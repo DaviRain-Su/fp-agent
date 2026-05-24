@@ -6,6 +6,10 @@ let apply action state = (Tui_shell.handle state action).state
 let input ?(page_size = 3) key state =
   (Tui_shell.handle_input ~page_size state key).state
 
+let accepted_command = function
+  | None -> None
+  | Some (command : View.command_entry) -> Some command.command
+
 let test_prompt_submit () =
   let state =
     Tui_shell.create ()
@@ -82,10 +86,13 @@ let test_palette_input_mapping () =
   Alcotest.(check (option int))
     "text ignored while open" (Some 4)
     (Tui_shell.selected_command_index state);
-  let state = input Tui_shell.Enter state in
+  let result = Tui_shell.handle_input ~page_size:3 state Tui_shell.Enter in
   Alcotest.(check bool)
     "enter closes palette" false
-    (Tui_shell.palette_open state)
+    (Tui_shell.palette_open result.state);
+  Alcotest.(check (option string))
+    "enter accepts selected command" (Some "/plugin <id|tool>")
+    (accepted_command result.accepted_command)
 
 let test_event_selection_state () =
   let state = Tui_shell.create () |> Tui_shell.set_event_count 5 in

@@ -138,7 +138,9 @@ copy. Two consequences:
   palette movement, and event inspection selection in a pure state machine.
   It also owns the abstract keyboard/mouse input mapping, including palette
   priority, event browsing, multiline prompt editing, and Ctrl+Enter submit
-  semantics for the future interactive shell.
+  semantics for the future interactive shell. Palette Enter returns the selected
+  command entry so the next shell layer can dispatch commands without re-parsing
+  terminal key events.
 
 Options:
 

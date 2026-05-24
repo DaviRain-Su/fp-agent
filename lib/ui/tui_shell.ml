@@ -19,6 +19,7 @@ type action =
   | Submit_prompt
   | Toggle_palette
   | Close_palette
+  | Accept_palette
   | Move_palette of int
   | Palette_home
   | Palette_end
@@ -48,7 +49,11 @@ type input =
   | Mouse_scroll_down
   | Unknown
 
-type result = { state : t; submitted : string option }
+type result = {
+  state : t;
+  submitted : string option;
+  accepted_command : View.command_entry option;
+}
 
 let create ?command_count () =
   let command_count =
@@ -86,9 +91,10 @@ let selection_label t =
 let palette_label t =
   View.palette_label ~command_count:t.command_count t.palette
 
-let no_submit state = { state; submitted = None }
+let no_submit state = { state; submitted = None; accepted_command = None }
 let page_delta page_size = Int.max 1 page_size
 let draft_has_text t = not (String.is_empty t.draft.text)
+let command_at index = List.nth View.command_palette_entries index
 
 let handle_prompt t = function
   | Insert_text text ->
@@ -106,6 +112,7 @@ let handle_prompt t = function
         {
           state = { t with draft = View.prompt_empty };
           submitted = Some t.draft.text;
+          accepted_command = None;
         }
   | _ -> no_submit t
 
@@ -118,6 +125,15 @@ let handle t action =
           palette = View.toggle_palette ~command_count:t.command_count t.palette;
         }
   | Close_palette -> no_submit { t with palette = View.Palette_closed }
+  | Accept_palette -> (
+      match Option.bind (selected_command_index t) ~f:command_at with
+      | None -> no_submit { t with palette = View.Palette_closed }
+      | Some command ->
+          {
+            state = { t with palette = View.Palette_closed };
+            submitted = None;
+            accepted_command = Some command;
+          })
   | Move_palette delta ->
       no_submit
         {
@@ -163,7 +179,8 @@ let action_of_input ~page_size t input =
   let page_size = page_delta page_size in
   if palette_open t then
     match input with
-    | Escape | Enter | Ctrl_enter -> Some Close_palette
+    | Escape -> Some Close_palette
+    | Enter | Ctrl_enter -> Some Accept_palette
     | Slash | Question -> Some Toggle_palette
     | Up | Mouse_scroll_up -> Some (Move_palette (-1))
     | Down | Mouse_scroll_down -> Some (Move_palette 1)

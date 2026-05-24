@@ -20,6 +20,7 @@ type action =
   | Submit_prompt
   | Toggle_palette
   | Close_palette
+  | Accept_palette
   | Move_palette of int
   | Palette_home
   | Palette_end
@@ -49,7 +50,11 @@ type input =
   | Mouse_scroll_down
   | Unknown
 
-type result = { state : t; submitted : string option }
+type result = {
+  state : t;
+  submitted : string option;
+  accepted_command : View.command_entry option;
+}
 
 val create : ?command_count:int -> unit -> t
 (** Initial shell state. [command_count] defaults to the built-in command
@@ -75,7 +80,8 @@ val palette_label : t -> string
 
 val handle : t -> action -> result
 (** Apply one input action. [Submit_prompt] returns the submitted prompt and
-    clears the draft when the draft is not empty. *)
+    clears the draft when the draft is not empty. [Accept_palette] closes the
+    palette and returns the highlighted command when one is selected. *)
 
 val action_of_input : page_size:int -> t -> input -> action option
 (** Translate abstract terminal input into a shell action. Palette navigation

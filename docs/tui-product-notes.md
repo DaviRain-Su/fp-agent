@@ -57,6 +57,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   palette priority, multiline prompt composition, Ctrl+Enter submission, and
   event browsing. The Notty renderer translates terminal events into those
   inputs instead of carrying shell behavior itself.
+- The command palette controller now distinguishes close from accept: Enter
+  returns the highlighted command entry, giving the future fullscreen shell a
+  tested command-dispatch point while preserving the current overlay behavior.
 - The REPL exposes the same inspector through `/inspect [index]`, so event-log
   review works even outside a full-screen TUI and can target historical events.
 - The REPL exposes plugin inspection through `/plugin <id|tool>`, showing
