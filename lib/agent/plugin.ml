@@ -383,6 +383,56 @@ let permissions_label = function
       |> String.concat ~sep:", "
   | Some value -> Yojson.Safe.to_string value
 
+let truthy_permission_value = function
+  | `Bool true -> true
+  | `Bool false | `Null -> false
+  | `String s -> (
+      match String.lowercase (String.strip s) with
+      | "" | "false" | "none" | "no" | "off" | "read" -> false
+      | _ -> true)
+  | `List values -> not (List.is_empty values)
+  | _ -> true
+
+let sensitive_permission_fields =
+  [ "network"; "shell"; "env"; "secret"; "secrets"; "token"; "tokens" ]
+
+let permission_field_needs_approval (name, value) =
+  let key = String.lowercase (String.strip name) in
+  if
+    String.equal key "workspace"
+    && truthy_permission_value value
+    &&
+    match value with
+    | `String value ->
+        String.is_substring (String.lowercase value) ~substring:"write"
+    | _ -> false
+  then Some "workspace write"
+  else if
+    List.mem sensitive_permission_fields key ~equal:String.equal
+    && truthy_permission_value value
+  then Some key
+  else None
+
+let plugin_approval_reason tool_name permissions =
+  match permissions with
+  | None -> None
+  | Some (`String s) when truthy_permission_value (`String s) ->
+      Some
+        (Printf.sprintf "plugin tool %s declares permission: %s" tool_name
+           (String.strip s))
+  | Some (`List values) when truthy_permission_value (`List values) ->
+      Some
+        (Printf.sprintf "plugin tool %s declares permissions: %s" tool_name
+           (permissions_label permissions))
+  | Some (`Assoc fields) -> (
+      match List.find_map fields ~f:permission_field_needs_approval with
+      | Some reason ->
+          Some
+            (Printf.sprintf "plugin tool %s requires %s permission" tool_name
+               reason)
+      | None -> None)
+  | _ -> None
+
 let parse_tool json : (plugin_tool, string) Result.t =
   let timeout_sec =
     Option.value
@@ -861,6 +911,9 @@ let register_manifest (manifest : manifest) =
             name = plugin_tool.tool_name;
             kind = plugin_tool.tool_kind;
             description;
+            approval_reason =
+              plugin_approval_reason plugin_tool.tool_name
+                plugin_tool.tool_permissions;
             input_schema = plugin_tool.tool_input_schema;
             check = plugin_check plugin_tool.tool_kind;
             run = run_plugin_tool manifest plugin_tool;

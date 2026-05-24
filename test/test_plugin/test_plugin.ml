@@ -546,6 +546,35 @@ let test_plugin_runtime_environment () =
             (String.is_substring output
                ~substring:{|args_file={"message":"hello"}|}))
 
+let test_plugin_permissions_require_confirm_approval () =
+  with_temp_dir "fp_agent_plugin_permission_approval" (fun root ->
+      let plugin_dir = Stdlib.Filename.concat root "plugin" in
+      mkdir_p plugin_dir;
+      write_plugin plugin_dir ~id:"com.example.approval"
+        ~tool_name:"plugin_network_read" ~kind:"read"
+        ~permissions:{|{"workspace":"read","network":true}|};
+      Unix.putenv "FP_AGENT_PLUGIN_PATH" plugin_dir;
+      Unix.putenv "FP_AGENT_PLUGIN_HOME" (Stdlib.Filename.concat root "home");
+      Tool_loader.register_all ();
+      let call =
+        Tool_call.make ~name:"plugin_network_read"
+          ~args:(`Assoc [ ("message", `String "hello") ])
+      in
+      Alcotest.(check bool)
+        "policy check still allows safe args" true
+        (Permission.is_allow
+           (Policy.check ~workspace:(workspace root) ~tool_call:call ()));
+      Alcotest.(check bool)
+        "default policy does not ask" true
+        (Option.is_none (Policy.approval_reason Policy.default call));
+      let confirm = { Policy.approve_commands = true; approve_writes = true } in
+      match Policy.approval_reason confirm call with
+      | None -> Alcotest.fail "expected plugin permission approval reason"
+      | Some reason ->
+          Alcotest.(check bool)
+            "approval reason names permission" true
+            (String.is_substring reason ~substring:"network permission"))
+
 let test_run_tool_validates_input_schema () =
   with_temp_dir "fp_agent_plugin_schema_validation" (fun root ->
       let plugin_dir = Stdlib.Filename.concat root "plugin" in
@@ -1039,6 +1068,8 @@ let () =
             test_tool_loader_refreshes_removed_plugins;
           Alcotest.test_case "runtime_environment" `Quick
             test_plugin_runtime_environment;
+          Alcotest.test_case "permission_approval" `Quick
+            test_plugin_permissions_require_confirm_approval;
           Alcotest.test_case "run_tool_schema_validation" `Quick
             test_run_tool_validates_input_schema;
           Alcotest.test_case "run_tool_schema_enum" `Quick

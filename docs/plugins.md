@@ -46,8 +46,11 @@ strings, booleans, or string arrays, for example
 `{ "workspace": "read", "network": false, "env": ["GITHUB_TOKEN"] }`.
 `fp-agent` validates the metadata shape, shows it in `/plugins` and `/plugin`,
 adds it to the registered tool description, and passes the raw JSON through
-`FP_AGENT_TOOL_PERMISSIONS`. The current enforcement still comes from `kind`
-and the workspace policy checks described below.
+`FP_AGENT_TOOL_PERMISSIONS`. When `--confirm` is enabled, sensitive metadata
+such as `network: true`, `shell: true`, environment variables, secrets, tokens,
+or `workspace: "write"` also triggers human approval before a model-triggered
+plugin call runs. Workspace path enforcement still comes from `kind` and the
+policy checks described below.
 
 `sdk_version` declares the fp-agent plugin manifest contract version. It
 defaults to `1` for older plugins, and `fp-agent --check-plugin` / install /

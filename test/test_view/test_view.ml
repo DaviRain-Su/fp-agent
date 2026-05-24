@@ -399,6 +399,7 @@ let test_tool_inspector_lines () =
       name = "echo_json";
       kind = Tool.Read;
       description = "Echoes JSON";
+      approval_reason = Some "plugin tool echo_json requires network permission";
       input_schema =
         Some
           (`Assoc
@@ -420,6 +421,9 @@ let test_tool_inspector_lines () =
   Alcotest.(check bool)
     "shows kind" true
     (String.is_substring joined ~substring:"kind: read");
+  Alcotest.(check bool)
+    "shows approval reason" true
+    (String.is_substring joined ~substring:"requires network permission");
   Alcotest.(check bool)
     "shows schema" true
     (String.is_substring joined ~substring:"input_schema:");

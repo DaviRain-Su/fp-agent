@@ -113,8 +113,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   JSON file path used for stdin.
 - Plugin tools can now declare optional `permissions` audit metadata. The
   manifest loader validates it, plugin/tool surfaces show it, registered tool
-  descriptions carry it, and runtime commands receive the raw JSON via
-  `FP_AGENT_TOOL_PERMISSIONS`.
+  descriptions carry it, runtime commands receive the raw JSON via
+  `FP_AGENT_TOOL_PERMISSIONS`, and sensitive declarations participate in
+  `--confirm` approval prompts for model-triggered plugin calls.
 - Plugin `input_schema` validation now supports JSON Schema `enum`, so local
   runs, smoke checks, and model-triggered plugin calls reject invalid option
   values before executing plugin code.

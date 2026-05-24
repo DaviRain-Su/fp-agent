@@ -21,4 +21,6 @@ let approval_reason t (tool_call : Tool_call.t) =
       Some "shell command requires approval"
   | Some tool when t.approve_writes && Poly.equal tool.Tool.kind Tool.Write ->
       Some "file modification requires approval"
+  | Some tool when t.approve_commands || t.approve_writes ->
+      tool.Tool.approval_reason
   | _ -> None

@@ -67,6 +67,7 @@ let tool ~name ~kind ~description ~check ~run =
     Tool.name;
     kind;
     description;
+    approval_reason = None;
     input_schema = Some (schema_for name);
     check;
     run;

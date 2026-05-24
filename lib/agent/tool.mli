@@ -7,6 +7,8 @@ type t = {
   name : string;
   kind : kind;
   description : string;  (** one-line args spec shown to the model *)
+  approval_reason : string option;
+      (** Extra human-approval reason for sensitive plugin metadata. *)
   input_schema : Yojson.Safe.t option;
       (** Optional JSON Schema for native tool calling. *)
   check : Workspace.t -> Yojson.Safe.t -> Permission.t;

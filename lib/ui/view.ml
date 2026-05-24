@@ -432,6 +432,7 @@ let tool_inspector_lines (tool : Tool.t) =
     "name: " ^ tool.name;
     "kind: " ^ tool_kind_label tool.kind;
     "description: " ^ tool.description;
+    "approval: " ^ Option.value tool.approval_reason ~default:"<none>";
   ]
   @
   match tool.input_schema with

@@ -128,7 +128,9 @@ receive runtime env such as `FP_AGENT_WORKSPACE`, `FP_AGENT_PLUGIN_ID`,
 `FP_AGENT_TOOL_KIND`, `FP_AGENT_TOOL_PERMISSIONS`, and
 `FP_AGENT_ARGS_FILE`. Tool manifests may include optional `permissions` audit
 metadata such as `{ "workspace": "read", "network": false }`; it is validated,
-shown in `/plugins` and `/plugin`, and passed through to SDK wrappers.
+shown in `/plugins` and `/plugin`, passed through to SDK wrappers, and used by
+`--confirm` to require approval for sensitive plugin permissions such as
+network, shell, env, secrets, tokens, or workspace writes.
 
 ```sh
 export FP_AGENT_PLUGIN_PATH=$PWD/examples/plugins/echo
