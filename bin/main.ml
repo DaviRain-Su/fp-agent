@@ -89,6 +89,20 @@ let tooling_counts_line (counts : Tool_loader.counts) =
 
 let tools_reloaded_line counts = "tools reloaded; " ^ tooling_counts_line counts
 
+let next_model_id ~current models =
+  match models with
+  | [] -> `No_models
+  | [ only ] ->
+      if String.equal only current then `Only_model only else `Next_model only
+  | models -> (
+      match
+        List.findi models ~f:(fun _ model -> String.equal model current)
+      with
+      | None -> `Next_model (Option.value_exn (List.hd models))
+      | Some (index, _) ->
+          let next_index = (index + 1) % List.length models in
+          `Next_model (Option.value_exn (List.nth models next_index)))
+
 (* Plain reporter: step lines + an animated spinner line on stderr. The spinner
    line is rewritten in place with CR + clear-to-EOL. *)
 let make_plain_reporter () =
@@ -903,12 +917,32 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
           "api_base: " ^ !config_ref.api_base;
         ]
   in
-  let switch_model model =
+  let switch_model ?command model =
     config_ref := { !config_ref with model };
     model_client := Model_client.create ~config:!config_ref;
     view.set_runtime ~provider:!config_ref.provider ~model:!config_ref.model
       ~api_base:!config_ref.api_base;
-    view.append_lines (current_model_lines ("/model " ^ model))
+    view.append_lines
+      (current_model_lines (Option.value command ~default:("/model " ^ model)))
+  in
+  let cycle_model () =
+    match next_model_id ~current:!config_ref.model !config_ref.models with
+    | `No_models ->
+        view.append_lines
+          [
+            "[tui] /model-next";
+            "no configured models for provider: " ^ !config_ref.provider;
+          ]
+    | `Only_model model ->
+        view.append_lines
+          [
+            "[tui] /model-next";
+            "only one configured model: " ^ model;
+            "provider: " ^ !config_ref.provider;
+            "model: " ^ !config_ref.model;
+            "api_base: " ^ !config_ref.api_base;
+          ]
+    | `Next_model model -> switch_model ~command:"/model-next" model
   in
   let switch_provider args =
     let parts =
@@ -1026,6 +1060,7 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
         stop := true
     | Command (Model, "") -> view.append_lines (current_model_lines "/model")
     | Command (Model, model) -> switch_model model
+    | Command (ModelNext, _) -> cycle_model ()
     | Command (Provider, args) -> switch_provider args
     | Command (NewSession, _) -> new_session ()
     | Command (Resume, arg) -> resume_session arg
@@ -1228,6 +1263,16 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
     config_ref := { !config_ref with model };
     model_client := Model_client.create ~config:!config_ref;
     show_current_model ()
+  in
+  let cycle_model () =
+    match next_model_id ~current:!config_ref.model !config_ref.models with
+    | `No_models ->
+        Stdlib.Printf.printf "no configured models for provider: %s\n%!"
+          !config_ref.provider
+    | `Only_model model ->
+        Stdlib.Printf.printf "only one configured model: %s\n%!" model;
+        show_current_model ()
+    | `Next_model model -> switch_model model
   in
   let print_models () =
     match Config.available_providers () with
@@ -1536,6 +1581,9 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
             loop ()
         | Command (Model, model) ->
             switch_model model;
+            loop ()
+        | Command (ModelNext, _) ->
+            cycle_model ();
             loop ()
         | Command (Models, _) ->
             print_models ();

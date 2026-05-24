@@ -70,9 +70,10 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   Ctrl+Enter drains the prompt into the session loop: slash commands render in
   the timeline and ordinary task prompts run the agent against the same
   event-sourced session log.
-- The fullscreen shell now treats `/model <id>` and `/provider <name> [model]
-  [api-base]` as stateful commands. They rebuild the model client, update the
-  status strip, and subsequent task submissions use the switched runtime.
+- The fullscreen shell now treats `/model <id>`, `/model-next`, and `/provider
+  <name> [model] [api-base]` as stateful commands. They rebuild the model
+  client, update the status strip, and subsequent task submissions use the
+  switched runtime.
 - The fullscreen shell now treats `/new`, `/resume <dir>`, and `/fork [index]`
   as stateful commands. They switch the active session directory, reopen the
   event log, reload inspector context, and continue later turns from that

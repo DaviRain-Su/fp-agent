@@ -15,6 +15,7 @@ type id =
   | NewSession
   | Resume
   | Model
+  | ModelNext
   | Models
   | Provider
   | Log

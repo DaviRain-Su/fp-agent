@@ -68,6 +68,7 @@ dune exec -- fp-agent
 > /resume <name>     # switch to a past session
 > /models            # list all configured provider/model ids
 > /model qwen36-rtx  # switch model inside the REPL
+> /model-next        # cycle current provider's configured models
 > /provider local-llm qwen36-rtx
 > /tools             # preview available tools
 > /tool read_file    # inspect a tool's kind/schema/description
@@ -89,9 +90,9 @@ earlier turns. Meta-commands start with `/`; anything else is a task.
 Use `--tui` without a task to start the fullscreen interactive shell. It uses
 the same session log and command palette as one-shot TUI runs; Ctrl+Enter
 submits the current draft as either a slash command or an agent task. `/model
-<id>` and `/provider <name> [model] [api-base]` update the active runtime for
-later turns inside the TUI; `/resume <dir>` and `/fork [index]` switch the
-active event-sourced session.
+<id>`, `/model-next`, and `/provider <name> [model] [api-base]` update the
+active runtime for later turns inside the TUI; `/resume <dir>` and `/fork
+[index]` switch the active event-sourced session.
 
 Code review requests get a review-specific system instruction: the agent starts
 from `git status --short` and `git diff --stat`, inspects changed files and
@@ -216,8 +217,9 @@ copy. Two consequences:
   validates, smoke-tests, installs, and removes plugins
   from the REPL or fullscreen TUI, then reloads the in-process tool registry so
   `/tools`, the status strip, and later model calls see the updated plugin set.
-- **TUI model/provider switching** lets `/model <id>` and `/provider <name>
-  [model] [api-base]` change the runtime used by later TUI task submissions.
+- **TUI model/provider switching** lets `/model <id>`, `/model-next`, and
+  `/provider <name> [model] [api-base]` change the runtime used by later TUI
+  task submissions.
 - **TUI session navigation** lets `/new`, `/resume <dir>`, and `/fork [index]`
   switch the active fullscreen session and continue writing to the selected
   event log.

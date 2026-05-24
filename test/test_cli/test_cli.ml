@@ -627,6 +627,20 @@ let provider_config =
           "cacheRead": 0,
           "cacheWrite": 0
         }
+      },
+      {
+        "id": "qwen36-rtx-fast",
+        "name": "qwen36-rtx-fast",
+        "reasoning": false,
+        "input": ["text"],
+        "contextWindow": 65536,
+        "maxTokens": 4096,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0
+        }
       }
     ]
   }
@@ -639,15 +653,26 @@ let test_repl_lists_and_switches_custom_provider_models () =
   write_file config_path provider_config;
   let env = isolated_env root @ [ ("FP_AGENT_CONFIG", config_path) ] in
   let repl =
-    run ~env ~stdin:"/models\n/provider local-llm qwen36-rtx\n/model\n/exit\n"
+    run ~env
+      ~stdin:
+        "/models\n\
+         /provider local-llm qwen36-rtx\n\
+         /model-next\n\
+         /model\n\
+         /model-cycle\n\
+         /model\n\
+         /exit\n"
       [ fp_agent_bin () ]
   in
   assert_success "repl model commands" repl;
   assert_contains "models include deepseek" repl.stdout "deepseek";
   assert_contains "models include custom provider" repl.stdout "local-llm";
   assert_contains "models include custom model" repl.stdout "qwen36-rtx";
+  assert_contains "models include second custom model" repl.stdout
+    "qwen36-rtx-fast";
   assert_contains "provider switched" repl.stdout "provider: local-llm";
-  assert_contains "model switched" repl.stdout "model: qwen36-rtx"
+  assert_contains "model switched" repl.stdout "model: qwen36-rtx";
+  assert_contains "model-next switched" repl.stdout "model: qwen36-rtx-fast"
 
 let test_repl_shows_project_instructions () =
   let root = tmp_dir "fp-agent-cli-instructions-" in

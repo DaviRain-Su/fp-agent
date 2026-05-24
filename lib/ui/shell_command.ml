@@ -17,6 +17,7 @@ type id =
   | NewSession
   | Resume
   | Model
+  | ModelNext
   | Models
   | Provider
   | Log
@@ -180,6 +181,14 @@ let specs =
       acceptance = Execute "/model";
     };
     {
+      id = ModelNext;
+      command = "/model-next";
+      description = "cycle to the next configured model";
+      aliases = [ "/model-cycle" ];
+      palette = true;
+      acceptance = Execute "/model-next";
+    };
+    {
       id = Models;
       command = "/models";
       description = "list configured provider models";
@@ -296,7 +305,7 @@ let group_of_id = function
   | PluginRemove | PluginSmoke ->
       "Plugins"
   | Sessions | Tree | NewSession | Resume -> "Sessions"
-  | Model | Models | Provider -> "Models"
+  | Model | ModelNext | Models | Provider -> "Models"
   | Log | Inspect | Usage | Status | Instructions -> "Context"
   | Compact | Fork | Diff | Retry | Undo -> "Run Control"
   | Help | Exit -> "Shell"

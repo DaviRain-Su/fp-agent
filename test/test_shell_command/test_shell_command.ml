@@ -28,6 +28,10 @@ let test_parse () =
   require_task "task" "fix tests" (Shell_command.parse "  fix tests  ");
   require_command "model" Shell_command.Model "qwen36-rtx"
     (Shell_command.parse "/model qwen36-rtx");
+  require_command "model next" Shell_command.ModelNext ""
+    (Shell_command.parse "/model-next");
+  require_command "model cycle alias" Shell_command.ModelNext ""
+    (Shell_command.parse "/model-cycle");
   require_command "models" Shell_command.Models ""
     (Shell_command.parse "/models");
   require_command "new session" Shell_command.NewSession ""
@@ -87,6 +91,9 @@ let test_metadata () =
   Alcotest.(check string)
     "provider group" "Models"
     (entry "/provider <name> [model] [api-base]").group;
+  Alcotest.(check bool)
+    "palette has model next" true
+    (List.mem palette "/model-next" ~equal:String.equal);
   Alcotest.(check bool)
     "palette has usage" true
     (List.mem palette "/usage" ~equal:String.equal);
@@ -154,6 +161,8 @@ let test_acceptance () =
     (Shell_command.accept (entry "/tools"));
   require_acceptance "model execute" ("execute", "/model")
     (Shell_command.accept (entry "/model [id]"));
+  require_acceptance "model next execute" ("execute", "/model-next")
+    (Shell_command.accept (entry "/model-next"));
   require_acceptance "usage execute" ("execute", "/usage")
     (Shell_command.accept (entry "/usage"));
   require_acceptance "status execute" ("execute", "/status")
