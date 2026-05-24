@@ -174,6 +174,68 @@ let command_palette_lines ~selected entries =
       let marker = if index = selected then "> " else "  " in
       Printf.sprintf "%s%-24s %s" marker entry.command entry.description)
 
+type prompt_editor = { text : string; cursor : int }
+
+let prompt_make ?cursor text =
+  let cursor = Option.value cursor ~default:(String.length text) in
+  { text; cursor = clamp ~lo:0 ~hi:(String.length text) cursor }
+
+let prompt_empty = prompt_make ""
+
+let prompt_insert_text inserted editor =
+  let editor = prompt_make ~cursor:editor.cursor editor.text in
+  {
+    text =
+      String.prefix editor.text editor.cursor
+      ^ inserted
+      ^ String.drop_prefix editor.text editor.cursor;
+    cursor = editor.cursor + String.length inserted;
+  }
+
+let prompt_newline editor = prompt_insert_text "\n" editor
+
+let prompt_backspace editor =
+  let editor = prompt_make ~cursor:editor.cursor editor.text in
+  if editor.cursor = 0 then editor
+  else
+    {
+      text =
+        String.prefix editor.text (editor.cursor - 1)
+        ^ String.drop_prefix editor.text editor.cursor;
+      cursor = editor.cursor - 1;
+    }
+
+let prompt_delete editor =
+  let editor = prompt_make ~cursor:editor.cursor editor.text in
+  if editor.cursor >= String.length editor.text then editor
+  else
+    {
+      text =
+        String.prefix editor.text editor.cursor
+        ^ String.drop_prefix editor.text (editor.cursor + 1);
+      cursor = editor.cursor;
+    }
+
+let prompt_move ~delta editor =
+  prompt_make ~cursor:(editor.cursor + delta) editor.text
+
+let prompt_home editor = prompt_make ~cursor:0 editor.text
+let prompt_end editor = prompt_make editor.text
+let prompt_is_empty editor = String.is_empty (String.strip editor.text)
+
+let prompt_editor_lines editor =
+  let editor = prompt_make ~cursor:editor.cursor editor.text in
+  let visible =
+    String.prefix editor.text editor.cursor
+    ^ "|"
+    ^ String.drop_prefix editor.text editor.cursor
+  in
+  let lines =
+    match display_lines visible with [] -> [ "|" ] | lines -> lines
+  in
+  [ "Prompt"; "Ctrl+Enter submit, Shift+Enter newline"; "" ]
+  @ List.map lines ~f:(fun line -> "> " ^ line)
+
 let flat s = String.substr_replace_all s ~pattern:"\n" ~with_:" "
 
 let event_kind (e : Event.t) =

@@ -46,6 +46,10 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - `/` or `?` opens a TUI command palette overlay with the core REPL commands
   for model/provider switching, plugin/tool inspection, session navigation,
   forks, diffs, and undo; Up/Down move through entries and Enter/Esc closes it.
+- Multiline prompt editing is now modeled in pure `View` helpers: draft text,
+  byte cursor, insert/newline/backspace/delete, cursor movement, empty checks,
+  and rendering with a visible cursor. This is the reusable base for the
+  fullscreen interactive shell.
 - The REPL exposes the same inspector through `/inspect [index]`, so event-log
   review works even outside a full-screen TUI and can target historical events.
 - The REPL exposes plugin inspection through `/plugin <id|tool>`, showing

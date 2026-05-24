@@ -131,6 +131,9 @@ copy. Two consequences:
   Home, and End.
 - **TUI command palette** (`/` or `?` in `--tui`) shows the core REPL commands
   for models, providers, plugins, tools, sessions, forks, diffs, and undo.
+- **TUI prompt editor groundwork** keeps multiline draft editing pure and
+  testable: insert text, newline, delete/backspace, cursor movement, and
+  rendering with a visible cursor.
 
 Options:
 

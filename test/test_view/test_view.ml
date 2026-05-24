@@ -173,6 +173,45 @@ let test_command_palette () =
     "renders plugin command" true
     (String.is_substring joined ~substring:"/plugins")
 
+let test_prompt_editor () =
+  Alcotest.(check string) "empty text" "" View.prompt_empty.text;
+  Alcotest.(check int) "empty cursor" 0 View.prompt_empty.cursor;
+  Alcotest.(check bool)
+    "empty draft" true
+    (View.prompt_is_empty View.prompt_empty);
+  let editor =
+    View.prompt_empty
+    |> View.prompt_insert_text "hello"
+    |> View.prompt_newline
+    |> View.prompt_insert_text "world"
+  in
+  Alcotest.(check string) "multiline text" "hello\nworld" editor.text;
+  Alcotest.(check int) "cursor at end" 11 editor.cursor;
+  let edited =
+    editor
+    |> View.prompt_move ~delta:(-5)
+    |> View.prompt_insert_text "wide "
+    |> View.prompt_backspace |> View.prompt_delete
+  in
+  Alcotest.(check string) "edits around cursor" "hello\nwideorld" edited.text;
+  Alcotest.(check int) "cursor after edits" 10 edited.cursor;
+  Alcotest.(check int) "home cursor" 0 (View.prompt_home edited).cursor;
+  Alcotest.(check int)
+    "end cursor"
+    (String.length edited.text)
+    (View.prompt_end edited).cursor;
+  Alcotest.(check string)
+    "cursor clamps" "abc" (View.prompt_make ~cursor:100 "abc").text;
+  Alcotest.(check int)
+    "cursor clamp value" 3 (View.prompt_make ~cursor:100 "abc").cursor;
+  let rendered = String.concat (View.prompt_editor_lines edited) ~sep:"\n" in
+  Alcotest.(check bool)
+    "renders prompt title" true
+    (String.is_substring rendered ~substring:"Prompt");
+  Alcotest.(check bool)
+    "renders visible cursor" true
+    (String.is_substring rendered ~substring:"wide|orld")
+
 let test_event_summary () =
   let event = Event.Tool_call (Tool_call.read_file "README.md") in
   Alcotest.(check string) "kind" "tool_call" (View.event_kind event);
@@ -309,6 +348,7 @@ let () =
             test_status_and_inspector;
           Alcotest.test_case "event_selection" `Quick test_event_selection;
           Alcotest.test_case "command_palette" `Quick test_command_palette;
+          Alcotest.test_case "prompt_editor" `Quick test_prompt_editor;
           Alcotest.test_case "event_summary" `Quick test_event_summary;
           Alcotest.test_case "event_inspector_lines" `Quick
             test_event_inspector_lines;

@@ -92,6 +92,43 @@ val move_palette :
 val command_palette_lines : selected:int -> command_entry list -> string list
 (** Render the command palette as plain lines. *)
 
+type prompt_editor = { text : string; cursor : int }
+(** Multiline prompt draft plus byte cursor position. Kept pure so a fullscreen
+    TUI can test input editing without a real terminal. *)
+
+val prompt_empty : prompt_editor
+(** Empty prompt editor. *)
+
+val prompt_make : ?cursor:int -> string -> prompt_editor
+(** Build an editor with cursor clamped inside the text. Defaults to end. *)
+
+val prompt_insert_text : string -> prompt_editor -> prompt_editor
+(** Insert text at the cursor and move the cursor after the inserted text. *)
+
+val prompt_newline : prompt_editor -> prompt_editor
+(** Insert a newline at the cursor. *)
+
+val prompt_backspace : prompt_editor -> prompt_editor
+(** Delete the byte before the cursor, if any. *)
+
+val prompt_delete : prompt_editor -> prompt_editor
+(** Delete the byte at the cursor, if any. *)
+
+val prompt_move : delta:int -> prompt_editor -> prompt_editor
+(** Move the cursor by [delta] bytes, clamped to the draft range. *)
+
+val prompt_home : prompt_editor -> prompt_editor
+(** Move the cursor to the beginning of the draft. *)
+
+val prompt_end : prompt_editor -> prompt_editor
+(** Move the cursor to the end of the draft. *)
+
+val prompt_is_empty : prompt_editor -> bool
+(** True when the draft contains only whitespace. *)
+
+val prompt_editor_lines : prompt_editor -> string list
+(** Render a compact multiline prompt editor with a visible cursor. *)
+
 val event_kind : Event.t -> string
 (** Stable event type label for the inspector. *)
 
