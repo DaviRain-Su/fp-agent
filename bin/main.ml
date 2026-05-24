@@ -360,6 +360,7 @@ let print_help () =
     "Commands:\n\
     \  /help              show this help\n\
     \  /tools             list available tools\n\
+    \  /tool <name>       show tool details/schema\n\
     \  /plugins           list discovered plugins\n\
     \  /plugin <id|tool>  show plugin manifest/tool details\n\
     \  /sessions          list sessions in this workspace\n\
@@ -385,6 +386,16 @@ let print_tools () =
       Stdlib.Printf.printf "  %-18s %-5s %s\n" tool.name
         (tool_kind_label tool.kind)
         tool.description)
+
+let print_tool_detail query =
+  Tool_loader.register_all ();
+  let query = String.strip query in
+  if String.is_empty query then Stdlib.print_endline "usage: /tool <tool-name>"
+  else
+    match Tool.find query with
+    | None -> Stdlib.Printf.printf "no tool matching: %s\n" query
+    | Some tool ->
+        List.iter (View.tool_inspector_lines tool) ~f:Stdlib.print_endline
 
 let print_plugins () =
   match Plugin.manifests () with
@@ -708,6 +719,12 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
           loop ())
         else if String.equal line "/tools" then (
           print_tools ();
+          loop ())
+        else if String.equal line "/tool" then (
+          print_tool_detail "";
+          loop ())
+        else if String.is_prefix line ~prefix:"/tool " then (
+          print_tool_detail (String.drop_prefix line 6);
           loop ())
         else if String.equal line "/plugins" then (
           print_plugins ();

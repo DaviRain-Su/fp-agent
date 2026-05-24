@@ -57,5 +57,9 @@ val event_inspector_lines : Event.t -> string list
 val plugin_inspector_lines : Plugin.manifest -> string list
 (** Render plugin manifest and tool details as plain inspector lines. *)
 
+val tool_inspector_lines : Tool.t -> string list
+(** Render registered tool details and its input schema as plain inspector
+    lines. *)
+
 val classify : string -> [ `Ok | `Err | `Action | `Plain ]
 (** Classify a display line by its leading icon so the renderer can color it. *)

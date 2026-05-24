@@ -185,6 +185,19 @@ let tool_kind_label = function
   | Tool.Write -> "write"
   | Tool.Exec -> "exec"
 
+let tool_inspector_lines (tool : Tool.t) =
+  [
+    "Tool";
+    "name: " ^ tool.name;
+    "kind: " ^ tool_kind_label tool.kind;
+    "description: " ^ tool.description;
+  ]
+  @
+  match tool.input_schema with
+  | None -> [ "input_schema: <none>" ]
+  | Some schema ->
+      "input_schema:" :: List.map (json_preview_lines schema) ~f:(( ^ ) "  ")
+
 let plugin_tool_lines (tool : Plugin.plugin_tool) =
   [
     "- " ^ tool.tool_name;

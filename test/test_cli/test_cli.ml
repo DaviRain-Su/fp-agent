@@ -182,6 +182,9 @@ let test_repl_lists_dynamic_plugin_tools () =
          /plugin local.my-plugin\n\
          /plugin hello_world\n\
          /plugin missing\n\
+         /tool read_file\n\
+         /tool hello_world\n\
+         /tool missing\n\
          /tools\n\
          /exit\n"
       [ bin ]
@@ -194,6 +197,10 @@ let test_repl_lists_dynamic_plugin_tools () =
   assert_contains "plugin detail schema" repl.stdout "input_schema:";
   assert_contains "plugin missing" repl.stdout
     "no plugin or tool matching: missing";
+  assert_contains "builtin tool detail" repl.stdout "name: read_file";
+  assert_contains "plugin tool detail" repl.stdout "name: hello_world";
+  assert_contains "tool detail schema" repl.stdout "input_schema:";
+  assert_contains "tool missing" repl.stdout "no tool matching: missing";
   assert_contains "tools lists plugin tool" repl.stdout "hello_world";
   assert_contains "tools marks plugin" repl.stdout "plugin local.my-plugin"
 

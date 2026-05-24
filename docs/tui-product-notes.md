@@ -44,6 +44,8 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   review works even outside a full-screen TUI and can target historical events.
 - The REPL exposes plugin inspection through `/plugin <id|tool>`, showing
   command, kind, timeout, and schema details for one plugin.
+- The REPL exposes registered tool inspection through `/tool <name>`, so
+  built-in and plugin tool schemas can be checked without asking the model.
 - Code-review tasks add review-specific system guidance without rewriting the
   logged user event, preserving audit and replay fidelity.
 - CLI regression tests cover plugin lifecycle commands, REPL plugin/tool

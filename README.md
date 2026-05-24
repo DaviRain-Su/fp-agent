@@ -64,6 +64,7 @@ dune exec -- fp-agent
 > /model qwen36-rtx  # switch model inside the REPL
 > /provider local-llm qwen36-rtx
 > /tools             # preview available tools
+> /tool read_file    # inspect a tool's kind/schema/description
 > /plugin echo_json  # inspect a plugin by id or tool name
 > /inspect 12        # inspect event 12: tool args/result/policy/JSON
 > /help
@@ -89,6 +90,7 @@ export FP_AGENT_PLUGIN_PATH=$PWD/examples/plugins/echo
 dune exec -- fp-agent
 > /plugins
 > /plugin echo_json
+> /tool echo_json
 > /tools
 ```
 

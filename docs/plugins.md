@@ -63,11 +63,16 @@ Use the REPL command:
 ```text
 /plugins
 /plugin echo_json
+/tool echo_json
 /tools
 ```
 
 `/plugin <plugin-id|tool-name>` prints the manifest details for one plugin:
 directory, version, tool kind, command, timeout, and input schema.
+
+`/tool <tool-name>` prints the registered tool descriptor exactly as the model
+sees it: kind, description, and input schema. This works for both built-in and
+plugin tools.
 
 ## Install
 

@@ -170,6 +170,40 @@ let test_plugin_inspector_lines () =
     "shows schema" true
     (String.is_substring joined ~substring:"input_schema:")
 
+let test_tool_inspector_lines () =
+  let tool : Tool.t =
+    {
+      name = "echo_json";
+      kind = Tool.Read;
+      description = "Echoes JSON";
+      input_schema =
+        Some
+          (`Assoc
+             [
+               ("type", `String "object");
+               ("required", `List [ `String "message" ]);
+               ( "properties",
+                 `Assoc [ ("message", `Assoc [ ("type", `String "string") ]) ]
+               );
+             ]);
+      check = (fun _ _ -> Permission.Allow);
+      run = (fun _ _ -> Tool_result.Success { output = "ok" });
+    }
+  in
+  let joined = String.concat (View.tool_inspector_lines tool) ~sep:"\n" in
+  Alcotest.(check bool)
+    "shows tool name" true
+    (String.is_substring joined ~substring:"name: echo_json");
+  Alcotest.(check bool)
+    "shows kind" true
+    (String.is_substring joined ~substring:"kind: read");
+  Alcotest.(check bool)
+    "shows schema" true
+    (String.is_substring joined ~substring:"input_schema:");
+  Alcotest.(check bool)
+    "shows required field" true
+    (String.is_substring joined ~substring:"\"required\":")
+
 let kind_str = function
   | `Ok -> "ok"
   | `Err -> "err"
@@ -202,6 +236,8 @@ let () =
             test_event_inspector_lines;
           Alcotest.test_case "plugin_inspector_lines" `Quick
             test_plugin_inspector_lines;
+          Alcotest.test_case "tool_inspector_lines" `Quick
+            test_tool_inspector_lines;
           Alcotest.test_case "classify" `Quick test_classify;
         ] );
     ]
