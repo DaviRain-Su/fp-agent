@@ -49,9 +49,9 @@ let test_parse () =
     (Shell_command.parse
        "/provider local-llm qwen36-rtx http://127.0.0.1:8000/v1");
   require_command "plugin new" Shell_command.PluginNew
-    "--id local.foo --tool-name foo ./my-plugin"
+    "--id local.foo --tool-name foo --kind exec ./my-plugin"
     (Shell_command.parse
-       "/plugin-new --id local.foo --tool-name foo ./my-plugin");
+       "/plugin-new --id local.foo --tool-name foo --kind exec ./my-plugin");
   require_command "plugin dev" Shell_command.PluginDev "--replace ./my-plugin"
     (Shell_command.parse "/plugin-dev --replace ./my-plugin");
   require_command "plugin check" Shell_command.PluginCheck "./my-plugin"
@@ -110,7 +110,8 @@ let test_metadata () =
     (List.mem palette "/status" ~equal:String.equal);
   Alcotest.(check bool)
     "palette has plugin new" true
-    (List.mem palette "/plugin-new [--id ID] [--tool-name NAME] <dir>"
+    (List.mem palette
+       "/plugin-new [--id ID] [--tool-name NAME] [--kind KIND] <dir>"
        ~equal:String.equal);
   Alcotest.(check bool)
     "palette has plugin check" true
@@ -198,7 +199,7 @@ let test_acceptance () =
     (Shell_command.accept (entry "/provider <name> [model] [api-base]"));
   require_acceptance "plugin new draft" ("draft", "/plugin-new ")
     (Shell_command.accept
-       (entry "/plugin-new [--id ID] [--tool-name NAME] <dir>"));
+       (entry "/plugin-new [--id ID] [--tool-name NAME] [--kind KIND] <dir>"));
   require_acceptance "plugin dev draft" ("draft", "/plugin-dev ")
     (Shell_command.accept (entry "/plugin-dev [--replace] <dir>"));
   require_acceptance "plugin check draft"

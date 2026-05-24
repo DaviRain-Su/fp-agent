@@ -388,6 +388,8 @@ let test_new_plugin_custom_id_cli () =
         "com.example.named_plugin";
         "--plugin-tool-name";
         "named_echo";
+        "--plugin-kind";
+        "exec";
       ]
   in
   assert_success "new plugin custom id" created;
@@ -401,6 +403,7 @@ let test_new_plugin_custom_id_cli () =
   assert_contains "custom id in check output" checked.stdout
     "com.example.named_plugin";
   assert_contains "custom tool in check output" checked.stdout "named_echo";
+  assert_contains "custom kind in check output" checked.stdout "exec";
   let smoked = run ~env [ bin; "--smoke-plugin"; plugin_dir ] in
   assert_success "smoke custom tool plugin" smoked;
   assert_contains "custom tool smoke output" smoked.stdout
@@ -460,7 +463,24 @@ let test_new_plugin_custom_id_cli () =
   let stray_tool = run ~env [ bin; "--plugin-tool-name"; "named_echo" ] in
   assert_failure "plugin tool name without new plugin" stray_tool;
   assert_contains "stray plugin tool name stderr" stray_tool.stderr
-    "--plugin-tool-name requires --new-plugin DIR"
+    "--plugin-tool-name requires --new-plugin DIR";
+  let stray_kind = run ~env [ bin; "--plugin-kind"; "exec" ] in
+  assert_failure "plugin kind without new plugin" stray_kind;
+  assert_contains "stray plugin kind stderr" stray_kind.stderr
+    "--plugin-kind requires --new-plugin DIR";
+  let invalid_kind =
+    run ~env
+      [
+        bin;
+        "--new-plugin";
+        Stdlib.Filename.concat root "bad-kind";
+        "--plugin-kind";
+        "network";
+      ]
+  in
+  assert_failure "new plugin invalid custom kind" invalid_kind;
+  assert_contains "invalid custom kind stderr" invalid_kind.stderr
+    "unknown tool kind: network"
 
 let test_plugin_tool_debug_cli () =
   let root = tmp_dir "fp-agent-cli-plugin-run-" in

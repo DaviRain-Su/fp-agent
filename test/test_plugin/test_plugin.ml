@@ -799,7 +799,7 @@ let test_scaffold_creates_valid_plugin () =
       let dir = Stdlib.Filename.concat root "starter" in
       match
         Plugin.scaffold ~id:"com.example.scaffold" ~tool_name:"scaffold_echo"
-          dir
+          ~kind:"write" dir
       with
       | Error e -> Alcotest.failf "scaffold failed: %s" e
       | Ok created -> (
@@ -824,6 +824,9 @@ let test_scaffold_creates_valid_plugin () =
           Alcotest.(check bool)
             "readme documents args file env" true
             (String.is_substring readme ~substring:"FP_AGENT_ARGS_FILE");
+          Alcotest.(check bool)
+            "readme documents tool kind" true
+            (String.is_substring readme ~substring:"Initial tool kind: `write`");
           Alcotest.(check bool)
             "readme documents interactive check" true
             (String.is_substring readme ~substring:"/plugin-check .");
@@ -865,6 +868,9 @@ let test_scaffold_creates_valid_plugin () =
               let tool = Option.value_exn (List.hd manifest.tools) in
               Alcotest.(check string)
                 "scaffold tool" "scaffold_echo" tool.tool_name;
+              Alcotest.(check bool)
+                "scaffold kind" true
+                (Poly.equal tool.tool_kind Tool.Write);
               Alcotest.(check int) "one tool" 1 (List.length manifest.tools)))
 
 let test_check_rejects_invalid_manifest () =

@@ -664,30 +664,35 @@ let plugin_smoke_result_lines results =
       Printf.sprintf "smoke ok: %s (%s)" result.tool_name result.args_file
       :: (if String.is_empty output then [] else String.split_lines output))
 
-let plugin_new_usage = "usage: /plugin-new [--id ID] [--tool-name NAME] <dir>"
+let plugin_new_usage =
+  "usage: /plugin-new [--id ID] [--tool-name NAME] [--kind KIND] <dir>"
 
 let parse_plugin_new_args raw =
   let tokens =
     String.split (String.strip raw) ~on:' '
     |> List.filter ~f:(fun s -> not (String.is_empty s))
   in
-  let rec loop id tool_name dirs = function
+  let rec loop id tool_name kind dirs = function
     | [] -> (
         match List.rev dirs with
-        | [ dir ] -> Ok (id, tool_name, dir)
+        | [ dir ] -> Ok (id, tool_name, kind, dir)
         | [] -> Error plugin_new_usage
         | _ -> Error "plugin new error: expected exactly one plugin directory")
     | ("--id" | "--plugin-id") :: value :: rest ->
-        loop (Some value) tool_name dirs rest
+        loop (Some value) tool_name kind dirs rest
     | ("--id" | "--plugin-id") :: [] -> Error plugin_new_usage
     | ("--tool-name" | "--plugin-tool-name") :: value :: rest ->
-        loop id (Some value) dirs rest
+        loop id (Some value) kind dirs rest
     | ("--tool-name" | "--plugin-tool-name") :: [] -> Error plugin_new_usage
+    | ("--kind" | "--plugin-kind" | "--tool-kind") :: value :: rest ->
+        loop id tool_name (Some value) dirs rest
+    | ("--kind" | "--plugin-kind" | "--tool-kind") :: [] ->
+        Error plugin_new_usage
     | flag :: _ when String.is_prefix flag ~prefix:"--" ->
         Error ("plugin new error: unknown option " ^ flag)
-    | dir :: rest -> loop id tool_name (dir :: dirs) rest
+    | dir :: rest -> loop id tool_name kind (dir :: dirs) rest
   in
-  loop None None [] tokens
+  loop None None None [] tokens
 
 let plugin_args_file (manifest : Plugin.manifest) tool_name =
   Stdlib.Filename.concat manifest.dir
@@ -729,8 +734,8 @@ let plugin_new_success_lines dst =
 let plugin_new_lines args =
   match parse_plugin_new_args args with
   | Error e -> [ e ]
-  | Ok (id, tool_name, dir) -> (
-      match Plugin.scaffold ?id ?tool_name dir with
+  | Ok (id, tool_name, kind, dir) -> (
+      match Plugin.scaffold ?id ?tool_name ?kind dir with
       | Error e -> [ "plugin scaffold error: " ^ e ]
       | Ok dst -> plugin_new_success_lines dst)
 
@@ -1925,14 +1930,16 @@ let run_plugin_dev_cli dir replace_plugin workspace_opt =
           List.iter lines ~f:(fun line -> Stdlib.Printf.printf "%s\n%!" line);
           0)
 
-let dispatch new_plugin plugin_id plugin_tool_name check_plugin install_plugin
-    smoke_plugin dev_plugin replace_plugin list_plugins doctor_plugins
-    remove_plugin run_plugin_tool plugin_tool plugin_args plugin_args_file task
-    provider api_base model workspace max_steps confirm resume tui yolo =
+let dispatch new_plugin plugin_id plugin_tool_name plugin_kind check_plugin
+    install_plugin smoke_plugin dev_plugin replace_plugin list_plugins
+    doctor_plugins remove_plugin run_plugin_tool plugin_tool plugin_args
+    plugin_args_file task provider api_base model workspace max_steps confirm
+    resume tui yolo =
   match
     ( new_plugin,
       plugin_id,
       plugin_tool_name,
+      plugin_kind,
       check_plugin,
       install_plugin,
       smoke_plugin,
@@ -1942,8 +1949,12 @@ let dispatch new_plugin plugin_id plugin_tool_name check_plugin install_plugin
       remove_plugin,
       run_plugin_tool )
   with
-  | Some path, plugin_id, plugin_tool_name, _, _, _, _, _, _, _, _ -> (
-      match Plugin.scaffold ?id:plugin_id ?tool_name:plugin_tool_name path with
+  | Some path, plugin_id, plugin_tool_name, plugin_kind, _, _, _, _, _, _, _, _
+    -> (
+      match
+        Plugin.scaffold ?id:plugin_id ?tool_name:plugin_tool_name
+          ?kind:plugin_kind path
+      with
       | Ok dst ->
           List.iter (plugin_new_success_lines dst) ~f:(fun line ->
               Stdlib.Printf.printf "%s\n%!" line);
@@ -1951,15 +1962,19 @@ let dispatch new_plugin plugin_id plugin_tool_name check_plugin install_plugin
       | Error e ->
           Stdlib.prerr_endline ("plugin scaffold error: " ^ e);
           1)
-  | None, Some _, _, _, _, _, _, _, _, _, _ ->
+  | None, Some _, _, _, _, _, _, _, _, _, _, _ ->
       Stdlib.prerr_endline
         "plugin scaffold error: --plugin-id requires --new-plugin DIR";
       1
-  | None, None, Some _, _, _, _, _, _, _, _, _ ->
+  | None, None, Some _, _, _, _, _, _, _, _, _, _ ->
       Stdlib.prerr_endline
         "plugin scaffold error: --plugin-tool-name requires --new-plugin DIR";
       1
-  | None, None, None, Some path, _, _, _, _, _, _, _ -> (
+  | None, None, None, Some _, _, _, _, _, _, _, _, _ ->
+      Stdlib.prerr_endline
+        "plugin scaffold error: --plugin-kind requires --new-plugin DIR";
+      1
+  | None, None, None, None, Some path, _, _, _, _, _, _, _ -> (
       match Plugin.check ~replace:replace_plugin path with
       | Ok manifest ->
           Stdlib.print_endline "plugin manifest ok:";
@@ -1968,7 +1983,7 @@ let dispatch new_plugin plugin_id plugin_tool_name check_plugin install_plugin
       | Error e ->
           Stdlib.prerr_endline ("plugin check error: " ^ e);
           1)
-  | None, None, None, None, Some path, _, _, _, _, _, _ -> (
+  | None, None, None, None, None, Some path, _, _, _, _, _, _ -> (
       match Plugin.install ~replace:replace_plugin path with
       | Ok dst ->
           Stdlib.Printf.printf "installed plugin: %s\n" dst;
@@ -1982,19 +1997,20 @@ let dispatch new_plugin plugin_id plugin_tool_name check_plugin install_plugin
       | Error e ->
           Stdlib.prerr_endline ("plugin install error: " ^ e);
           1)
-  | None, None, None, None, None, Some path, _, _, _, _, _ ->
+  | None, None, None, None, None, None, Some path, _, _, _, _, _ ->
       run_plugin_smoke_cli path replace_plugin workspace
-  | None, None, None, None, None, None, Some path, _, _, _, _ ->
+  | None, None, None, None, None, None, None, Some path, _, _, _, _ ->
       run_plugin_dev_cli path replace_plugin workspace
-  | None, None, None, None, None, None, None, true, _, _, _ ->
+  | None, None, None, None, None, None, None, None, true, _, _, _ ->
       print_installed_plugins ();
       0
-  | None, None, None, None, None, None, None, false, true, _, _ ->
+  | None, None, None, None, None, None, None, None, false, true, _, _ ->
       List.iter
         (Tui_command.plugin_diagnostics_lines ())
         ~f:Stdlib.print_endline;
       0
-  | None, None, None, None, None, None, None, false, false, Some id, _ -> (
+  | None, None, None, None, None, None, None, None, false, false, Some id, _
+    -> (
       match Plugin.remove id with
       | Ok dst ->
           Stdlib.Printf.printf "removed plugin: %s\n" dst;
@@ -2002,15 +2018,16 @@ let dispatch new_plugin plugin_id plugin_tool_name check_plugin install_plugin
       | Error e ->
           Stdlib.prerr_endline ("plugin remove error: " ^ e);
           1)
-  | None, None, None, None, None, None, None, false, false, None, Some dir ->
+  | None, None, None, None, None, None, None, None, false, false, None, Some dir
+    ->
       run_plugin_tool_cli dir plugin_tool plugin_args plugin_args_file workspace
-  | None, None, None, None, None, None, None, false, false, None, None
+  | None, None, None, None, None, None, None, None, false, false, None, None
     when replace_plugin ->
       Stdlib.prerr_endline
         "plugin error: --replace-plugin requires --install-plugin DIR or \
          --check-plugin DIR or --smoke-plugin DIR or --dev-plugin DIR";
       1
-  | None, None, None, None, None, None, None, false, false, None, None ->
+  | None, None, None, None, None, None, None, None, false, false, None, None ->
       with_setup provider api_base model workspace max_steps
         (fun config workspace ->
           match task with
@@ -2158,6 +2175,16 @@ let () =
       & info [ "plugin-tool-name" ] ~docv:"NAME"
           ~doc:"Initial tool name to use with --new-plugin.")
   in
+  let plugin_kind =
+    Arg.(
+      value
+      & opt (some string) None
+      & info
+          [ "plugin-kind"; "tool-kind" ]
+          ~docv:"KIND"
+          ~doc:
+            "Initial tool kind to use with --new-plugin: read, write, or exec.")
+  in
   let provider =
     Arg.(
       value
@@ -2230,11 +2257,12 @@ let () =
   let doc = "A type-safe local CLI code agent harness." in
   let term =
     Term.(
-      const dispatch $ new_plugin $ plugin_id $ plugin_tool_name $ check_plugin
-      $ install_plugin $ smoke_plugin $ dev_plugin $ replace_plugin
-      $ list_plugins $ doctor_plugins $ remove_plugin $ run_plugin_tool
-      $ plugin_tool $ plugin_args $ plugin_args_file $ task $ provider
-      $ api_base $ model $ workspace $ max_steps $ confirm $ resume $ tui $ yolo)
+      const dispatch $ new_plugin $ plugin_id $ plugin_tool_name $ plugin_kind
+      $ check_plugin $ install_plugin $ smoke_plugin $ dev_plugin
+      $ replace_plugin $ list_plugins $ doctor_plugins $ remove_plugin
+      $ run_plugin_tool $ plugin_tool $ plugin_args $ plugin_args_file $ task
+      $ provider $ api_base $ model $ workspace $ max_steps $ confirm $ resume
+      $ tui $ yolo)
   in
   let info = Cmd.info "fp-agent" ~version:"0.1.0" ~doc in
   Stdlib.exit (Cmd.eval' (Cmd.v info term))

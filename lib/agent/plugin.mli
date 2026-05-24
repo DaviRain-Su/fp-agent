@@ -76,7 +76,11 @@ val check : ?replace:bool -> string -> (manifest, string) result
     with the same id is ignored for conflict checks. *)
 
 val scaffold :
-  ?id:string -> ?tool_name:string -> string -> (string, string) result
+  ?id:string ->
+  ?tool_name:string ->
+  ?kind:string ->
+  string ->
+  (string, string) result
 (** Create a starter plugin directory and return its path. *)
 
 val run_tool :

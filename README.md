@@ -74,12 +74,12 @@ dune exec -- fp-agent
 > /tool read_file    # inspect a tool's kind/schema/description
 > /plugin-doctor     # show plugin search paths and diagnostics
 > /plugin echo_json  # inspect a plugin by id or tool name
-> /plugin-new --id local.my-plugin --tool-name my_tool my-plugin
+> /plugin-new --id local.my-plugin --tool-name my_tool --kind read my-plugin
 > /plugin-dev --replace my-plugin
 > /plugin-check my-plugin
 > /plugin-install --replace my-plugin
 > /plugin-smoke --replace my-plugin
-> /plugin-run my-plugin hello_world '{"message":"hi"}'
+> /plugin-run my-plugin my_tool '{"message":"hi"}'
 > /plugin-remove local.my-plugin
 > /inspect 12        # inspect event 12: tool args/result/policy/JSON
 > /help
@@ -134,12 +134,12 @@ dune exec -- fp-agent
 > /plugins
 > /plugin-doctor
 > /plugin echo_json
-> /plugin-new --id local.my-plugin --tool-name my_tool my-plugin
+> /plugin-new --id local.my-plugin --tool-name my_tool --kind read my-plugin
 > /plugin-dev --replace my-plugin
 > /plugin-check my-plugin
 > /plugin-install --replace my-plugin
 > /plugin-smoke --replace my-plugin
-> /plugin-run my-plugin hello_world '{"message":"hi"}'
+> /plugin-run my-plugin my_tool '{"message":"hi"}'
 > /plugin-remove local.my-plugin
 > /tool echo_json
 > /tools
@@ -151,16 +151,17 @@ Create, test, and install a plugin into the user plugin home:
 dune exec -- fp-agent --new-plugin my-plugin
 dune exec -- fp-agent --new-plugin my-plugin --plugin-id com.example.my_plugin
 dune exec -- fp-agent --new-plugin my-plugin --plugin-tool-name my_tool
+dune exec -- fp-agent --new-plugin my-plugin --plugin-kind exec
 dune exec -- fp-agent --dev-plugin my-plugin --replace-plugin
 dune exec -- fp-agent --check-plugin my-plugin
 dune exec -- fp-agent --smoke-plugin my-plugin
 dune exec -- fp-agent
-> /plugin-new --id local.my-plugin --tool-name my_tool my-plugin
+> /plugin-new --id local.my-plugin --tool-name my_tool --kind read my-plugin
 > /plugin-dev --replace my-plugin
 > /plugin-check my-plugin
 > /plugin-install --replace my-plugin
 > /plugin-smoke --replace my-plugin
-> /plugin-run my-plugin hello_world '{"message":"hi"}'
+> /plugin-run my-plugin my_tool '{"message":"hi"}'
 > /plugin-remove local.my-plugin
 dune exec -- fp-agent --doctor-plugins
 dune exec -- fp-agent --check-plugin my-plugin --replace-plugin
@@ -233,7 +234,7 @@ copy. Two consequences:
   so plugin developers can keep the current agent session open while testing
   SDK changes.
 - **Plugin install management** (`/plugin-new [--id ID] [--tool-name NAME]
-  <dir>`, `/plugin-dev [--replace] <dir>`, `/plugin-check <dir>`,
+  [--kind KIND] <dir>`, `/plugin-dev [--replace] <dir>`, `/plugin-check <dir>`,
   `/plugin-install [--replace] <dir>`, `/plugin-remove <id>`) scaffolds,
   validates, smoke-tests, installs, and removes plugins
   from the REPL or fullscreen TUI, then reloads the in-process tool registry so
@@ -284,6 +285,8 @@ Options:
 - `--new-plugin DIR` — create a starter plugin directory, then exit
 - `--plugin-id ID` — manifest id to use with `--new-plugin`
 - `--plugin-tool-name NAME` — initial tool name to use with `--new-plugin`
+- `--plugin-kind KIND` / `--tool-kind KIND` — initial tool kind for
+  `--new-plugin`: `read`, `write`, or `exec`
 - `--check-plugin DIR` — validate a plugin directory, then exit
 - `--smoke-plugin DIR` — validate a plugin directory and run each tool with
   `examples/<tool>.args.json` plus `examples/<tool>/*.json` cases
