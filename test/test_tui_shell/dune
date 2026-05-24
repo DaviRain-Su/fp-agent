@@ -1,3 +1,3 @@
 (test
  (name test_tui_shell)
- (libraries fp_agent alcotest base))
+ (libraries fp_agent alcotest base unix))

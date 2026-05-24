@@ -137,7 +137,9 @@ copy. Two consequences:
   palette acceptance either dispatches safe no-arg commands or seeds the prompt
   draft for commands that need arguments. Typing while the palette is open
   filters commands by name or description, and accepted commands/drafts are
-  echoed into the TUI timeline.
+  echoed into the TUI timeline. Read-only commands such as `/tools`, `/plugins`,
+  `/models`, `/model`, `/diff`, `/log`, and `/inspect` render their results
+  directly inside the fullscreen view.
 - **TUI prompt editor groundwork** keeps multiline draft editing pure and
   testable: insert text, newline, delete/backspace, cursor movement, and
   rendering with a visible cursor.

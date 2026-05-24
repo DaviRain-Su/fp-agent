@@ -72,6 +72,10 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - Palette accept results now emit tested feedback lines. The Notty TUI appends
   accepted commands and seeded command drafts to the timeline instead of
   silently dropping them.
+- The Notty TUI now executes safe read-only palette commands directly:
+  `/tools`, `/plugins`, `/models`, `/model`, `/sessions`, `/tree`, `/diff`,
+  `/log`, and `/inspect` render their output into the timeline without leaving
+  fullscreen mode.
 - The REPL exposes the same inspector through `/inspect [index]`, so event-log
   review works even outside a full-screen TUI and can target historical events.
 - The REPL exposes plugin inspection through `/plugin <id|tool>`, showing

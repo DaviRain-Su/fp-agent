@@ -14,6 +14,47 @@ let palette_command_at index =
   Option.map (List.nth View.command_palette_entries index)
     ~f:(fun (command : View.command_entry) -> command.command)
 
+let rm_rf path =
+  ignore
+    (Shell.run
+       ~command:(Printf.sprintf "rm -rf %s" (Stdlib.Filename.quote path))
+       ~timeout_sec:10
+      : (Shell.result, string) Result.t)
+
+let mkdir_p path =
+  ignore
+    (Shell.run
+       ~command:(Printf.sprintf "mkdir -p %s" (Stdlib.Filename.quote path))
+       ~timeout_sec:10
+      : (Shell.result, string) Result.t)
+
+let write path content =
+  mkdir_p (Stdlib.Filename.dirname path);
+  Stdlib.Out_channel.with_open_bin path (fun oc ->
+      Stdlib.Out_channel.output_string oc content)
+
+let with_temp_dir prefix f =
+  let root = Stdlib.Filename.temp_dir prefix "" in
+  Exn.protect ~f:(fun () -> f root) ~finally:(fun () -> rm_rf root)
+
+let tui_context ?(events = []) ?selected_event_index root =
+  let session_dir = Session.create ~base_dir:root in
+  {
+    Tui_command.provider = "local-llm";
+    model = "qwen36-rtx";
+    api_base = "http://localhost/v1";
+    workspace_root = root;
+    sessions_root = Stdlib.Filename.dirname session_dir;
+    session_dir;
+    events;
+    selected_event_index;
+  }
+
+let output command context =
+  match Tui_command.run context command with
+  | Some lines -> String.concat lines ~sep:"\n"
+  | None -> Alcotest.failf "command was not handled: %s" command
+
 let test_prompt_submit () =
   let state =
     Tui_shell.create ()
@@ -214,6 +255,78 @@ let test_home_end_prompt_vs_events () =
   let state = input Tui_shell.End state in
   Alcotest.(check int) "end with draft moves cursor" 3 state.draft.cursor
 
+let test_tui_command_model_log_and_inspect () =
+  with_temp_dir "fp_agent_tui_command_events" (fun root ->
+      let events = [ Event.User_message { content = "inspect README" } ] in
+      let context = tui_context ~events ~selected_event_index:0 root in
+      let model = output "/model" context in
+      Alcotest.(check bool)
+        "model command header" true
+        (String.is_substring model ~substring:"[tui] /model");
+      Alcotest.(check bool)
+        "model provider" true
+        (String.is_substring model ~substring:"provider: local-llm");
+      let log = output "/log" context in
+      Alcotest.(check bool)
+        "log includes event summary" true
+        (String.is_substring log ~substring:"0  user: inspect README");
+      let inspect = output "/inspect" context in
+      Alcotest.(check bool)
+        "inspect includes selected index" true
+        (String.is_substring inspect ~substring:"event 0");
+      Alcotest.(check bool)
+        "inspect includes event kind" true
+        (String.is_substring inspect ~substring:"kind: user_message"))
+
+let test_tui_command_sessions_and_diff () =
+  with_temp_dir "fp_agent_tui_command_sessions" (fun root ->
+      let context = tui_context root in
+      let sessions = output "/sessions" context in
+      Alcotest.(check bool)
+        "sessions marks current" true
+        (String.is_substring sessions ~substring:"  *");
+      let diff = output "/diff" context in
+      Alcotest.(check bool)
+        "non-git diff message" true
+        (String.is_substring diff ~substring:"(workspace is not a git repo)"))
+
+let test_tui_command_plugins_and_tools () =
+  with_temp_dir "fp_agent_tui_command_plugins" (fun root ->
+      let plugin_dir = Stdlib.Filename.concat root "plugin" in
+      write
+        (Stdlib.Filename.concat plugin_dir Plugin.manifest_file)
+        {|{
+  "id": "com.example.tui",
+  "name": "TUI Test Plugin",
+  "version": "0.1.0",
+  "tools": [
+    {
+      "name": "tui_echo",
+      "kind": "read",
+      "description": "Echoes TUI input",
+      "command": "sh echo.sh",
+      "input_schema": {
+        "type": "object",
+        "properties": { "message": { "type": "string" } },
+        "required": ["message"]
+      }
+    }
+  ]
+}
+|};
+      write (Stdlib.Filename.concat plugin_dir "echo.sh") "cat\n";
+      Unix.putenv "FP_AGENT_PLUGIN_PATH" plugin_dir;
+      Unix.putenv "FP_AGENT_PLUGIN_HOME" (Stdlib.Filename.concat root "home");
+      let context = tui_context root in
+      let plugins = output "/plugins" context in
+      Alcotest.(check bool)
+        "plugins include manifest" true
+        (String.is_substring plugins ~substring:"com.example.tui");
+      let tools = output "/tools" context in
+      Alcotest.(check bool)
+        "tools include plugin tool" true
+        (String.is_substring tools ~substring:"tui_echo"))
+
 let () =
   Alcotest.run "tui_shell"
     [
@@ -235,5 +348,11 @@ let () =
             test_event_input_mapping;
           Alcotest.test_case "home_end_prompt_vs_events" `Quick
             test_home_end_prompt_vs_events;
+          Alcotest.test_case "tui_command_model_log_inspect" `Quick
+            test_tui_command_model_log_and_inspect;
+          Alcotest.test_case "tui_command_sessions_diff" `Quick
+            test_tui_command_sessions_and_diff;
+          Alcotest.test_case "tui_command_plugins_tools" `Quick
+            test_tui_command_plugins_and_tools;
         ] );
     ]

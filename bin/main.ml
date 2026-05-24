@@ -112,11 +112,13 @@ let make_plain_reporter () =
 
 (* Full-screen view: header, status strip, timeline, optional inspector, and a
    footer phase line. *)
-let make_tui_reporter ~provider ~model ~session ~header =
+let make_tui_reporter ~provider ~model ~api_base ~workspace_root ~session_dir
+    ~sessions_root ~header =
   let module I = Notty.I in
   let module A = Notty.A in
   let term = Notty_unix.Term.create () in
   let manifests = Plugin.manifests () in
+  let session = Stdlib.Filename.basename session_dir in
   Tool_loader.register_all ();
   let plugin_count = List.length manifests in
   let tool_count = List.length (Tool.all ()) in
@@ -167,7 +169,28 @@ let make_tui_reporter ~provider ~model ~session ~header =
     let apply input =
       let result = Tui_shell.handle_input ~page_size !shell input in
       shell := result.state;
-      match Tui_shell.feedback_lines result with
+      let feedback =
+        match result.dispatched_command with
+        | None -> Tui_shell.feedback_lines result
+        | Some command ->
+            let context : Tui_command.context =
+              {
+                provider;
+                model;
+                api_base;
+                workspace_root;
+                sessions_root;
+                session_dir;
+                events = !events;
+                selected_event_index =
+                  Tui_shell.selected_event_index result.state;
+              }
+            in
+            Option.value
+              (Tui_command.run context command)
+              ~default:(Tui_shell.feedback_lines result)
+      in
+      match feedback with
       | [] -> ()
       | feedback ->
           flush_delta ();
@@ -417,7 +440,10 @@ let run_oneshot config workspace ~confirm ~resume_opt ~tui ~yolo ~task =
   let reporter =
     if tui then
       make_tui_reporter ~provider:config.provider ~model:config.model
-        ~session:(Stdlib.Filename.basename session_dir)
+        ~api_base:config.api_base ~workspace_root:root ~session_dir
+        ~sessions_root:
+          (Stdlib.Filename.concat root
+             (Stdlib.Filename.concat ".ocaml-agent" "sessions"))
         ~header:(Printf.sprintf "fp-agent  %s  —  %s" config.model task)
     else make_plain_reporter ()
   in
