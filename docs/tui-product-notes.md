@@ -130,6 +130,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   README, and smoke-test args file start with the developer's real first tool.
 - Plugin scaffolding accepts `--plugin-kind` / `--kind` so the starter manifest
   can begin as a `read`, `write`, or `exec` tool without manual JSON edits.
+- Plugin scaffolding accepts `--plugin-template` / `--template`, with `shell`
+  and `python` starters that generate the matching command, script file,
+  README, manifest, and smoke args.
 - Plugin local development now has `--smoke-plugin`, which validates a plugin
   and runs each tool against `examples/<tool>.args.json` plus any sorted
   `examples/<tool>/*.json` case files before install.

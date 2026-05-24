@@ -108,7 +108,7 @@ Use the REPL command:
 /plugins
 /plugin-doctor
 /plugin echo_json
-/plugin-new --id com.example.echo --tool-name echo_json --kind read my-plugin
+/plugin-new --id com.example.echo --tool-name echo_json --kind read --template python my-plugin
 /plugin-dev --replace my-plugin
 /plugin-check my-plugin
 /plugin-install --replace my-plugin
@@ -157,11 +157,12 @@ reads JSON args from disk:
 step: validate the manifest, run smoke examples, install the plugin, refresh the
 tool registry, and print the next `/plugin` and `/tool` inspection commands.
 
-`/plugin-new [--id ID] [--tool-name NAME] [--kind KIND] <dir>`,
-`/plugin-check [--replace] <dir>`, `/plugin-install [--replace] <dir>`, and
-`/plugin-remove <id>` expose the same workflow as individual steps inside a live
-REPL or fullscreen TUI session. Install/remove commands reload the in-process
-tool registry, so `/tools` and later model calls see the updated plugin set.
+`/plugin-new [--id ID] [--tool-name NAME] [--kind KIND] [--template NAME]
+<dir>`, `/plugin-check [--replace] <dir>`, `/plugin-install [--replace] <dir>`,
+and `/plugin-remove <id>` expose the same workflow as individual steps inside a
+live REPL or fullscreen TUI session. Install/remove commands reload the
+in-process tool registry, so `/tools` and later model calls see the updated
+plugin set.
 
 ## Install
 
@@ -178,18 +179,22 @@ dune exec -- fp-agent --new-plugin my-plugin --plugin-id com.example.my_plugin
 ```
 
 Use `--plugin-tool-name` when the starter should scaffold the real first tool
-instead of `hello_world`, and `--plugin-kind` / `--tool-kind` when that tool
-should start as `read`, `write`, or `exec`:
+instead of `hello_world`, `--plugin-kind` / `--tool-kind` when that tool should
+start as `read`, `write`, or `exec`, and `--plugin-template` / `--template` to
+choose the generated runtime starter. Supported templates are `shell` and
+`python`:
 
 ```sh
 dune exec -- fp-agent --new-plugin my-plugin --plugin-tool-name my_tool
 dune exec -- fp-agent --new-plugin my-plugin --plugin-kind exec
+dune exec -- fp-agent --new-plugin my-plugin --plugin-template python
 ```
 
 The scaffold includes `fp-agent-plugin.json`, `hello.sh`, a README with the
 local development commands, and `examples/<tool>.args.json` for a first
-`--run-plugin-tool` smoke test. Add more JSON files under `examples/<tool>/` to
-run multiple smoke cases for the same tool.
+`--run-plugin-tool` smoke test. Python scaffolds use `main.py` and
+`python3 main.py` instead of `hello.sh`. Add more JSON files under
+`examples/<tool>/` to run multiple smoke cases for the same tool.
 
 Validate it before installing:
 
@@ -222,7 +227,7 @@ tool:
 dune exec -- fp-agent --smoke-plugin my-plugin
 dune exec -- fp-agent --dev-plugin my-plugin --replace-plugin
 dune exec -- fp-agent
-> /plugin-new --id com.example.echo --tool-name echo_json --kind read my-plugin
+> /plugin-new --id com.example.echo --tool-name echo_json --kind read --template python my-plugin
 > /plugin-dev --replace my-plugin
 > /plugin-check my-plugin
 > /plugin-install --replace my-plugin

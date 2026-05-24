@@ -468,6 +468,48 @@ let test_new_plugin_custom_id_cli () =
   assert_failure "plugin kind without new plugin" stray_kind;
   assert_contains "stray plugin kind stderr" stray_kind.stderr
     "--plugin-kind requires --new-plugin DIR";
+  let python_dir = Stdlib.Filename.concat root "python-plugin" in
+  let python_created =
+    run ~env
+      [
+        bin;
+        "--new-plugin";
+        python_dir;
+        "--plugin-tool-name";
+        "python_echo";
+        "--plugin-template";
+        "python";
+      ]
+  in
+  assert_success "new plugin python template" python_created;
+  Alcotest.(check bool)
+    "python scaffold created main.py" true
+    (Stdlib.Sys.file_exists (Stdlib.Filename.concat python_dir "main.py"));
+  let python_manifest =
+    Stdlib.In_channel.with_open_bin
+      (Stdlib.Filename.concat python_dir "fp-agent-plugin.json")
+      Stdlib.In_channel.input_all
+  in
+  assert_contains "python manifest command" python_manifest "python3 main.py";
+  let checked_python = run ~env [ bin; "--check-plugin"; python_dir ] in
+  assert_success "check python scaffold" checked_python;
+  let stray_template = run ~env [ bin; "--plugin-template"; "python" ] in
+  assert_failure "plugin template without new plugin" stray_template;
+  assert_contains "stray plugin template stderr" stray_template.stderr
+    "--plugin-template requires --new-plugin DIR";
+  let invalid_template =
+    run ~env
+      [
+        bin;
+        "--new-plugin";
+        Stdlib.Filename.concat root "bad-template";
+        "--plugin-template";
+        "ruby";
+      ]
+  in
+  assert_failure "new plugin invalid template" invalid_template;
+  assert_contains "invalid template stderr" invalid_template.stderr
+    "unknown plugin template";
   let invalid_kind =
     run ~env
       [

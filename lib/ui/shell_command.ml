@@ -96,7 +96,9 @@ let specs =
     };
     {
       id = PluginNew;
-      command = "/plugin-new [--id ID] [--tool-name NAME] [--kind KIND] <dir>";
+      command =
+        "/plugin-new [--id ID] [--tool-name NAME] [--kind KIND] [--template \
+         NAME] <dir>";
       description = "create a plugin scaffold";
       aliases = [];
       palette = true;

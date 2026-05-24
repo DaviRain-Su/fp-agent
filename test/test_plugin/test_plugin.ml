@@ -923,6 +923,43 @@ let test_scaffold_creates_valid_plugin () =
                 (Plugin.permissions_label tool.tool_permissions);
               Alcotest.(check int) "one tool" 1 (List.length manifest.tools)))
 
+let test_scaffold_creates_python_template () =
+  with_temp_dir "fp_agent_plugin_scaffold_python" (fun root ->
+      let dir = Stdlib.Filename.concat root "python-starter" in
+      match
+        Plugin.scaffold ~id:"com.example.python_scaffold"
+          ~tool_name:"python_echo" ~kind:"read" ~template:"python" dir
+      with
+      | Error e -> Alcotest.failf "python scaffold failed: %s" e
+      | Ok created -> (
+          Alcotest.(check string) "created dir" dir created;
+          Alcotest.(check bool)
+            "python file exists" true
+            (Stdlib.Sys.file_exists (Stdlib.Filename.concat dir "main.py"));
+          Alcotest.(check bool)
+            "shell file omitted" false
+            (Stdlib.Sys.file_exists (Stdlib.Filename.concat dir "hello.sh"));
+          let readme =
+            Stdlib.In_channel.with_open_bin
+              (Stdlib.Filename.concat dir "README.md")
+              Stdlib.In_channel.input_all
+          in
+          Alcotest.(check bool)
+            "readme documents python template" true
+            (String.is_substring readme ~substring:"Initial template: `python`");
+          Alcotest.(check bool)
+            "readme documents python command" true
+            (String.is_substring readme
+               ~substring:"Generated command: `python3 main.py`");
+          match Plugin.check dir with
+          | Error e -> Alcotest.failf "python scaffold check failed: %s" e
+          | Ok manifest ->
+              let tool = Option.value_exn (List.hd manifest.tools) in
+              Alcotest.(check string)
+                "python command" "python3 main.py" tool.tool_command;
+              Alcotest.(check string) "python tool" "python_echo" tool.tool_name
+          ))
+
 let test_check_rejects_invalid_manifest () =
   with_temp_dir "fp_agent_plugin_bad" (fun root ->
       let check_error name json substring =
@@ -1084,6 +1121,8 @@ let () =
             test_run_tool_reports_unknown_tool;
           Alcotest.test_case "scaffold_plugin" `Quick
             test_scaffold_creates_valid_plugin;
+          Alcotest.test_case "scaffold_python_template" `Quick
+            test_scaffold_creates_python_template;
           Alcotest.test_case "check_invalid_plugin" `Quick
             test_check_rejects_invalid_manifest;
           Alcotest.test_case "plugin_schema_request" `Quick

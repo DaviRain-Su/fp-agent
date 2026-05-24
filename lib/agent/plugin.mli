@@ -87,6 +87,7 @@ val scaffold :
   ?id:string ->
   ?tool_name:string ->
   ?kind:string ->
+  ?template:string ->
   string ->
   (string, string) result
 (** Create a starter plugin directory and return its path. *)
