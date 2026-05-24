@@ -1120,6 +1120,31 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
         Stdlib.Printf.printf "output_tokens: %d\n" usage.output_tokens;
         Stdlib.Printf.printf "total_tokens: %d\n" (View.token_usage_total usage)
   in
+  let latest_event_index events =
+    if List.is_empty events then None else Some (List.length events - 1)
+  in
+  let command_context () =
+    let events =
+      match Journal.read ~session_dir:!session with
+      | Ok events -> events
+      | Error _ -> []
+    in
+    {
+      Tui_command.provider = !config_ref.provider;
+      model = !config_ref.model;
+      api_base = !config_ref.api_base;
+      workspace_root = root;
+      sessions_root;
+      session_dir = !session;
+      events;
+      selected_event_index = latest_event_index events;
+    }
+  in
+  let print_status () =
+    List.iter
+      (Tui_command.status_lines (command_context ()))
+      ~f:Stdlib.print_endline
+  in
   let print_tree () =
     match Stdlib.Sys.readdir sessions_root with
     | exception _ -> Stdlib.print_endline "(no sessions yet)"
@@ -1263,6 +1288,9 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
             loop ()
         | Command (Usage, _) ->
             print_usage ();
+            loop ()
+        | Command (Status, _) ->
+            print_status ();
             loop ()
         | Command (Tree, _) ->
             print_tree ();

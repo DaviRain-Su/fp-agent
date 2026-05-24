@@ -285,6 +285,29 @@ let usage_lines ctx =
     Printf.sprintf "total_tokens: %d" (View.token_usage_total usage);
   ]
 
+let status_lines ctx =
+  Tool_loader.register_all ();
+  let discovery = Plugin.discover () in
+  let usage = View.token_usage_of_events ctx.events in
+  let conflicts = Plugin.tool_conflicts () in
+  [
+    "workspace: " ^ ctx.workspace_root;
+    "session: " ^ Stdlib.Filename.basename ctx.session_dir;
+    "session_dir: " ^ ctx.session_dir;
+    "provider: " ^ ctx.provider;
+    "model: " ^ ctx.model;
+    "api_base: " ^ ctx.api_base;
+    Printf.sprintf "events: %d" (List.length ctx.events);
+    Printf.sprintf "tokens: input %d output %d total %d" usage.input_tokens
+      usage.output_tokens
+      (View.token_usage_total usage);
+    Printf.sprintf "plugins: %d valid / %d invalid / %d conflicts"
+      (List.length discovery.manifests)
+      (List.length discovery.errors)
+      (List.length conflicts);
+    Printf.sprintf "tools: %d" (List.length (Tool.all ()));
+  ]
+
 let last_user_message events =
   List.find_map (List.rev events) ~f:(function
     | Event.User_message { content }
@@ -313,4 +336,5 @@ let run ctx command =
   | Command (Inspect, arg) ->
       Some (command_section command (inspect_lines ctx arg))
   | Command (Usage, _) -> Some (command_section command (usage_lines ctx))
+  | Command (Status, _) -> Some (command_section command (status_lines ctx))
   | Empty | Task _ | Unknown _ | Command _ -> None

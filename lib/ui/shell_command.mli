@@ -14,6 +14,7 @@ type id =
   | Log
   | Inspect
   | Usage
+  | Status
   | Fork
   | Diff
   | Retry

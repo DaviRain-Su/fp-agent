@@ -339,6 +339,26 @@ let test_tui_command_model_log_and_inspect () =
       Alcotest.(check bool)
         "usage command shows total" true
         (String.is_substring usage ~substring:"total_tokens: 28");
+      let status = output "/status" context in
+      Alcotest.(check bool)
+        "status command header" true
+        (String.is_substring status ~substring:"[tui] /status");
+      Alcotest.(check bool)
+        "status shows workspace" true
+        (String.is_substring status ~substring:("workspace: " ^ root));
+      Alcotest.(check bool)
+        "status shows provider" true
+        (String.is_substring status ~substring:"provider: local-llm");
+      Alcotest.(check bool)
+        "status shows events" true
+        (String.is_substring status ~substring:"events: 2");
+      Alcotest.(check bool)
+        "status shows tokens" true
+        (String.is_substring status
+           ~substring:"tokens: input 21 output 7 total 28");
+      Alcotest.(check bool)
+        "status shows tool count" true
+        (String.is_substring status ~substring:"tools:");
       let inspect_by_index = output "/inspect 0" context in
       Alcotest.(check bool)
         "inspect accepts explicit index" true

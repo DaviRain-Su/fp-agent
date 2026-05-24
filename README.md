@@ -58,6 +58,7 @@ dune exec -- fp-agent
 > /retry             # rerun the latest user task
 > /log               # list this session's events with indices
 > /usage             # show token usage from the event log
+> /status            # show runtime/session/plugin status
 > /fork 3            # fork a new branch at event index 3 (or /fork for the end)
 > /tree              # show the session fork tree
 > /sessions          # list sessions in this workspace
@@ -149,6 +150,8 @@ copy. Two consequences:
 - **Inspect** (`/inspect [index]`) renders the same event inspector used by the
   TUI: event kind, summary, tool args, policy/result details, and a JSON
   preview. With no index it inspects the latest event.
+- **Status** (`/status`) summarizes workspace, session, provider/model,
+  event count, token usage, plugin diagnostics, and registered tool count.
 - **TUI event navigation** (`--tui`) lets the inspector follow the latest event
   by default, or pin a historical event with Up/Down, PageUp/PageDown, Home,
   and End.
@@ -159,8 +162,8 @@ copy. Two consequences:
   prompt draft for commands that need arguments. Typing while the palette is open
   filters commands by name or description, and accepted commands/drafts are
   echoed into the TUI timeline. Read-only commands such as `/tools`, `/plugins`,
-  `/models`, `/model`, `/usage`, `/diff`, `/log`, and `/inspect` render their
-  results directly inside the fullscreen view.
+  `/models`, `/model`, `/usage`, `/status`, `/diff`, `/log`, and `/inspect`
+  render their results directly inside the fullscreen view.
 - **TUI model/provider switching** lets `/model <id>` and `/provider <name>
   [model] [api-base]` change the runtime used by later TUI task submissions.
 - **TUI session navigation** lets `/new`, `/resume <dir>`, and `/fork [index]`

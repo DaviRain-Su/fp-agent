@@ -512,6 +512,7 @@ let test_repl_inspects_session_events () =
       ~stdin:
         "/log\n\
          /usage\n\
+         /status\n\
          /inspect 0\n\
          /inspect\n\
          /inspect 3\n\
@@ -531,6 +532,11 @@ let test_repl_inspects_session_events () =
   assert_contains "inspect json" repl.stdout "JSON";
   assert_contains "usage input" repl.stdout "input_tokens: 31";
   assert_contains "usage total" repl.stdout "total_tokens: 40";
+  assert_contains "status session" repl.stdout "session: inspect-session";
+  assert_contains "status events" repl.stdout "events: 2";
+  assert_contains "status tokens" repl.stdout
+    "tokens: input 31 output 9 total 40";
+  assert_contains "status tools" repl.stdout "tools:";
   assert_contains "inspect range" repl.stdout "no event at index 3 (0..1)";
   assert_contains "inspect usage" repl.stdout "usage: /inspect [event-index]";
   assert_contains "retry without user task" repl.stdout

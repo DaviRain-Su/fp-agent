@@ -33,6 +33,8 @@ let test_parse () =
   require_command "new session" Shell_command.NewSession ""
     (Shell_command.parse "/new");
   require_command "usage" Shell_command.Usage "" (Shell_command.parse "/usage");
+  require_command "status" Shell_command.Status ""
+    (Shell_command.parse "/status");
   require_command "retry" Shell_command.Retry "" (Shell_command.parse "/retry");
   require_command "provider" Shell_command.Provider
     "local-llm qwen36-rtx http://127.0.0.1:8000/v1"
@@ -60,6 +62,9 @@ let test_metadata () =
     "palette has usage" true
     (List.mem palette "/usage" ~equal:String.equal);
   Alcotest.(check bool)
+    "palette has status" true
+    (List.mem palette "/status" ~equal:String.equal);
+  Alcotest.(check bool)
     "palette has new session" true
     (List.mem palette "/new" ~equal:String.equal);
   Alcotest.(check bool)
@@ -85,6 +90,8 @@ let test_acceptance () =
     (Shell_command.accept (entry "/model [id]"));
   require_acceptance "usage execute" ("execute", "/usage")
     (Shell_command.accept (entry "/usage"));
+  require_acceptance "status execute" ("execute", "/status")
+    (Shell_command.accept (entry "/status"));
   require_acceptance "tool draft" ("draft", "/tool ")
     (Shell_command.accept (entry "/tool <name>"));
   require_acceptance "provider draft" ("draft", "/provider ")

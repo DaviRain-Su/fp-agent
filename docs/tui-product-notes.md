@@ -24,7 +24,7 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - Right/secondary inspector: selected event JSON, tool args/result, usage, and
   policy decision.
 - Footer command palette: `/model`, `/provider`, `/plugins`, `/tools`,
-  `/new`, `/resume`, `/fork`, `/retry`, `/undo`, `/diff`.
+  `/new`, `/resume`, `/fork`, `/retry`, `/status`, `/undo`, `/diff`.
 - Status strip: provider/model, session id, step count, token usage, current
   phase, and active plugin count.
 - Review mode: navigate prior events, fork from an event, and replay compacted
@@ -75,6 +75,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - Token usage is now derived from assistant-message events and shown in the
   status/inspector surfaces; `/usage` renders input, output, and total tokens
   from the current event log.
+- `/status` now exposes a shared REPL/TUI runtime summary with workspace,
+  session, provider/model, event count, token usage, plugin diagnostics, and
+  registered tool count.
 - Fullscreen TUI confirm mode now renders approval prompts in the active view.
   `Y` approves a pending tool call, while `N`, Enter, or Esc deny it; normal
   prompt and palette input is paused until the approval is resolved.
@@ -119,8 +122,8 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   silently dropping them.
 - The Notty TUI now executes safe read-only palette commands directly:
   `/tools`, `/plugins`, `/models`, `/model`, `/sessions`, `/tree`, `/diff`,
-  `/log`, and `/inspect` render their output into the timeline without leaving
-  fullscreen mode.
+  `/status`, `/log`, and `/inspect` render their output into the timeline
+  without leaving fullscreen mode.
 - The REPL exposes the same inspector through `/inspect [index]`, so event-log
   review works even outside a full-screen TUI and can target historical events.
 - The REPL exposes plugin inspection through `/plugin <id|tool>`, showing

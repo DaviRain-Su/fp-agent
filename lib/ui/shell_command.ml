@@ -16,6 +16,7 @@ type id =
   | Log
   | Inspect
   | Usage
+  | Status
   | Fork
   | Diff
   | Retry
@@ -161,6 +162,14 @@ let specs =
       aliases = [];
       palette = true;
       acceptance = Execute "/usage";
+    };
+    {
+      id = Status;
+      command = "/status";
+      description = "show runtime, session, usage, and plugin status";
+      aliases = [];
+      palette = true;
+      acceptance = Execute "/status";
     };
     {
       id = Fork;

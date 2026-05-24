@@ -16,5 +16,8 @@ val run : context -> string -> string list option
     to append to the TUI timeline. Returns [None] for commands that are
     unsupported in the TUI or require side effects beyond display. *)
 
+val status_lines : context -> string list
+(** Render runtime/session/plugin status without a command header. *)
+
 val last_user_message : Event.t list -> string option
 (** Return the latest non-empty user task from an event log, if any. *)
