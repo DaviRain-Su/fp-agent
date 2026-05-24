@@ -59,13 +59,17 @@ Each provider has a built-in key env var, base URL, and default model. All carry
 the same JSON action contract; the wire protocol differs (Kimi for coding speaks
 the Anthropic Messages API, the others OpenAI chat completions).
 
-| Provider | Key env var | Base URL | Default model | Protocol |
-| --- | --- | --- | --- | --- |
-| `kimi` (default) | `KIMI_API_KEY` | `https://api.kimi.com/coding` | `kimi-for-coding` | Anthropic |
-| `zhipu` | `ZAI_API_KEY` | `https://api.z.ai/api/paas/v4` | `glm-4` | OpenAI |
-| `deepseek` | `DEEPSEEK_API_KEY` | `https://api.deepseek.com` | `deepseek-v4-flash` | OpenAI |
+| Provider | Key env var | Base URL | Default model | Protocol | Status |
+| --- | --- | --- | --- | --- | --- |
+| `kimi` (default) | `KIMI_API_KEY` | `https://api.kimi.com/coding` | `kimi-for-coding` | Anthropic | verified end-to-end |
+| `deepseek` | `DEEPSEEK_API_KEY` | `https://api.deepseek.com` | `deepseek-v4-flash` | OpenAI | verified end-to-end |
+| `zhipu` | `ZAI_API_KEY` | `https://api.z.ai/api/paas/v4` | `glm-4` | OpenAI | wiring verified; needs account balance |
 
 For DeepSeek Pro: `--model deepseek-v4-pro`.
+
+> The `zhipu` integration is correct but unverified live: the test key returned
+> z.ai error `1113` ("Insufficient balance or no resource package"). Recharge the
+> account, then `--provider zhipu` (optionally `--model glm-5.1`) works as-is.
 
 ### Environment variables
 
