@@ -116,6 +116,64 @@ let move_selection ~event_count ~delta selection =
   | None -> Follow_latest
   | Some index -> select_event ~event_count ~index:(index + delta)
 
+type command_entry = { command : string; description : string }
+
+let command_palette_entries =
+  [
+    { command = "/model [id]"; description = "show or switch model" };
+    {
+      command = "/provider <name> [model]";
+      description = "switch provider catalog entry";
+    };
+    { command = "/models"; description = "list configured models" };
+    { command = "/plugins"; description = "list discovered plugins" };
+    { command = "/plugin <id|tool>"; description = "inspect plugin manifest" };
+    { command = "/tool <name>"; description = "inspect tool schema" };
+    { command = "/inspect [index]"; description = "inspect an event" };
+    { command = "/resume <session>"; description = "switch session" };
+    { command = "/fork [index]"; description = "fork from event" };
+    { command = "/diff"; description = "show uncommitted changes" };
+    { command = "/undo"; description = "revert last turn changes" };
+  ]
+
+type palette_state = Palette_closed | Palette_open of int
+
+let normalize_palette ~command_count state =
+  if command_count <= 0 then Palette_closed
+  else
+    match state with
+    | Palette_closed -> Palette_closed
+    | Palette_open index ->
+        Palette_open (clamp ~lo:0 ~hi:(command_count - 1) index)
+
+let palette_index ~command_count state =
+  match normalize_palette ~command_count state with
+  | Palette_closed -> None
+  | Palette_open index -> Some index
+
+let palette_label ~command_count state =
+  match palette_index ~command_count state with
+  | None -> "palette closed"
+  | Some index -> Printf.sprintf "command %d/%d" (index + 1) command_count
+
+let toggle_palette ~command_count state =
+  match normalize_palette ~command_count state with
+  | Palette_closed ->
+      if command_count <= 0 then Palette_closed else Palette_open 0
+  | Palette_open _ -> Palette_closed
+
+let move_palette ~command_count ~delta state =
+  match palette_index ~command_count state with
+  | None -> state
+  | Some index ->
+      normalize_palette ~command_count (Palette_open (index + delta))
+
+let command_palette_lines ~selected entries =
+  [ "Command Palette"; "press Enter/Esc to close"; "" ]
+  @ List.mapi entries ~f:(fun index entry ->
+      let marker = if index = selected then "> " else "  " in
+      Printf.sprintf "%s%-24s %s" marker entry.command entry.description)
+
 let flat s = String.substr_replace_all s ~pattern:"\n" ~with_:" "
 
 let event_kind (e : Event.t) =

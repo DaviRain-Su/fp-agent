@@ -129,6 +129,8 @@ copy. Two consequences:
 - **TUI event navigation** (`--tui`) lets the inspector follow the latest event
   by default, or pin a historical event with Up/Down, `j`/`k`, PageUp/PageDown,
   Home, and End.
+- **TUI command palette** (`/` or `?` in `--tui`) shows the core REPL commands
+  for models, providers, plugins, tools, sessions, forks, diffs, and undo.
 
 Options:
 

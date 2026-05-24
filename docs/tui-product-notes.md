@@ -43,6 +43,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - The inspector expands the selected event into a stable type label, summary,
   key tool/policy/result fields, and a JSON preview, keeping audit details close
   to the live run.
+- `/` or `?` opens a TUI command palette overlay with the core REPL commands
+  for model/provider switching, plugin/tool inspection, session navigation,
+  forks, diffs, and undo; Up/Down move through entries and Enter/Esc closes it.
 - The REPL exposes the same inspector through `/inspect [index]`, so event-log
   review works even outside a full-screen TUI and can target historical events.
 - The REPL exposes plugin inspection through `/plugin <id|tool>`, showing

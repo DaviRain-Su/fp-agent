@@ -132,6 +132,47 @@ let test_event_selection () =
     "select newest follows" "latest (5/5)"
     (View.selection_label ~event_count:5 newest)
 
+let test_command_palette () =
+  let count = List.length View.command_palette_entries in
+  Alcotest.(check bool) "palette has commands" true (count > 0);
+  Alcotest.(check (option int))
+    "closed palette has no index" None
+    (View.palette_index ~command_count:count View.Palette_closed);
+  let opened = View.toggle_palette ~command_count:count View.Palette_closed in
+  Alcotest.(check (option int))
+    "toggle opens first command" (Some 0)
+    (View.palette_index ~command_count:count opened);
+  let moved = View.move_palette ~command_count:count ~delta:2 opened in
+  Alcotest.(check (option int))
+    "move selects command" (Some 2)
+    (View.palette_index ~command_count:count moved);
+  let clamped = View.move_palette ~command_count:count ~delta:100 moved in
+  Alcotest.(check (option int))
+    "move clamps high"
+    (Some (count - 1))
+    (View.palette_index ~command_count:count clamped);
+  Alcotest.(check string)
+    "palette label"
+    (Printf.sprintf "command %d/%d" count count)
+    (View.palette_label ~command_count:count clamped);
+  let closed = View.toggle_palette ~command_count:count clamped in
+  Alcotest.(check (option int))
+    "toggle closes open palette" None
+    (View.palette_index ~command_count:count closed);
+  let lines =
+    View.command_palette_lines ~selected:1 View.command_palette_entries
+  in
+  let joined = String.concat lines ~sep:"\n" in
+  Alcotest.(check bool)
+    "renders title" true
+    (String.is_substring joined ~substring:"Command Palette");
+  Alcotest.(check bool)
+    "renders selected marker" true
+    (String.is_substring joined ~substring:"> /provider");
+  Alcotest.(check bool)
+    "renders plugin command" true
+    (String.is_substring joined ~substring:"/plugins")
+
 let test_event_summary () =
   let event = Event.Tool_call (Tool_call.read_file "README.md") in
   Alcotest.(check string) "kind" "tool_call" (View.event_kind event);
@@ -267,6 +308,7 @@ let () =
           Alcotest.test_case "status_and_inspector" `Quick
             test_status_and_inspector;
           Alcotest.test_case "event_selection" `Quick test_event_selection;
+          Alcotest.test_case "command_palette" `Quick test_command_palette;
           Alcotest.test_case "event_summary" `Quick test_event_summary;
           Alcotest.test_case "event_inspector_lines" `Quick
             test_event_inspector_lines;

@@ -125,6 +125,7 @@ let make_tui_reporter ~provider ~model ~session ~header =
   let phase = make_phase () in
   let events = ref [] in
   let selection = ref View.Follow_latest in
+  let palette = ref View.Palette_closed in
   let i = ref 0 in
   let visible_lines () =
     if String.is_empty !current_delta then !lines
@@ -136,6 +137,17 @@ let make_tui_reporter ~provider ~model ~session ~header =
       current_delta := "")
   in
   let drain_input ~page_size =
+    let command_count = List.length View.command_palette_entries in
+    let palette_open () =
+      Option.is_some (View.palette_index ~command_count !palette)
+    in
+    let toggle_palette () =
+      palette := View.toggle_palette ~command_count !palette
+    in
+    let close_palette () = palette := View.Palette_closed in
+    let move_palette delta =
+      palette := View.move_palette ~command_count ~delta !palette
+    in
     let move delta =
       selection :=
         View.move_selection ~event_count:(List.length !events) ~delta !selection
@@ -147,6 +159,23 @@ let make_tui_reporter ~provider ~model ~session ~header =
     let rec loop () =
       if Notty_unix.Term.pending term then (
         (match Notty_unix.Term.event term with
+        | `Key (`Escape, _) when palette_open () -> close_palette ()
+        | `Key (`Enter, _) when palette_open () -> close_palette ()
+        | `Key (`ASCII '/', _) | `Key (`ASCII '?', _) -> toggle_palette ()
+        | (`Key (`Arrow `Up, _) | `Key (`ASCII 'k', _)) when palette_open () ->
+            move_palette (-1)
+        | (`Key (`Arrow `Down, _) | `Key (`ASCII 'j', _)) when palette_open ()
+          ->
+            move_palette 1
+        | `Key (`Page `Up, _) when palette_open () -> move_palette (-page_size)
+        | `Key (`Page `Down, _) when palette_open () -> move_palette page_size
+        | `Key (`Home, _) when palette_open () -> palette := View.Palette_open 0
+        | `Key (`End, _) when palette_open () ->
+            palette := View.Palette_open (command_count - 1)
+        | `Mouse (`Press (`Scroll `Up), _, _) when palette_open () ->
+            move_palette (-1)
+        | `Mouse (`Press (`Scroll `Down), _, _) when palette_open () ->
+            move_palette 1
         | `Key (`Arrow `Up, _) | `Key (`ASCII 'k', _) -> move (-1)
         | `Key (`Arrow `Down, _) | `Key (`ASCII 'j', _) -> move 1
         | `Key (`Page `Up, _) -> move (-page_size)
@@ -171,6 +200,13 @@ let make_tui_reporter ~provider ~model ~session ~header =
         ~f:(List.nth !events)
     in
     let selection_label = View.selection_label ~event_count !selection in
+    let command_count = List.length View.command_palette_entries in
+    let palette_index = View.palette_index ~command_count !palette in
+    let palette_label = View.palette_label ~command_count !palette in
+    let palette_lines =
+      Option.map palette_index ~f:(fun selected ->
+          View.command_palette_lines ~selected View.command_palette_entries)
+    in
     let phase_text = phase_label !(fst phase) in
     let status : View.status =
       {
@@ -198,7 +234,8 @@ let make_tui_reporter ~provider ~model ~session ~header =
       match View.split_panes ~width:w with
       | None ->
           let shown =
-            View.viewport ~rows:body_rows ~cols:w (visible_lines ())
+            View.viewport ~rows:body_rows ~cols:w
+              (Option.value palette_lines ~default:(visible_lines ()))
           in
           I.vcat
             (List.init body_rows ~f:(fun idx ->
@@ -209,16 +246,19 @@ let make_tui_reporter ~provider ~model ~session ~header =
               (visible_lines ())
           in
           let inspector =
-            (match selected_event with
-              | None ->
-                  View.inspector_lines status
-                    ~focus_label:("Selected event: " ^ selection_label)
-                    ~last_event:"waiting for first event"
-              | Some event ->
-                  View.inspector_lines status
-                    ~focus_label:("Selected event: " ^ selection_label)
-                    ~last_event:(View.event_summary event)
-                  @ ("" :: View.event_inspector_lines event))
+            (match palette_lines with
+              | Some lines -> lines
+              | None -> (
+                  match selected_event with
+                  | None ->
+                      View.inspector_lines status
+                        ~focus_label:("Selected event: " ^ selection_label)
+                        ~last_event:"waiting for first event"
+                  | Some event ->
+                      View.inspector_lines status
+                        ~focus_label:("Selected event: " ^ selection_label)
+                        ~last_event:(View.event_summary event)
+                      @ ("" :: View.event_inspector_lines event)))
             |> View.viewport ~rows:body_rows ~cols:panes.inspector_cols
           in
           I.vcat
@@ -244,8 +284,12 @@ let make_tui_reporter ~provider ~model ~session ~header =
     let rule = I.string A.(fg lightblue) (String.make (Int.max 1 w) '-') in
     let footer =
       let hint =
-        Printf.sprintf "%s | up/down inspect | End follow latest"
-          selection_label
+        match palette_index with
+        | Some _ ->
+            Printf.sprintf "%s | up/down choose | Esc close" palette_label
+        | None ->
+            Printf.sprintf "%s | / palette | up/down inspect | End latest"
+              selection_label
       in
       match phase_text with
       | None ->
