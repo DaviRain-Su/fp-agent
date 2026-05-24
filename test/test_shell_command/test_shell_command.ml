@@ -64,6 +64,10 @@ let test_parse () =
   require_command "plugin smoke" Shell_command.PluginSmoke
     "--replace ./my-plugin"
     (Shell_command.parse "/plugin-smoke --replace ./my-plugin");
+  require_command "plugin run" Shell_command.PluginRun
+    {|./my-plugin hello_world {"message":"hi"}|}
+    (Shell_command.parse
+       {|/plugin-run ./my-plugin hello_world {"message":"hi"}|});
   require_command "plugin doctor" Shell_command.PluginDoctor ""
     (Shell_command.parse "/plugin-doctor");
   require_command "plugin doctor alias" Shell_command.PluginDoctor ""
@@ -128,6 +132,13 @@ let test_metadata () =
   Alcotest.(check bool)
     "palette has plugin smoke" true
     (List.mem palette "/plugin-smoke [--replace] <dir>" ~equal:String.equal);
+  Alcotest.(check bool)
+    "palette has plugin run" true
+    (List.mem palette "/plugin-run <dir> <tool> <json|@file>"
+       ~equal:String.equal);
+  Alcotest.(check string)
+    "plugin run group" "Plugins"
+    (entry "/plugin-run <dir> <tool> <json|@file>").group;
   Alcotest.(check bool)
     "palette has plugin doctor" true
     (List.mem palette "/plugin-doctor" ~equal:String.equal);
@@ -202,6 +213,8 @@ let test_acceptance () =
   require_acceptance "plugin smoke draft"
     ("draft", "/plugin-smoke ")
     (Shell_command.accept (entry "/plugin-smoke [--replace] <dir>"));
+  require_acceptance "plugin run draft" ("draft", "/plugin-run ")
+    (Shell_command.accept (entry "/plugin-run <dir> <tool> <json|@file>"));
   require_acceptance "plugin doctor execute"
     ("execute", "/plugin-doctor")
     (Shell_command.accept (entry "/plugin-doctor"));

@@ -818,6 +818,67 @@ let plugin_smoke_lines ~workspace args =
       | Error e -> [ "plugin smoke error: " ^ e ]
       | Ok results -> plugin_smoke_result_lines results)
 
+let plugin_run_usage = "usage: /plugin-run <dir> <tool> <json|@args-file>"
+
+let parse_plugin_run_args raw =
+  let raw = String.strip raw in
+  match String.lsplit2 raw ~on:' ' with
+  | None -> Error plugin_run_usage
+  | Some (dir, rest) -> (
+      let rest = String.strip rest in
+      match String.lsplit2 rest ~on:' ' with
+      | None -> Error plugin_run_usage
+      | Some (tool_name, args_spec) ->
+          let dir = String.strip dir in
+          let tool_name = String.strip tool_name in
+          let args_spec = String.strip args_spec in
+          if
+            String.is_empty dir || String.is_empty tool_name
+            || String.is_empty args_spec
+          then Error plugin_run_usage
+          else Ok (dir, tool_name, args_spec))
+
+let read_plugin_run_args args_spec =
+  let read_file path =
+    match Stdlib.In_channel.with_open_bin path Stdlib.In_channel.input_all with
+    | content -> Ok content
+    | exception exn ->
+        Error
+          (Printf.sprintf "cannot read plugin args file %s: %s" path
+             (Exn.to_string exn))
+  in
+  let json =
+    if String.is_prefix args_spec ~prefix:"@" then
+      let path = String.drop_prefix args_spec 1 |> String.strip in
+      if String.is_empty path then Error plugin_run_usage else read_file path
+    else Ok args_spec
+  in
+  match json with
+  | Error _ as e -> e
+  | Ok json -> (
+      match Yojson.Safe.from_string json with
+      | json -> Ok json
+      | exception exn -> Error ("invalid plugin args JSON: " ^ Exn.to_string exn)
+      )
+
+let plugin_run_lines ~workspace args =
+  match parse_plugin_run_args args with
+  | Error e -> [ e ]
+  | Ok (dir, tool_name, args_spec) -> (
+      match read_plugin_run_args args_spec with
+      | Error e -> [ "plugin run error: " ^ e ]
+      | Ok args -> (
+          match Plugin.run_tool ~dir ~tool_name ~workspace ~args with
+          | Error e -> [ "plugin run error: " ^ e ]
+          | Ok (Tool_result.Error { message }) ->
+              [ "plugin run error: " ^ message ]
+          | Ok (Tool_result.Success { output }) ->
+              let output = String.strip output in
+              ("plugin run ok: " ^ tool_name)
+              ::
+              (if String.is_empty output then [] else String.split_lines output)
+          ))
+
 let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
   let root = Workspace.root workspace in
   let sessions_root =
@@ -1080,6 +1141,9 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
     view.append_lines
       ("[tui] /plugin-smoke" :: plugin_smoke_lines ~workspace arg)
   in
+  let run_plugin arg =
+    view.append_lines ("[tui] /plugin-run" :: plugin_run_lines ~workspace arg)
+  in
   let doctor_plugins () =
     view.append_lines
       ("[tui] /plugin-doctor" :: Tui_command.plugin_diagnostics_lines ())
@@ -1126,6 +1190,7 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
     | Command (PluginInstall, arg) -> install_plugin arg
     | Command (PluginRemove, arg) -> remove_plugin arg
     | Command (PluginSmoke, arg) -> smoke_plugin arg
+    | Command (PluginRun, arg) -> run_plugin arg
     | Command (PluginDoctor, _) -> doctor_plugins ()
     | Command _ -> (
         match Tui_command.run (command_context ()) raw with
@@ -1644,6 +1709,9 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
             List.iter
               (plugin_smoke_lines ~workspace arg)
               ~f:Stdlib.print_endline;
+            loop ()
+        | Command (PluginRun, arg) ->
+            List.iter (plugin_run_lines ~workspace arg) ~f:Stdlib.print_endline;
             loop ()
         | Command (PluginDoctor, _) ->
             List.iter

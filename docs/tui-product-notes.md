@@ -128,6 +128,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - Plugin smoke checks are now available inside the REPL and fullscreen TUI as
   `/plugin-smoke [--replace] <dir>`, backed by the same SDK smoke runner as the
   CLI.
+- Plugin authors can now run one local tool inside the REPL or fullscreen TUI
+  with `/plugin-run <dir> <tool> <json|@file>`, so the interactive workflow can
+  validate real tool output without a model call.
 - Plugin development now has `/plugin-dev [--replace] <dir>` and
   `--dev-plugin DIR`, which validate, smoke-test, install, refresh tools, and
   print inspection next steps in one command.

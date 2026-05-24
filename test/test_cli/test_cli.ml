@@ -300,6 +300,9 @@ let test_repl_installs_and_removes_plugin () =
              "/plugin-new --id local.repl-plugin --tool-name repl_echo "
              ^ plugin_dir;
              "/plugin-check " ^ plugin_dir;
+             "/plugin-run " ^ plugin_dir ^ {| repl_echo {"message":"from-run"}|};
+             "/plugin-run " ^ plugin_dir ^ " repl_echo @" ^ plugin_dir
+             ^ "/examples/repl_echo.args.json";
              "/plugin-install " ^ plugin_dir;
              "/plugins";
              "/plugin-doctor";
@@ -321,6 +324,9 @@ let test_repl_installs_and_removes_plugin () =
   assert_contains "new install hint" repl.stdout
     ("next: /plugin-install --replace " ^ plugin_dir);
   assert_contains "check output" repl.stdout "plugin manifest ok:";
+  assert_contains "plugin run output" repl.stdout "plugin run ok: repl_echo";
+  assert_contains "plugin run inline args" repl.stdout "from-run";
+  assert_contains "plugin run file args" repl.stdout {|"message":"hi"|};
   assert_contains "install output" repl.stdout "installed plugin:";
   assert_contains "install reload output" repl.stdout "tools reloaded";
   assert_contains "install count output" repl.stdout

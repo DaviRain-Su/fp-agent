@@ -96,6 +96,7 @@ Use the REPL command:
 /plugin-check my-plugin
 /plugin-install --replace my-plugin
 /plugin-smoke --replace my-plugin
+/plugin-run my-plugin hello_world '{"message":"hi"}'
 /plugin-remove com.example.echo
 /tool echo_json
 /tools
@@ -125,6 +126,14 @@ plugin tools.
 tool against `examples/<tool>.args.json` plus any sorted
 `examples/<tool>/*.json` case files without leaving the current REPL or
 fullscreen TUI session.
+
+`/plugin-run <dir> <tool> <json|@file>` runs one plugin tool locally from the
+current REPL or fullscreen TUI. Inline JSON is accepted directly, and `@file`
+reads JSON args from disk:
+
+```text
+/plugin-run my-plugin hello_world @my-plugin/examples/hello_world.args.json
+```
 
 `/plugin-dev [--replace] <dir>` runs the normal local development loop in one
 step: validate the manifest, run smoke examples, install the plugin, refresh the
@@ -198,6 +207,7 @@ dune exec -- fp-agent
 > /plugin-check my-plugin
 > /plugin-install --replace my-plugin
 > /plugin-smoke --replace my-plugin
+> /plugin-run my-plugin hello_world '{"message":"hi"}'
 > /plugin-remove com.example.echo
 
 dune exec -- fp-agent --run-plugin-tool my-plugin \

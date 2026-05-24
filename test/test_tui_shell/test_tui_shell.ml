@@ -177,7 +177,7 @@ let test_palette_state () =
     (Tui_shell.selected_command_index state)
 
 let test_palette_input_mapping () =
-  let state = Tui_shell.create ~command_count:12 () in
+  let state = Tui_shell.create ~command_count:13 () in
   let state = input Tui_shell.Slash state in
   Alcotest.(check (option int))
     "slash opens" (Some 0)
@@ -192,14 +192,14 @@ let test_palette_input_mapping () =
     (Tui_shell.selected_command_index state);
   let state = input Tui_shell.End state in
   Alcotest.(check (option int))
-    "end moves palette" (Some 11)
+    "end moves palette" (Some 12)
     (Tui_shell.selected_command_index state);
   let result = Tui_shell.handle_input ~page_size:3 state Tui_shell.Enter in
   Alcotest.(check bool)
     "enter closes palette" false
     (Tui_shell.palette_open result.state);
   Alcotest.(check (option string))
-    "enter accepts selected command" (palette_command_at 11)
+    "enter accepts selected command" (palette_command_at 12)
     (accepted_command result.accepted_command);
   Alcotest.(check (option string))
     "enter dispatches no-arg command" (Some "/sessions")
@@ -570,6 +570,11 @@ let test_tui_command_plugins_and_tools () =
       Alcotest.(check bool)
         "plugin detail includes command" true
         (String.is_substring plugin ~substring:"command: sh echo.sh");
+      Alcotest.(check bool)
+        "plugin run is stateful" true
+        (Option.is_none
+           (Tui_command.run context
+              {|/plugin-run plugin tui_echo {"message":"hi"}|}));
       let doctor = output "/plugin-doctor" context in
       Alcotest.(check bool)
         "doctor command header" true

@@ -78,8 +78,9 @@ dune exec -- fp-agent
 > /plugin-dev --replace my-plugin
 > /plugin-check my-plugin
 > /plugin-install --replace my-plugin
-> /plugin-remove local.my-plugin
 > /plugin-smoke --replace my-plugin
+> /plugin-run my-plugin hello_world '{"message":"hi"}'
+> /plugin-remove local.my-plugin
 > /inspect 12        # inspect event 12: tool args/result/policy/JSON
 > /help
 > /exit
@@ -116,13 +117,14 @@ or TUI to preview the exact instruction text before a model call.
 Third-party tools can be added as plugin directories with a
 `fp-agent-plugin.json` manifest. A plugin tool receives JSON args on stdin and
 returns its result on stdout. `input_schema` is enforced before the plugin
-command runs, so developers get local feedback from `--run-plugin-tool` without
-spending a model call. The local schema subset includes common JSON Schema
-constraints such as `type`, `enum`, `required`, object `properties`, and array
-`items`; object schemas can also set `additionalProperties: false` to reject
-undeclared arguments before plugin code runs. Manifests can declare
-`sdk_version`; unsupported future SDK versions are rejected by `--check-plugin`,
-install, and local tool runs. Plugin commands also receive runtime env such as
+command runs, so developers get local feedback from `/plugin-run` or
+`--run-plugin-tool` without spending a model call. The local schema subset
+includes common JSON Schema constraints such as `type`, `enum`, `required`,
+object `properties`, and array `items`; object schemas can also set
+`additionalProperties: false` to reject undeclared arguments before plugin code
+runs. Manifests can declare `sdk_version`; unsupported future SDK versions are
+rejected by `--check-plugin`, install, and local tool runs. Plugin commands also
+receive runtime env such as
 `FP_AGENT_WORKSPACE`,
 `FP_AGENT_PLUGIN_ID`, `FP_AGENT_TOOL_KIND`, and `FP_AGENT_ARGS_FILE`.
 
@@ -137,6 +139,7 @@ dune exec -- fp-agent
 > /plugin-check my-plugin
 > /plugin-install --replace my-plugin
 > /plugin-smoke --replace my-plugin
+> /plugin-run my-plugin hello_world '{"message":"hi"}'
 > /plugin-remove local.my-plugin
 > /tool echo_json
 > /tools
@@ -157,6 +160,7 @@ dune exec -- fp-agent
 > /plugin-check my-plugin
 > /plugin-install --replace my-plugin
 > /plugin-smoke --replace my-plugin
+> /plugin-run my-plugin hello_world '{"message":"hi"}'
 > /plugin-remove local.my-plugin
 dune exec -- fp-agent --doctor-plugins
 dune exec -- fp-agent --check-plugin my-plugin --replace-plugin
@@ -217,6 +221,10 @@ copy. Two consequences:
   echoed into the TUI timeline. Read-only commands such as `/tools`, `/plugins`,
   `/models`, `/model`, `/usage`, `/status`, `/instructions`, `/diff`, `/log`,
   and `/inspect` render their results directly inside the fullscreen view.
+- **Plugin local runs** (`/plugin-run <dir> <tool> <json|@file>`) execute one
+  plugin tool with inline JSON or a JSON args file from inside the REPL or
+  fullscreen TUI, using the same validation and workspace guard as
+  `--run-plugin-tool`.
 - **Plugin smoke checks** (`/plugin-smoke [--replace] <dir>`) validate a
   plugin and run `examples/<tool>.args.json` plus any
   `examples/<tool>/*.json` case files from inside the REPL or fullscreen TUI,

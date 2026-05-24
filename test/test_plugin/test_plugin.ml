@@ -834,6 +834,9 @@ let test_scaffold_creates_valid_plugin () =
             "readme documents plugin dev" true
             (String.is_substring readme ~substring:"/plugin-dev --replace .");
           Alcotest.(check bool)
+            "readme documents plugin run" true
+            (String.is_substring readme ~substring:"/plugin-run . scaffold_echo");
+          Alcotest.(check bool)
             "readme documents cli plugin dev" true
             (String.is_substring readme
                ~substring:"--dev-plugin . --replace-plugin");

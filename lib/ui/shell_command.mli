@@ -10,6 +10,7 @@ type id =
   | PluginInstall
   | PluginRemove
   | PluginSmoke
+  | PluginRun
   | PluginDoctor
   | Sessions
   | Tree

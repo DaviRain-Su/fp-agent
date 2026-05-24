@@ -929,7 +929,7 @@ without leaving the REPL or fullscreen TUI:
 > /plugin-smoke .
 > /plugin-dev --replace .
 > /plugin-install --replace .
-> /tool %s {"message":"hi"}
+> /plugin-run . %s {"message":"hi"}
 > /plugin-remove %s
 ```
 
