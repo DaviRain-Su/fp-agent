@@ -377,7 +377,16 @@ let test_event_summary () =
     "workspace kind" "workspace_snapshot" (View.event_kind snapshot);
   Alcotest.(check bool)
     "workspace summary" true
-    (String.is_substring (View.event_summary snapshot) ~substring:"workspace:")
+    (String.is_substring (View.event_summary snapshot) ~substring:"workspace:");
+  let turn =
+    Event.Turn_completed
+      { status = Event.Turn_status_completed; steps = 3; summary = "done" }
+  in
+  Alcotest.(check string) "turn kind" "turn_completed" (View.event_kind turn);
+  Alcotest.(check bool)
+    "turn summary" true
+    (String.is_substring (View.event_summary turn)
+       ~substring:"completed after 3 step")
 
 let test_event_inspector_lines () =
   let event =
@@ -439,6 +448,26 @@ let test_workspace_snapshot_inspector_lines () =
   Alcotest.(check bool)
     "workspace inspector diff stat" true
     (String.is_substring joined ~substring:"lib/foo.ml | 2 +-")
+
+let test_turn_completion_inspector_lines () =
+  let event =
+    Event.Turn_completed
+      {
+        status = Event.Turn_status_max_steps_reached;
+        steps = 14;
+        summary = "best effort final answer";
+      }
+  in
+  let joined = View.event_inspector_lines event |> String.concat ~sep:"\n" in
+  Alcotest.(check bool)
+    "turn inspector kind" true
+    (String.is_substring joined ~substring:"kind: turn_completed");
+  Alcotest.(check bool)
+    "turn inspector status" true
+    (String.is_substring joined ~substring:"status: max_steps_reached");
+  Alcotest.(check bool)
+    "turn inspector summary" true
+    (String.is_substring joined ~substring:"best effort final answer")
 
 let test_plugin_inspector_lines () =
   let plugin : Plugin.manifest =
@@ -579,6 +608,8 @@ let () =
             test_plan_event_inspector_lines;
           Alcotest.test_case "workspace_snapshot_inspector_lines" `Quick
             test_workspace_snapshot_inspector_lines;
+          Alcotest.test_case "turn_completion_inspector_lines" `Quick
+            test_turn_completion_inspector_lines;
           Alcotest.test_case "plugin_inspector_lines" `Quick
             test_plugin_inspector_lines;
           Alcotest.test_case "tool_inspector_lines" `Quick

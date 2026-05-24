@@ -6,6 +6,12 @@ type plan_status = Todo | Doing | Done [@@deriving yojson_of, of_yojson]
 type plan_item = { status : plan_status; text : string }
 [@@deriving yojson_of, of_yojson]
 
+type turn_status =
+  | Turn_status_completed
+  | Turn_status_failed
+  | Turn_status_max_steps_reached
+[@@deriving yojson_of, of_yojson]
+
 type t =
   | User_message of { content : string }
   | Model_delta of { content : string }
@@ -20,6 +26,7 @@ type t =
       status : string list;
       diff_stat : string list;
     }
+  | Turn_completed of { status : turn_status; steps : int; summary : string }
   | Context_compacted of { summary : string; recent : Llm.turn list }
   | Plan_updated of { items : plan_item list }
   | Graph_event of Graph_event.t
@@ -62,6 +69,11 @@ let plan_status_of_string s =
 
 let plan_item_line (item : plan_item) =
   Printf.sprintf "[%s] %s" (plan_status_to_string item.status) item.text
+
+let turn_status_to_string = function
+  | Turn_status_completed -> "completed"
+  | Turn_status_failed -> "failed"
+  | Turn_status_max_steps_reached -> "max_steps_reached"
 
 let json_member obj names =
   List.find_map names ~f:(fun name ->
@@ -128,6 +140,11 @@ let to_display (t : t) =
       Some
         (Printf.sprintf "workspace: %d status line(s), %d diff-stat line(s)"
            (List.length status) (List.length diff_stat))
+  | Turn_completed { status; steps; summary } ->
+      Some
+        (Printf.sprintf "turn: %s after %d step(s): %s"
+           (turn_status_to_string status)
+           steps (first_line summary))
   | Context_compacted { summary; _ } ->
       Some ("  ↻ compacted context: " ^ first_line summary)
   | Plan_updated { items } ->

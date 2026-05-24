@@ -276,6 +276,37 @@ let test_workspace_snapshot_emitted_after_task () =
                      | None -> false))
           | Some _ | None -> Alcotest.fail "expected Workspace_snapshot event"))
 
+let test_turn_completion_emitted_after_task () =
+  with_env (fun config workspace event_log session_dir ->
+      let client =
+        scripted
+          [
+            Model_action.Tool_call
+              (Tool_call.write_file ~path:"out.txt" ~content:"hi");
+            Model_action.Final_answer { answer = "done" };
+          ]
+      in
+      let outcome = run config workspace event_log client "make a file" in
+      Alcotest.(check string)
+        "status completed" "completed"
+        (Agent_loop.status_to_string outcome.status);
+      match Journal.read ~session_dir with
+      | Error e -> Alcotest.failf "read event log: %s" e
+      | Ok events -> (
+          match List.last events with
+          | Some
+              (Event.Turn_completed
+                 {
+                   status = Event.Turn_status_completed;
+                   steps;
+                   summary = "done";
+                 }) ->
+              Alcotest.(check int) "turn steps" 2 steps
+          | Some event ->
+              Alcotest.failf "unexpected last event: %s"
+                (Yojson.Safe.to_string (Event.to_yojson event))
+          | None -> Alcotest.fail "expected events"))
+
 let test_history_truncation_keeps_tool_exchange_atomic () =
   let big_result =
     String.make (Agent_loop.max_history_chars_for_test - 100) 'x'
@@ -609,6 +640,8 @@ let () =
             test_update_plan_tool_emits_plan_event;
           Alcotest.test_case "workspace_snapshot" `Quick
             test_workspace_snapshot_emitted_after_task;
+          Alcotest.test_case "turn_completion" `Quick
+            test_turn_completion_emitted_after_task;
           Alcotest.test_case "history_truncation_atomic" `Quick
             test_history_truncation_keeps_tool_exchange_atomic;
           Alcotest.test_case "auto_compaction" `Quick

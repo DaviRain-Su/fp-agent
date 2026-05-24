@@ -122,6 +122,11 @@ let status_to_string = function
   | Failed -> "failed"
   | Max_steps_reached -> "max_steps_reached"
 
+let event_turn_status = function
+  | Completed -> Event.Turn_status_completed
+  | Failed -> Event.Turn_status_failed
+  | Max_steps_reached -> Event.Turn_status_max_steps_reached
+
 let max_content_chars = 12_000
 
 let clamp_string s =
@@ -335,7 +340,10 @@ let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
   let finish status summary steps =
     if not !snapshot_emitted then (
       snapshot_emitted := true;
-      emit (workspace_snapshot_event workspace));
+      emit (workspace_snapshot_event workspace);
+      emit
+        (Event.Turn_completed
+           { status = event_turn_status status; steps; summary }));
     Lwt.return { status; summary; steps }
   in
   let rec step n =

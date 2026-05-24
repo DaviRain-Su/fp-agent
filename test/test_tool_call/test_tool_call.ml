@@ -120,6 +120,17 @@ let test_event_roundtrips () =
         Event.Tool_result_message
           { id = "call-123"; result = Tool_result.Success { output = "42" } } );
       ("Tool_result", Event.Tool_result (Tool_result.Success { output = "42" }));
+      ( "Workspace_snapshot",
+        Event.Workspace_snapshot
+          {
+            is_git = true;
+            status = [ " M lib/foo.ml"; "?? test/foo_test.ml" ];
+            diff_stat = [ " lib/foo.ml | 2 +-" ];
+          } );
+      ( "Turn_completed",
+        Event.Turn_completed
+          { status = Event.Turn_status_completed; steps = 2; summary = "done" }
+      );
       ( "Context_compacted",
         Event.Context_compacted
           { summary = "Earlier findings"; recent = [ Llm.user "continue" ] } );

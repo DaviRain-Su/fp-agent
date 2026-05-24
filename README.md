@@ -252,6 +252,9 @@ copy. Two consequences:
   `git status --short` and `git diff --stat` while excluding `.ocaml-agent`.
   The timeline and inspector can therefore show what the last turn changed
   without relying only on a live shell command.
+- **Turn completion events** record each agent task's final status, model step
+  count, and summary in the event log. This makes the end of a run explicit in
+  `/log`, `/inspect`, resume, fork, and handoff-oriented workflows.
 - **Project instructions** (`/instructions`) shows the workspace instruction
   files that will be appended to the model system prompt.
 - **Session plan** (`/plan`, `/plan-set`, `/plan-add`, `/plan-update`,

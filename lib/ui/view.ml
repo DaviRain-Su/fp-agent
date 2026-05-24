@@ -366,6 +366,7 @@ let event_kind (e : Event.t) =
   | Tool_result_message _ -> "tool_result_message"
   | Tool_result _ -> "tool_result"
   | Workspace_snapshot _ -> "workspace_snapshot"
+  | Turn_completed _ -> "turn_completed"
   | Context_compacted _ -> "context_compacted"
   | Plan_updated _ -> "plan_updated"
   | Graph_event _ -> "graph_event"
@@ -397,6 +398,11 @@ let event_summary (e : Event.t) =
       | Workspace_snapshot { status; diff_stat; _ } ->
           Printf.sprintf "workspace: %d status / %d diff-stat"
             (List.length status) (List.length diff_stat)
+      | Turn_completed { status; steps; summary } ->
+          Printf.sprintf "turn: %s after %d step(s): %s"
+            (Event.turn_status_to_string status)
+            steps
+            (truncate ~cols:80 (flat summary))
       | Plan_updated { items } ->
           Printf.sprintf "plan: %d item%s" (List.length items)
             (if List.length items = 1 then "" else "s")
@@ -434,6 +440,12 @@ let event_detail_lines (e : Event.t) =
       @ List.map status ~f:(fun line -> "  " ^ line)
       @ Printf.sprintf "diff-stat lines: %d" (List.length diff_stat)
         :: List.map diff_stat ~f:(fun line -> "  " ^ line)
+  | Turn_completed { status; steps; summary } ->
+      [
+        "status: " ^ Event.turn_status_to_string status;
+        Printf.sprintf "steps: %d" steps;
+        "summary: " ^ flat summary;
+      ]
   | Policy_decision { tool_call; permission } ->
       [
         "permission: " ^ Permission.to_string permission;

@@ -1,6 +1,11 @@
 type plan_status = Todo | Doing | Done
 type plan_item = { status : plan_status; text : string }
 
+type turn_status =
+  | Turn_status_completed
+  | Turn_status_failed
+  | Turn_status_max_steps_reached
+
 type t =
   | User_message of { content : string }
   | Model_delta of { content : string }
@@ -15,6 +20,7 @@ type t =
       status : string list;
       diff_stat : string list;
     }
+  | Turn_completed of { status : turn_status; steps : int; summary : string }
   | Context_compacted of { summary : string; recent : Llm.turn list }
   | Plan_updated of { items : plan_item list }
   | Graph_event of Graph_event.t
@@ -35,6 +41,7 @@ val describe_tool : Tool_call.t -> string
 val plan_status_to_string : plan_status -> string
 val plan_status_of_string : string -> plan_status option
 val plan_item_line : plan_item -> string
+val turn_status_to_string : turn_status -> string
 
 val plan_items_of_json : Yojson.Safe.t -> (plan_item list, string) result
 (** Parse model/tool args for an event-sourced plan update. Accepts either

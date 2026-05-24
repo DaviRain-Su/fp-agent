@@ -1831,6 +1831,10 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
     | Workspace_snapshot { status; diff_stat; _ } ->
         Printf.sprintf "workspace: %d status / %d diff-stat"
           (List.length status) (List.length diff_stat)
+    | Turn_completed { status; steps; _ } ->
+        Printf.sprintf "turn %s after %d step(s)"
+          (Event.turn_status_to_string status)
+          steps
     | Context_compacted _ -> "context compacted"
     | Plan_updated { items } ->
         let done_count =

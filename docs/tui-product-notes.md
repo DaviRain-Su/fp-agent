@@ -133,6 +133,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   `git status --short` and `git diff --stat` excluding `.ocaml-agent`. This
   gives the timeline, inspector, resume, and handoff flows a durable record of
   what the turn changed, rather than only a live diff panel.
+- Agent tasks also append a `Turn_completed` event with the final status, step
+  count, and summary. This gives long sessions a durable run boundary instead
+  of forcing users to infer completion from the final assistant message.
 - The command palette now groups commands by workflow area such as Tools,
   Plugins, Sessions, Models, Context, and Run Control. Filtering also matches
   those group labels, so queries like `plugins install` can jump directly to
