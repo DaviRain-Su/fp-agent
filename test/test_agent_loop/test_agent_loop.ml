@@ -47,6 +47,14 @@ let write_file path content =
   Stdlib.Out_channel.with_open_bin path (fun oc ->
       Stdlib.Out_channel.output_string oc content)
 
+let shell_ok label command =
+  match Shell.run ~command ~timeout_sec:30 with
+  | Ok { exit_code = 0; _ } -> ()
+  | Ok { exit_code; stdout; stderr } ->
+      Alcotest.failf "%s failed (exit %d): stdout=%s stderr=%s" label exit_code
+        stdout stderr
+  | Error e -> Alcotest.failf "%s failed: %s" label e
+
 (* A mock that returns a scripted sequence of responses, one per call. *)
 let scripted actions =
   let remaining = ref (List.map actions ~f:response) in
@@ -223,6 +231,50 @@ let test_update_plan_tool_emits_plan_event () =
                   | _ -> false))
           | Some items ->
               Alcotest.failf "unexpected plan length: %d" (List.length items)))
+
+let test_workspace_snapshot_emitted_after_task () =
+  with_env (fun config workspace event_log session_dir ->
+      let root = Workspace.root workspace in
+      shell_ok "git init"
+        (Printf.sprintf "git -C %s init --quiet" (Stdlib.Filename.quote root));
+      let client =
+        scripted
+          [
+            Model_action.Tool_call
+              (Tool_call.write_file ~path:"out.txt" ~content:"hi");
+            Model_action.Final_answer { answer = "done" };
+          ]
+      in
+      let outcome = run config workspace event_log client "make a file" in
+      Alcotest.(check string)
+        "status completed" "completed"
+        (Agent_loop.status_to_string outcome.status);
+      match Journal.read ~session_dir with
+      | Error e -> Alcotest.failf "read event log: %s" e
+      | Ok events -> (
+          match
+            List.find events ~f:(function
+              | Event.Workspace_snapshot _ -> true
+              | _ -> false)
+          with
+          | Some (Event.Workspace_snapshot { is_git; status; diff_stat = _ }) ->
+              Alcotest.(check bool) "snapshot is git" true is_git;
+              Alcotest.(check bool)
+                "status has output file" true
+                (List.exists status ~f:(fun line ->
+                     String.is_substring line ~substring:"out.txt"));
+              Alcotest.(check bool)
+                "status excludes session logs" false
+                (List.exists status ~f:(fun line ->
+                     String.is_substring line ~substring:".ocaml-agent"));
+              Alcotest.(check bool)
+                "display summarizes workspace" true
+                (List.exists events ~f:(fun event ->
+                     match Event.to_display event with
+                     | Some line ->
+                         String.is_substring line ~substring:"workspace:"
+                     | None -> false))
+          | Some _ | None -> Alcotest.fail "expected Workspace_snapshot event"))
 
 let test_history_truncation_keeps_tool_exchange_atomic () =
   let big_result =
@@ -555,6 +607,8 @@ let () =
             test_parallel_tool_batch_then_final;
           Alcotest.test_case "update_plan_tool" `Quick
             test_update_plan_tool_emits_plan_event;
+          Alcotest.test_case "workspace_snapshot" `Quick
+            test_workspace_snapshot_emitted_after_task;
           Alcotest.test_case "history_truncation_atomic" `Quick
             test_history_truncation_keeps_tool_exchange_atomic;
           Alcotest.test_case "auto_compaction" `Quick

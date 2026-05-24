@@ -81,6 +81,42 @@ let review_preflight workspace =
         exit_code stdout
         (if String.is_empty stderr then "" else "\n--- stderr ---\n" ^ stderr)
 
+let git_exclude_agent = "':(exclude).ocaml-agent'"
+
+let git_lines root args =
+  match
+    Shell.run
+      ~command:(Printf.sprintf "git -C %s %s" (Stdlib.Filename.quote root) args)
+      ~timeout_sec:30
+  with
+  | Error e -> [ e ]
+  | Ok { stdout; stderr; exit_code = 0 } ->
+      let output =
+        if not (String.is_empty stdout) then stdout
+        else if not (String.is_empty stderr) then stderr
+        else ""
+      in
+      String.split_lines output
+      |> List.filter ~f:(fun line -> not (String.is_empty (String.strip line)))
+  | Ok { stdout; stderr; exit_code } ->
+      let detail =
+        if not (String.is_empty (String.strip stderr)) then stderr else stdout
+      in
+      [
+        Printf.sprintf "git %s failed (exit %d): %s" args exit_code
+          (String.strip detail);
+      ]
+
+let workspace_snapshot_event workspace =
+  let root = Workspace.root workspace in
+  let is_git = Stdlib.Sys.file_exists (Stdlib.Filename.concat root ".git") in
+  if not is_git then
+    Event.Workspace_snapshot { is_git = false; status = []; diff_stat = [] }
+  else
+    let status = git_lines root ("status --short -- . " ^ git_exclude_agent) in
+    let diff_stat = git_lines root ("diff --stat -- . " ^ git_exclude_agent) in
+    Event.Workspace_snapshot { is_git = true; status; diff_stat }
+
 let status_to_string = function
   | Completed -> "completed"
   | Failed -> "failed"
@@ -295,7 +331,13 @@ let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
   if review_task then
     emit (Event.User_message { content = review_preflight workspace });
   goto Agent_state.Waiting_for_model;
-  let finish status summary steps = Lwt.return { status; summary; steps } in
+  let snapshot_emitted = ref false in
+  let finish status summary steps =
+    if not !snapshot_emitted then (
+      snapshot_emitted := true;
+      emit (workspace_snapshot_event workspace));
+    Lwt.return { status; summary; steps }
+  in
   let rec step n =
     if n > effective_max_steps then finalize_after_tool_budget ()
     else send_with_retry 0 n

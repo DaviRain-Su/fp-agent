@@ -129,6 +129,10 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   run. The loop validates the requested plan, appends the same `Plan_updated`
   event used by manual slash commands, and returns a tool result so long tasks
   keep visible progress in the session timeline.
+- Agent tasks now append a `Workspace_snapshot` event on completion with
+  `git status --short` and `git diff --stat` excluding `.ocaml-agent`. This
+  gives the timeline, inspector, resume, and handoff flows a durable record of
+  what the turn changed, rather than only a live diff panel.
 - The command palette now groups commands by workflow area such as Tools,
   Plugins, Sessions, Models, Context, and Run Control. Filtering also matches
   those group labels, so queries like `plugins install` can jump directly to

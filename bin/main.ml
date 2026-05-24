@@ -1825,6 +1825,12 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
     | Tool_result_message { result = Error _; _ } -> "result err"
     | Tool_result (Success _) -> "result ok"
     | Tool_result (Error _) -> "result err"
+    | Workspace_snapshot { is_git = false; _ } -> "workspace: not a git repo"
+    | Workspace_snapshot { status = []; diff_stat = []; _ } ->
+        "workspace: clean"
+    | Workspace_snapshot { status; diff_stat; _ } ->
+        Printf.sprintf "workspace: %d status / %d diff-stat"
+          (List.length status) (List.length diff_stat)
     | Context_compacted _ -> "context compacted"
     | Plan_updated { items } ->
         let done_count =

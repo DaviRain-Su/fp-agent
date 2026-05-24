@@ -248,6 +248,10 @@ copy. Two consequences:
 - **Handoff** (`/handoff`) prints a copyable continuation summary with the
   resume commands, runtime, token usage, current plan, last user task, recent
   events, and workspace diff summary.
+- **Workspace snapshot events** are appended after each agent task, recording
+  `git status --short` and `git diff --stat` while excluding `.ocaml-agent`.
+  The timeline and inspector can therefore show what the last turn changed
+  without relying only on a live shell command.
 - **Project instructions** (`/instructions`) shows the workspace instruction
   files that will be appended to the model system prompt.
 - **Session plan** (`/plan`, `/plan-set`, `/plan-add`, `/plan-update`,

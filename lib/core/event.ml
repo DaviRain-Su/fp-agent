@@ -15,6 +15,11 @@ type t =
   | Tool_call of Tool_call.t
   | Tool_result_message of { id : string; result : Tool_result.t }
   | Tool_result of Tool_result.t
+  | Workspace_snapshot of {
+      is_git : bool;
+      status : string list;
+      diff_stat : string list;
+    }
   | Context_compacted of { summary : string; recent : Llm.turn list }
   | Plan_updated of { items : plan_item list }
   | Graph_event of Graph_event.t
@@ -116,6 +121,13 @@ let to_display (t : t) =
       Some ("  ✗ " ^ first_line message)
   | Tool_result (Success { output }) -> Some ("  ✓ " ^ first_line output)
   | Tool_result (Error { message }) -> Some ("  ✗ " ^ first_line message)
+  | Workspace_snapshot { is_git = false; _ } -> Some "workspace: not a git repo"
+  | Workspace_snapshot { status = []; diff_stat = []; _ } ->
+      Some "workspace: clean"
+  | Workspace_snapshot { status; diff_stat; _ } ->
+      Some
+        (Printf.sprintf "workspace: %d status line(s), %d diff-stat line(s)"
+           (List.length status) (List.length diff_stat))
   | Context_compacted { summary; _ } ->
       Some ("  ↻ compacted context: " ^ first_line summary)
   | Plan_updated { items } ->

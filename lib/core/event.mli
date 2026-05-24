@@ -10,6 +10,11 @@ type t =
   | Tool_call of Tool_call.t
   | Tool_result_message of { id : string; result : Tool_result.t }
   | Tool_result of Tool_result.t
+  | Workspace_snapshot of {
+      is_git : bool;
+      status : string list;
+      diff_stat : string list;
+    }
   | Context_compacted of { summary : string; recent : Llm.turn list }
   | Plan_updated of { items : plan_item list }
   | Graph_event of Graph_event.t

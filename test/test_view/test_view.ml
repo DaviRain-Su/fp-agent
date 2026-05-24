@@ -364,7 +364,20 @@ let test_event_summary () =
   in
   Alcotest.(check string) "plan kind" "plan_updated" (View.event_kind plan);
   Alcotest.(check string)
-    "plan summary" "plan: 1/2 done" (View.event_summary plan)
+    "plan summary" "plan: 1/2 done" (View.event_summary plan);
+  let snapshot =
+    Event.Workspace_snapshot
+      {
+        is_git = true;
+        status = [ " M lib/foo.ml"; "?? test/foo_test.ml" ];
+        diff_stat = [ " lib/foo.ml | 2 +-" ];
+      }
+  in
+  Alcotest.(check string)
+    "workspace kind" "workspace_snapshot" (View.event_kind snapshot);
+  Alcotest.(check bool)
+    "workspace summary" true
+    (String.is_substring (View.event_summary snapshot) ~substring:"workspace:")
 
 let test_event_inspector_lines () =
   let event =
@@ -406,6 +419,26 @@ let test_plan_event_inspector_lines () =
   Alcotest.(check bool)
     "plan inspector item" true
     (String.is_substring joined ~substring:"[doing] implement command")
+
+let test_workspace_snapshot_inspector_lines () =
+  let event =
+    Event.Workspace_snapshot
+      {
+        is_git = true;
+        status = [ " M lib/foo.ml"; "?? test/foo_test.ml" ];
+        diff_stat = [ " lib/foo.ml | 2 +-" ];
+      }
+  in
+  let joined = View.event_inspector_lines event |> String.concat ~sep:"\n" in
+  Alcotest.(check bool)
+    "workspace inspector kind" true
+    (String.is_substring joined ~substring:"kind: workspace_snapshot");
+  Alcotest.(check bool)
+    "workspace inspector status" true
+    (String.is_substring joined ~substring:" M lib/foo.ml");
+  Alcotest.(check bool)
+    "workspace inspector diff stat" true
+    (String.is_substring joined ~substring:"lib/foo.ml | 2 +-")
 
 let test_plugin_inspector_lines () =
   let plugin : Plugin.manifest =
@@ -544,6 +577,8 @@ let () =
             test_event_inspector_lines;
           Alcotest.test_case "plan_event_inspector_lines" `Quick
             test_plan_event_inspector_lines;
+          Alcotest.test_case "workspace_snapshot_inspector_lines" `Quick
+            test_workspace_snapshot_inspector_lines;
           Alcotest.test_case "plugin_inspector_lines" `Quick
             test_plugin_inspector_lines;
           Alcotest.test_case "tool_inspector_lines" `Quick

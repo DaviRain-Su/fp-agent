@@ -365,6 +365,7 @@ let event_kind (e : Event.t) =
   | Tool_call _ -> "tool_call"
   | Tool_result_message _ -> "tool_result_message"
   | Tool_result _ -> "tool_result"
+  | Workspace_snapshot _ -> "workspace_snapshot"
   | Context_compacted _ -> "context_compacted"
   | Plan_updated _ -> "plan_updated"
   | Graph_event _ -> "graph_event"
@@ -390,6 +391,12 @@ let event_summary (e : Event.t) =
       | Model_response { action = Final_answer _ } -> "model: final answer"
       | Policy_decision { permission; _ } ->
           "policy: " ^ Permission.to_string permission
+      | Workspace_snapshot { is_git = false; _ } -> "workspace: not a git repo"
+      | Workspace_snapshot { status = []; diff_stat = []; _ } ->
+          "workspace: clean"
+      | Workspace_snapshot { status; diff_stat; _ } ->
+          Printf.sprintf "workspace: %d status / %d diff-stat"
+            (List.length status) (List.length diff_stat)
       | Plan_updated { items } ->
           Printf.sprintf "plan: %d item%s" (List.length items)
             (if List.length items = 1 then "" else "s")
@@ -419,6 +426,14 @@ let event_detail_lines (e : Event.t) =
   | Tool_result result -> result_lines result
   | Tool_result_message { id; result } ->
       ("tool_use_id: " ^ id) :: result_lines result
+  | Workspace_snapshot { is_git; status; diff_stat } ->
+      [
+        "is_git: " ^ Bool.to_string is_git;
+        Printf.sprintf "status lines: %d" (List.length status);
+      ]
+      @ List.map status ~f:(fun line -> "  " ^ line)
+      @ Printf.sprintf "diff-stat lines: %d" (List.length diff_stat)
+        :: List.map diff_stat ~f:(fun line -> "  " ^ line)
   | Policy_decision { tool_call; permission } ->
       [
         "permission: " ^ Permission.to_string permission;
