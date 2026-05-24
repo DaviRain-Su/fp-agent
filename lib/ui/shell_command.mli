@@ -5,6 +5,7 @@ type id =
   | Plugins
   | Plugin
   | PluginNew
+  | PluginDev
   | PluginCheck
   | PluginInstall
   | PluginRemove

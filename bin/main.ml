@@ -730,6 +730,35 @@ let plugin_install_lines args =
           in
           [ "installed plugin: " ^ dst; tools_reloaded_line counts ] @ next)
 
+let plugin_dev_lines ~workspace args =
+  match
+    parse_plugin_dir_arg ~usage:"usage: /plugin-dev [--replace] <dir>" args
+  with
+  | Error e -> [ e ]
+  | Ok (replace, dir) -> (
+      match Plugin.check ~replace dir with
+      | Error e -> [ "plugin dev check error: " ^ e ]
+      | Ok manifest -> (
+          match Plugin.smoke ~replace ~workspace dir with
+          | Error e -> [ "plugin dev smoke error: " ^ e ]
+          | Ok smoke_results -> (
+              match Plugin.install ~replace dir with
+              | Error e -> [ "plugin dev install error: " ^ e ]
+              | Ok dst ->
+                  let counts = Tool_loader.refresh_counts () in
+                  let next =
+                    match Plugin.check dst with
+                    | Ok installed -> plugin_next_lines installed
+                    | Error e -> [ "plugin detail error after install: " ^ e ]
+                  in
+                  [
+                    "plugin dev check ok: " ^ manifest.id;
+                    "plugin dev smoke ok:";
+                  ]
+                  @ plugin_smoke_result_lines smoke_results
+                  @ [ "installed plugin: " ^ dst; tools_reloaded_line counts ]
+                  @ next)))
+
 let plugin_remove_lines arg =
   let id = String.strip arg in
   if String.is_empty id then [ "usage: /plugin-remove <id>" ]
@@ -967,6 +996,10 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
   let check_plugin arg =
     view.append_lines ("[tui] /plugin-check" :: plugin_check_lines arg)
   in
+  let dev_plugin arg =
+    view.append_lines ("[tui] /plugin-dev" :: plugin_dev_lines ~workspace arg);
+    ignore (view.refresh_tooling ())
+  in
   let install_plugin arg =
     view.append_lines ("[tui] /plugin-install" :: plugin_install_lines arg);
     ignore (view.refresh_tooling ())
@@ -996,6 +1029,7 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
     | Command (Compact, _) -> compact_session ()
     | Command (Undo, _) -> undo ()
     | Command (PluginNew, arg) -> new_plugin arg
+    | Command (PluginDev, arg) -> dev_plugin arg
     | Command (PluginCheck, arg) -> check_plugin arg
     | Command (PluginInstall, arg) -> install_plugin arg
     | Command (PluginRemove, arg) -> remove_plugin arg
@@ -1471,6 +1505,9 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
             loop ()
         | Command (PluginNew, arg) ->
             List.iter (plugin_new_lines arg) ~f:Stdlib.print_endline;
+            loop ()
+        | Command (PluginDev, arg) ->
+            List.iter (plugin_dev_lines ~workspace arg) ~f:Stdlib.print_endline;
             loop ()
         | Command (PluginCheck, arg) ->
             List.iter (plugin_check_lines arg) ~f:Stdlib.print_endline;

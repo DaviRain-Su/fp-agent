@@ -284,6 +284,9 @@ let test_repl_installs_and_removes_plugin () =
              "/tool repl_echo";
              "/plugin-smoke --replace " ^ plugin_dir;
              "/plugin-remove local.repl-plugin";
+             "/plugin-dev --replace " ^ plugin_dir;
+             "/tool repl_echo";
+             "/plugin-remove local.repl-plugin";
              "/tool repl_echo";
              "/plugins";
              "/exit";
@@ -310,6 +313,10 @@ let test_repl_installs_and_removes_plugin () =
   assert_contains "plugin listed after install" repl.stdout "local.repl-plugin";
   assert_contains "tool available after install" repl.stdout "name: repl_echo";
   assert_contains "smoke output" repl.stdout "smoke ok: repl_echo";
+  assert_contains "dev check output" repl.stdout
+    "plugin dev check ok: local.repl-plugin";
+  assert_contains "dev smoke output" repl.stdout "plugin dev smoke ok:";
+  assert_contains "dev install output" repl.stdout "installed plugin:";
   assert_contains "remove output" repl.stdout "removed plugin:";
   assert_contains "remove count output" repl.stdout
     "tools reloaded; tooling: 0 plugin(s)";

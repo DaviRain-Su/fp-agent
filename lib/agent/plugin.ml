@@ -816,12 +816,15 @@ without leaving the REPL or fullscreen TUI:
 ```text
 > /plugin-check .
 > /plugin-smoke .
+> /plugin-dev --replace .
 > /plugin-install --replace .
 > /tool %s {"message":"hi"}
 > /plugin-remove %s
 ```
 
-`/plugin-install --replace` reloads the in-process tool registry, so `/tools`
+`/plugin-dev --replace .` runs validation, smoke examples, install, and registry
+reload in one step. `/plugin-install --replace` is available when you want to
+run those steps manually; it reloads the in-process tool registry, so `/tools`
 and the next model turn can see updated plugin tools immediately.
 
 ## CLI Equivalents

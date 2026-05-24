@@ -7,6 +7,7 @@ type id =
   | Plugins
   | Plugin
   | PluginNew
+  | PluginDev
   | PluginCheck
   | PluginInstall
   | PluginRemove
@@ -97,6 +98,14 @@ let specs =
       aliases = [];
       palette = true;
       acceptance = Draft "/plugin-new ";
+    };
+    {
+      id = PluginDev;
+      command = "/plugin-dev [--replace] <dir>";
+      description = "check, smoke, and install a plugin";
+      aliases = [];
+      palette = true;
+      acceptance = Draft "/plugin-dev ";
     };
     {
       id = PluginCheck;
@@ -283,8 +292,8 @@ let command_token command =
 
 let group_of_id = function
   | Tools | Tool -> "Tools"
-  | Plugins | Plugin | PluginNew | PluginCheck | PluginInstall | PluginRemove
-  | PluginSmoke ->
+  | Plugins | Plugin | PluginNew | PluginDev | PluginCheck | PluginInstall
+  | PluginRemove | PluginSmoke ->
       "Plugins"
   | Sessions | Tree | NewSession | Resume -> "Sessions"
   | Model | Models | Provider -> "Models"

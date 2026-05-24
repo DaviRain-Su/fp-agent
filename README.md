@@ -73,6 +73,7 @@ dune exec -- fp-agent
 > /tool read_file    # inspect a tool's kind/schema/description
 > /plugin echo_json  # inspect a plugin by id or tool name
 > /plugin-new --id local.my-plugin --tool-name my_tool my-plugin
+> /plugin-dev --replace my-plugin
 > /plugin-check my-plugin
 > /plugin-install --replace my-plugin
 > /plugin-remove local.my-plugin
@@ -124,6 +125,7 @@ dune exec -- fp-agent
 > /plugins
 > /plugin echo_json
 > /plugin-new --id local.my-plugin --tool-name my_tool my-plugin
+> /plugin-dev --replace my-plugin
 > /plugin-check my-plugin
 > /plugin-install --replace my-plugin
 > /plugin-smoke --replace my-plugin
@@ -142,6 +144,7 @@ dune exec -- fp-agent --check-plugin my-plugin
 dune exec -- fp-agent --smoke-plugin my-plugin
 dune exec -- fp-agent
 > /plugin-new --id local.my-plugin --tool-name my_tool my-plugin
+> /plugin-dev --replace my-plugin
 > /plugin-check my-plugin
 > /plugin-install --replace my-plugin
 > /plugin-smoke --replace my-plugin
@@ -207,8 +210,9 @@ copy. Two consequences:
   fullscreen TUI, so plugin developers can keep the current agent session open
   while testing SDK changes.
 - **Plugin install management** (`/plugin-new [--id ID] [--tool-name NAME]
-  <dir>`, `/plugin-check <dir>`, `/plugin-install [--replace] <dir>`,
-  `/plugin-remove <id>`) scaffolds, validates, installs, and removes plugins
+  <dir>`, `/plugin-dev [--replace] <dir>`, `/plugin-check <dir>`,
+  `/plugin-install [--replace] <dir>`, `/plugin-remove <id>`) scaffolds,
+  validates, smoke-tests, installs, and removes plugins
   from the REPL or fullscreen TUI, then reloads the in-process tool registry so
   `/tools`, the status strip, and later model calls see the updated plugin set.
 - **TUI model/provider switching** lets `/model <id>` and `/provider <name>

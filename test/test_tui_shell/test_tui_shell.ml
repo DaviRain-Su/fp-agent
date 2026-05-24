@@ -177,7 +177,7 @@ let test_palette_state () =
     (Tui_shell.selected_command_index state)
 
 let test_palette_input_mapping () =
-  let state = Tui_shell.create ~command_count:10 () in
+  let state = Tui_shell.create ~command_count:11 () in
   let state = input Tui_shell.Slash state in
   Alcotest.(check (option int))
     "slash opens" (Some 0)
@@ -192,14 +192,14 @@ let test_palette_input_mapping () =
     (Tui_shell.selected_command_index state);
   let state = input Tui_shell.End state in
   Alcotest.(check (option int))
-    "end moves palette" (Some 9)
+    "end moves palette" (Some 10)
     (Tui_shell.selected_command_index state);
   let result = Tui_shell.handle_input ~page_size:3 state Tui_shell.Enter in
   Alcotest.(check bool)
     "enter closes palette" false
     (Tui_shell.palette_open result.state);
   Alcotest.(check (option string))
-    "enter accepts selected command" (palette_command_at 9)
+    "enter accepts selected command" (palette_command_at 10)
     (accepted_command result.accepted_command);
   Alcotest.(check (option string))
     "enter dispatches no-arg command" (Some "/sessions")

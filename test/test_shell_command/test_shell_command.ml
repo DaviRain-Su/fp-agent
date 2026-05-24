@@ -48,6 +48,8 @@ let test_parse () =
     "--id local.foo --tool-name foo ./my-plugin"
     (Shell_command.parse
        "/plugin-new --id local.foo --tool-name foo ./my-plugin");
+  require_command "plugin dev" Shell_command.PluginDev "--replace ./my-plugin"
+    (Shell_command.parse "/plugin-dev --replace ./my-plugin");
   require_command "plugin check" Shell_command.PluginCheck "./my-plugin"
     (Shell_command.parse "/plugin-check ./my-plugin");
   require_command "plugin install" Shell_command.PluginInstall
@@ -98,6 +100,11 @@ let test_metadata () =
   Alcotest.(check bool)
     "palette has plugin check" true
     (List.mem palette "/plugin-check [--replace] <dir>" ~equal:String.equal);
+  Alcotest.(check bool)
+    "palette has plugin dev" true
+    (List.mem palette "/plugin-dev [--replace] <dir>" ~equal:String.equal);
+  Alcotest.(check string)
+    "plugin dev group" "Plugins" (entry "/plugin-dev [--replace] <dir>").group;
   Alcotest.(check bool)
     "palette has plugin install" true
     (List.mem palette "/plugin-install [--replace] <dir>" ~equal:String.equal);
@@ -163,6 +170,8 @@ let test_acceptance () =
   require_acceptance "plugin new draft" ("draft", "/plugin-new ")
     (Shell_command.accept
        (entry "/plugin-new [--id ID] [--tool-name NAME] <dir>"));
+  require_acceptance "plugin dev draft" ("draft", "/plugin-dev ")
+    (Shell_command.accept (entry "/plugin-dev [--replace] <dir>"));
   require_acceptance "plugin check draft"
     ("draft", "/plugin-check ")
     (Shell_command.accept (entry "/plugin-check [--replace] <dir>"));

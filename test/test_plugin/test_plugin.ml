@@ -630,6 +630,9 @@ let test_scaffold_creates_valid_plugin () =
             "readme documents interactive smoke" true
             (String.is_substring readme ~substring:"/plugin-smoke .");
           Alcotest.(check bool)
+            "readme documents plugin dev" true
+            (String.is_substring readme ~substring:"/plugin-dev --replace .");
+          Alcotest.(check bool)
             "readme documents replace install" true
             (String.is_substring readme ~substring:"/plugin-install --replace .");
           Alcotest.(check bool)
