@@ -17,6 +17,7 @@ type id =
   | Inspect
   | Usage
   | Status
+  | Instructions
   | Compact
   | Fork
   | Diff
@@ -171,6 +172,14 @@ let specs =
       aliases = [];
       palette = true;
       acceptance = Execute "/status";
+    };
+    {
+      id = Instructions;
+      command = "/instructions";
+      description = "show workspace project instructions";
+      aliases = [];
+      palette = true;
+      acceptance = Execute "/instructions";
     };
     {
       id = Compact;

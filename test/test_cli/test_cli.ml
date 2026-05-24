@@ -479,6 +479,33 @@ let test_repl_lists_and_switches_custom_provider_models () =
   assert_contains "provider switched" repl.stdout "provider: local-llm";
   assert_contains "model switched" repl.stdout "model: qwen36-rtx"
 
+let test_repl_shows_project_instructions () =
+  let root = tmp_dir "fp-agent-cli-instructions-" in
+  let env = isolated_env root in
+  let workspace =
+    match List.Assoc.find env "WORKSPACE_ROOT" ~equal:String.equal with
+    | Some path -> path
+    | None -> Alcotest.fail "missing workspace env"
+  in
+  write_file
+    (Stdlib.Filename.concat workspace "RTK.md")
+    "Prefer repo-specific test evidence.\n";
+  write_file
+    (Stdlib.Filename.concat workspace "AGENTS.md")
+    "Follow workspace conventions.\n@RTK.md\n";
+  let repl =
+    run ~env ~stdin:"/instructions\n/status\n/exit\n" [ fp_agent_bin () ]
+  in
+  assert_success "repl instructions command" repl;
+  assert_contains "instructions header" repl.stdout
+    "Project instructions loaded";
+  assert_contains "instructions include agents" repl.stdout "--- AGENTS.md ---";
+  assert_contains "instructions include include" repl.stdout "--- RTK.md ---";
+  assert_contains "instructions include content" repl.stdout
+    "Prefer repo-specific test evidence.";
+  assert_contains "status shows instructions" repl.stdout
+    "project_instructions: loaded"
+
 let test_repl_inspects_session_events () =
   let root = tmp_dir "fp-agent-cli-inspect-" in
   let env = isolated_env root in
@@ -626,6 +653,8 @@ let () =
             test_repl_lists_dynamic_plugin_tools;
           Alcotest.test_case "custom provider models" `Quick
             test_repl_lists_and_switches_custom_provider_models;
+          Alcotest.test_case "repl instructions" `Quick
+            test_repl_shows_project_instructions;
           Alcotest.test_case "repl inspect events" `Quick
             test_repl_inspects_session_events;
           Alcotest.test_case "repl compact events" `Quick

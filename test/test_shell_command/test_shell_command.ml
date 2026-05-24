@@ -35,6 +35,8 @@ let test_parse () =
   require_command "usage" Shell_command.Usage "" (Shell_command.parse "/usage");
   require_command "status" Shell_command.Status ""
     (Shell_command.parse "/status");
+  require_command "instructions" Shell_command.Instructions ""
+    (Shell_command.parse "/instructions");
   require_command "compact" Shell_command.Compact ""
     (Shell_command.parse "/compact");
   require_command "retry" Shell_command.Retry "" (Shell_command.parse "/retry");
@@ -67,6 +69,9 @@ let test_metadata () =
     "palette has status" true
     (List.mem palette "/status" ~equal:String.equal);
   Alcotest.(check bool)
+    "palette has instructions" true
+    (List.mem palette "/instructions" ~equal:String.equal);
+  Alcotest.(check bool)
     "palette has compact" true
     (List.mem palette "/compact" ~equal:String.equal);
   Alcotest.(check bool)
@@ -97,6 +102,9 @@ let test_acceptance () =
     (Shell_command.accept (entry "/usage"));
   require_acceptance "status execute" ("execute", "/status")
     (Shell_command.accept (entry "/status"));
+  require_acceptance "instructions execute"
+    ("execute", "/instructions")
+    (Shell_command.accept (entry "/instructions"));
   require_acceptance "compact draft" ("draft", "/compact")
     (Shell_command.accept (entry "/compact"));
   require_acceptance "tool draft" ("draft", "/tool ")

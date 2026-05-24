@@ -15,6 +15,7 @@ type id =
   | Inspect
   | Usage
   | Status
+  | Instructions
   | Compact
   | Fork
   | Diff

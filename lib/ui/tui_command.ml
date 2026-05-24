@@ -290,6 +290,14 @@ let status_lines ctx =
   let discovery = Plugin.discover () in
   let usage = View.token_usage_of_events ctx.events in
   let conflicts = Plugin.tool_conflicts () in
+  let project_instructions =
+    match Workspace.create ~root:ctx.workspace_root with
+    | Error _ -> "unavailable"
+    | Ok workspace -> (
+        match Project_instructions.load workspace with
+        | None -> "none"
+        | Some _ -> "loaded")
+  in
   [
     "workspace: " ^ ctx.workspace_root;
     "session: " ^ Stdlib.Filename.basename ctx.session_dir;
@@ -305,8 +313,21 @@ let status_lines ctx =
       (List.length discovery.manifests)
       (List.length discovery.errors)
       (List.length conflicts);
+    "project_instructions: " ^ project_instructions;
     Printf.sprintf "tools: %d" (List.length (Tool.all ()));
   ]
+
+let instruction_lines ctx =
+  match Workspace.create ~root:ctx.workspace_root with
+  | Error e -> [ "workspace error: " ^ e ]
+  | Ok workspace -> (
+      match Project_instructions.load workspace with
+      | None ->
+          [
+            "(no project instruction files found)";
+            "Checked AGENTS.md, CLAUDE.md, and .fp-agent/instructions.md.";
+          ]
+      | Some instructions -> lines_of_text instructions)
 
 let last_user_message events =
   List.find_map (List.rev events) ~f:(function
@@ -337,4 +358,6 @@ let run ctx command =
       Some (command_section command (inspect_lines ctx arg))
   | Command (Usage, _) -> Some (command_section command (usage_lines ctx))
   | Command (Status, _) -> Some (command_section command (status_lines ctx))
+  | Command (Instructions, _) ->
+      Some (command_section command (instruction_lines ctx))
   | Empty | Task _ | Unknown _ | Command _ -> None

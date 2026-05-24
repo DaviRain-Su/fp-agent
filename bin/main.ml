@@ -1336,6 +1336,11 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
         | Command (Status, _) ->
             print_status ();
             loop ()
+        | Command (Instructions, _) ->
+            List.iter
+              (Tui_command.instruction_lines (command_context ()))
+              ~f:Stdlib.print_endline;
+            loop ()
         | Command (Tree, _) ->
             print_tree ();
             loop ()

@@ -59,6 +59,7 @@ dune exec -- fp-agent
 > /log               # list this session's events with indices
 > /usage             # show token usage from the event log
 > /status            # show runtime/session/plugin status
+> /instructions      # show project instructions loaded for the model
 > /compact           # summarize older session history
 > /fork 3            # fork a new branch at event index 3 (or /fork for the end)
 > /tree              # show the session fork tree
@@ -98,7 +99,8 @@ request remains unchanged in the event log for audit and resume.
 system prompt. Whole-line `@relative/path.md` includes are expanded relative to
 the file that references them, and includes must stay inside the workspace.
 Project instructions are not written into the event log, so session logs remain
-focused on user-visible events and audit data.
+focused on user-visible events and audit data. Use `/instructions` in the REPL
+or TUI to preview the exact instruction text before a model call.
 
 ### Plugins
 
@@ -162,6 +164,8 @@ copy. Two consequences:
   preview. With no index it inspects the latest event.
 - **Status** (`/status`) summarizes workspace, session, provider/model,
   event count, token usage, plugin diagnostics, and registered tool count.
+- **Project instructions** (`/instructions`) shows the workspace instruction
+  files that will be appended to the model system prompt.
 - **Compaction** (`/compact`) appends a `Context_compacted` event that replaces
   older model-visible turns with a bounded summary while preserving the recent
   turns needed to continue safely. The raw event log remains intact.
@@ -175,8 +179,8 @@ copy. Two consequences:
   prompt draft for commands that need arguments. Typing while the palette is open
   filters commands by name or description, and accepted commands/drafts are
   echoed into the TUI timeline. Read-only commands such as `/tools`, `/plugins`,
-  `/models`, `/model`, `/usage`, `/status`, `/diff`, `/log`, and `/inspect`
-  render their results directly inside the fullscreen view.
+  `/models`, `/model`, `/usage`, `/status`, `/instructions`, `/diff`, `/log`,
+  and `/inspect` render their results directly inside the fullscreen view.
 - **TUI model/provider switching** lets `/model <id>` and `/provider <name>
   [model] [api-base]` change the runtime used by later TUI task submissions.
 - **TUI session navigation** lets `/new`, `/resume <dir>`, and `/fork [index]`

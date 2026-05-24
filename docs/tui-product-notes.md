@@ -24,8 +24,8 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - Right/secondary inspector: selected event JSON, tool args/result, usage, and
   policy decision.
 - Footer command palette: `/model`, `/provider`, `/plugins`, `/tools`,
-  `/new`, `/resume`, `/fork`, `/retry`, `/compact`, `/status`, `/undo`,
-  `/diff`.
+  `/new`, `/resume`, `/fork`, `/retry`, `/compact`, `/status`,
+  `/instructions`, `/undo`, `/diff`.
 - Status strip: provider/model, session id, step count, token usage, current
   phase, and active plugin count.
 - Review mode: navigate prior events, fork from an event, and replay compacted
@@ -79,6 +79,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - `/status` now exposes a shared REPL/TUI runtime summary with workspace,
   session, provider/model, event count, token usage, plugin diagnostics, and
   registered tool count.
+- `/instructions` now exposes the exact workspace project instructions that are
+  appended to the model system prompt, so REPL/TUI users can audit repo guidance
+  before spending a model call.
 - Fullscreen TUI confirm mode now renders approval prompts in the active view.
   `Y` approves a pending tool call, while `N`, Enter, or Esc deny it; normal
   prompt and palette input is paused until the approval is resolved.
@@ -126,8 +129,8 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   silently dropping them.
 - The Notty TUI now executes safe read-only palette commands directly:
   `/tools`, `/plugins`, `/models`, `/model`, `/sessions`, `/tree`, `/diff`,
-  `/status`, `/log`, and `/inspect` render their output into the timeline
-  without leaving fullscreen mode.
+  `/status`, `/instructions`, `/log`, and `/inspect` render their output into
+  the timeline without leaving fullscreen mode.
 - The REPL exposes the same inspector through `/inspect [index]`, so event-log
   review works even outside a full-screen TUI and can target historical events.
 - The REPL exposes plugin inspection through `/plugin <id|tool>`, showing

@@ -362,10 +362,41 @@ let test_tui_command_model_log_and_inspect () =
       Alcotest.(check bool)
         "status shows tool count" true
         (String.is_substring status ~substring:"tools:");
+      Alcotest.(check bool)
+        "status shows instruction state" true
+        (String.is_substring status ~substring:"project_instructions: none");
       let inspect_by_index = output "/inspect 0" context in
       Alcotest.(check bool)
         "inspect accepts explicit index" true
         (String.is_substring inspect_by_index ~substring:"event 0"))
+
+let test_tui_command_project_instructions () =
+  with_temp_dir "fp_agent_tui_command_instructions" (fun root ->
+      write
+        (Stdlib.Filename.concat root "RTK.md")
+        "Prefer repo-specific test evidence.\n";
+      write
+        (Stdlib.Filename.concat root "AGENTS.md")
+        "Follow workspace conventions.\n@RTK.md\n";
+      let context = tui_context root in
+      let instructions = output "/instructions" context in
+      Alcotest.(check bool)
+        "instructions command header" true
+        (String.is_substring instructions ~substring:"[tui] /instructions");
+      Alcotest.(check bool)
+        "instructions include agents" true
+        (String.is_substring instructions ~substring:"--- AGENTS.md ---");
+      Alcotest.(check bool)
+        "instructions include referenced file" true
+        (String.is_substring instructions ~substring:"--- RTK.md ---");
+      Alcotest.(check bool)
+        "instructions include referenced content" true
+        (String.is_substring instructions
+           ~substring:"Prefer repo-specific test evidence.");
+      let status = output "/status" context in
+      Alcotest.(check bool)
+        "status shows loaded instructions" true
+        (String.is_substring status ~substring:"project_instructions: loaded"))
 
 let test_tui_command_sessions_and_diff () =
   with_temp_dir "fp_agent_tui_command_sessions" (fun root ->
@@ -505,6 +536,8 @@ let () =
             test_tui_command_model_log_and_inspect;
           Alcotest.test_case "tui_command_sessions_diff" `Quick
             test_tui_command_sessions_and_diff;
+          Alcotest.test_case "tui_command_project_instructions" `Quick
+            test_tui_command_project_instructions;
           Alcotest.test_case "tui_command_plugins_tools" `Quick
             test_tui_command_plugins_and_tools;
         ] );

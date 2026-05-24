@@ -19,5 +19,8 @@ val run : context -> string -> string list option
 val status_lines : context -> string list
 (** Render runtime/session/plugin status without a command header. *)
 
+val instruction_lines : context -> string list
+(** Render workspace project instructions without a command header. *)
+
 val last_user_message : Event.t list -> string option
 (** Return the latest non-empty user task from an event log, if any. *)
