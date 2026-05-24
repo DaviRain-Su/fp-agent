@@ -1,0 +1,22 @@
+(lang dune 3.14)
+(name fp_agent)
+(version 0.1.0)
+(generate_opam_files true)
+(source (github user/fp-agent))
+(authors "Agent")
+(maintainers "Agent")
+(license MIT)
+
+(package
+ (name fp_agent)
+ (synopsis "OCaml Code Agent Harness")
+ (description "A type-safe, auditable code agent harness")
+ (depends
+  (ocaml (>= 5.2.0))
+  (dune (>= 3.14))
+  (base (>= v0.17.0))
+  (yojson (>= 3.0.0))
+  (ppx_yojson_conv (>= v0.17.0))
+  (alcotest (>= 1.9.0))
+  (cmdliner (>= 2.1.0))
+  (logs (>= 0.10.0))))

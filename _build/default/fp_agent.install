@@ -1,0 +1,8 @@
+lib: [
+  "_build/install/default/lib/fp_agent/META"
+  "_build/install/default/lib/fp_agent/dune-package"
+  "_build/install/default/lib/fp_agent/opam"
+]
+bin: [
+  "_build/install/default/bin/fp-agent"
+]
