@@ -16,7 +16,7 @@ let with_workspace f =
         (Shell.run ~command:(Printf.sprintf "rm -rf %s" root) ~timeout_sec:10
           : (Shell.result, string) Result.t))
 
-let run ws tc = Tool_runner.run ~workspace:ws ~tool_call:tc
+let run ws tc = Tool_runner.run ~workspace:ws ~tool_call:tc ()
 
 let output = function
   | Tool_result.Success { output } -> output

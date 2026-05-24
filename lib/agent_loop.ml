@@ -26,7 +26,8 @@ let truncate_history ~system messages =
 
 let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
     ?(on_approval = fun _ _ -> Lwt.return false) ?(initial_history = [])
-    ~(config : Config.t) ~model_client ~event_log ~workspace ~task () =
+    ?(yolo = false) ~(config : Config.t) ~model_client ~event_log ~workspace
+    ~task () =
   let log e =
     Event_log.append event_log e;
     on_event e
@@ -83,7 +84,7 @@ let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
     | Tool_call tc -> (
         goto Agent_state.Executing_tool;
         log (Event.Tool_call tc);
-        let permission = Policy.check ~workspace ~tool_call:tc in
+        let permission = Policy.check ~yolo ~workspace ~tool_call:tc () in
         log (Event.Policy_decision { tool_call = tc; permission });
         let after_result result =
           log (Event.Tool_result result);
@@ -93,7 +94,7 @@ let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
           step (n + 1)
         in
         let execute () =
-          after_result (Tool_runner.run ~workspace ~tool_call:tc)
+          after_result (Tool_runner.run ~yolo ~workspace ~tool_call:tc ())
         in
         (* Deny is enforced by the runner; for allowed calls, gate risky ones
            on human approval when the policy asks for it. *)

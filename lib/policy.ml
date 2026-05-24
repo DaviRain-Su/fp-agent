@@ -33,7 +33,7 @@ let dangerous_command_reason command =
   List.find_map rules ~f:(fun (pred, reason) ->
       if pred () then Some reason else None)
 
-let check ~workspace ~tool_call =
+let check ?(yolo = false) ~workspace ~tool_call () =
   match (tool_call : Tool_call.t) with
   | Read_file { path } | List_files { path } | Search { path = Some path; _ }
     -> (
@@ -47,7 +47,7 @@ let check ~workspace ~tool_call =
       | Error reason -> Permission.Deny reason)
   | Run_command { command; _ } -> (
       match dangerous_command_reason command with
-      | Some reason -> Permission.Deny reason
+      | Some reason -> if yolo then Permission.Allow else Permission.Deny reason
       | None -> Permission.Allow)
   (* git apply itself rejects paths that escape the tree. *)
   | Apply_patch _ -> Permission.Allow

@@ -202,8 +202,8 @@ let execute ws (tool_call : Tool_call.t) =
   | Make_dir { path } -> exec_make_dir ws path
   | Apply_patch { patch } -> exec_apply_patch ws patch
 
-let run ~workspace ~tool_call =
-  match Policy.check ~workspace ~tool_call with
+let run ?(yolo = false) ~workspace ~tool_call () =
+  match Policy.check ~yolo ~workspace ~tool_call () with
   | Permission.Deny reason -> err ("policy denied: " ^ reason)
   | Permission.Ask_user reason ->
       err ("requires user approval (not supported in MVP): " ^ reason)

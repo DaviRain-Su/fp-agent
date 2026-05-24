@@ -8,6 +8,7 @@ val run :
   ?policy:Policy.t ->
   ?on_approval:(Tool_call.t -> string -> bool Lwt.t) ->
   ?initial_history:Message.t list ->
+  ?yolo:bool ->
   config:Config.t ->
   model_client:Model_client.t ->
   event_log:Event_log.t ->

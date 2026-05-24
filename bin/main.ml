@@ -104,7 +104,13 @@ let with_setup provider_opt api_base_opt model_opt workspace_opt max_steps_opt f
           1
       | Ok workspace -> f config workspace)
 
-let run_oneshot config workspace ~confirm ~resume_opt ~tui ~task =
+let warn_yolo yolo =
+  if yolo then
+    Stdlib.prerr_endline
+      "⚠ YOLO mode: dangerous-command deny-list bypassed (workspace bounds \
+       still apply)."
+
+let run_oneshot config workspace ~confirm ~resume_opt ~tui ~yolo ~task =
   let root = Workspace.root workspace in
   let session_dir, initial_history =
     match resume_opt with
@@ -131,10 +137,12 @@ let run_oneshot config workspace ~confirm ~resume_opt ~tui ~task =
     else (stderr_reporter, fun () -> ())
   in
   let policy = policy_of ~confirm:(confirm && not tui) in
+  warn_yolo yolo;
   let outcome =
     Lwt_main.run
       (Agent_loop.run ~on_event ~policy ~on_approval:prompt_approval
-         ~initial_history ~config ~model_client ~event_log ~workspace ~task ())
+         ~initial_history ~yolo ~config ~model_client ~event_log ~workspace
+         ~task ())
   in
   close_view ();
   Event_log.close event_log;
@@ -180,7 +188,7 @@ let print_sessions sessions_root current =
           let mark = if String.equal full current then "  *" else "" in
           Stdlib.Printf.printf "  %s%s\n" e mark)
 
-let run_repl config workspace ~confirm ~resume_opt =
+let run_repl config workspace ~confirm ~resume_opt ~yolo =
   let root = Workspace.root workspace in
   let sessions_root =
     Stdlib.Filename.concat root
@@ -203,6 +211,7 @@ let run_repl config workspace ~confirm ~resume_opt =
      session: %s\n\
      %!"
     config.Config.model !session;
+  warn_yolo yolo;
   let run_task task =
     let initial_history =
       match Transcript.of_session ~session_dir:!session with
@@ -212,8 +221,8 @@ let run_repl config workspace ~confirm ~resume_opt =
     let outcome =
       Lwt_main.run
         (Agent_loop.run ~on_event:stderr_reporter ~policy
-           ~on_approval:prompt_approval ~initial_history ~config ~model_client
-           ~event_log:!log ~workspace ~task ())
+           ~on_approval:prompt_approval ~initial_history ~yolo ~config
+           ~model_client ~event_log:!log ~workspace ~task ())
     in
     print_summary outcome
   in
@@ -258,13 +267,14 @@ let run_repl config workspace ~confirm ~resume_opt =
   0
 
 let dispatch task provider api_base model workspace max_steps confirm resume tui
-    =
+    yolo =
   with_setup provider api_base model workspace max_steps
     (fun config workspace ->
       match task with
       | Some task ->
-          run_oneshot config workspace ~confirm ~resume_opt:resume ~tui ~task
-      | None -> run_repl config workspace ~confirm ~resume_opt:resume)
+          run_oneshot config workspace ~confirm ~resume_opt:resume ~tui ~yolo
+            ~task
+      | None -> run_repl config workspace ~confirm ~resume_opt:resume ~yolo)
 
 let () =
   let open Cmdliner in
@@ -336,11 +346,19 @@ let () =
       & info [ "tui" ]
           ~doc:"Render a full-screen live view of the run (runs autonomously).")
   in
+  let yolo =
+    Arg.(
+      value & flag
+      & info [ "yolo" ]
+          ~doc:
+            "Bypass the dangerous-command deny-list (workspace bounds still \
+             apply). Use with care.")
+  in
   let doc = "A type-safe local CLI code agent harness." in
   let term =
     Term.(
       const dispatch $ task $ provider $ api_base $ model $ workspace
-      $ max_steps $ confirm $ resume $ tui)
+      $ max_steps $ confirm $ resume $ tui $ yolo)
   in
   let info = Cmd.info "fp-agent" ~version:"0.1.0" ~doc in
   Stdlib.exit (Cmd.eval' (Cmd.v info term))

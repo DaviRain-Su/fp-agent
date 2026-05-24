@@ -16,7 +16,7 @@ let with_workspace f =
         (Shell.run ~command:(Printf.sprintf "rm -rf %s" root) ~timeout_sec:10
           : (Shell.result, string) Result.t))
 
-let check ws tc = Policy.check ~workspace:ws ~tool_call:tc
+let check ws tc = Policy.check ~workspace:ws ~tool_call:tc ()
 let is_allow p = Permission.is_allow p
 let is_deny = function Permission.Deny _ -> true | _ -> false
 
@@ -81,6 +81,24 @@ let test_deny_includes_reason () =
             (not (String.is_empty reason))
       | _ -> Alcotest.fail "expected Deny")
 
+let test_yolo_bypasses_denylist () =
+  with_workspace (fun ws ->
+      let tc = Tool_call.Run_command { command = "rm -rf /"; cwd = None } in
+      Alcotest.(check bool)
+        "denied normally" true
+        (is_deny (Policy.check ~workspace:ws ~tool_call:tc ()));
+      Alcotest.(check bool)
+        "allowed under yolo" true
+        (is_allow (Policy.check ~yolo:true ~workspace:ws ~tool_call:tc ()));
+      (* yolo still keeps workspace bounds for writes *)
+      Alcotest.(check bool)
+        "git write still denied under yolo" true
+        (is_deny
+           (Policy.check ~yolo:true ~workspace:ws
+              ~tool_call:
+                (Tool_call.Write_file { path = ".git/x"; content = "y" })
+              ())))
+
 let () =
   Alcotest.run "policy"
     [
@@ -93,5 +111,6 @@ let () =
           Alcotest.test_case "dangerous_denied" `Quick
             test_dangerous_commands_denied;
           Alcotest.test_case "deny_reason" `Quick test_deny_includes_reason;
+          Alcotest.test_case "yolo" `Quick test_yolo_bypasses_denylist;
         ] );
     ]
