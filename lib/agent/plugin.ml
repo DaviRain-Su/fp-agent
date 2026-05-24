@@ -672,22 +672,26 @@ let sanitize_id_part s =
   in
   if String.is_empty id then "plugin" else id
 
-let scaffold ?id dir =
+let scaffold ?id ?tool_name dir =
   let id =
     Option.value id
       ~default:
         ("local."
         ^ sanitize_id_part (Stdlib.Filename.basename (String.rstrip dir)))
   in
-  match validate_plugin_id id with
-  | Error e -> Error e
-  | Ok () -> (
+  let tool_name = Option.value tool_name ~default:"hello_world" in
+  match
+    ( validate_plugin_id id,
+      validate_name ~what:"tool name" ~allow_dot:false tool_name )
+  with
+  | Error e, _ | _, Error e -> Error e
+  | Ok (), Ok () -> (
       let manifest_path = Stdlib.Filename.concat dir manifest_file in
       let script_path = Stdlib.Filename.concat dir "hello.sh" in
       let readme_path = Stdlib.Filename.concat dir "README.md" in
       let examples_dir = Stdlib.Filename.concat dir "examples" in
       let args_path =
-        Stdlib.Filename.concat examples_dir "hello_world.args.json"
+        Stdlib.Filename.concat examples_dir (tool_name ^ ".args.json")
       in
       if Stdlib.Sys.file_exists manifest_path then
         Error ("plugin manifest already exists: " ^ manifest_path)
@@ -704,7 +708,7 @@ let scaffold ?id dir =
   "sdk_version": %d,
   "tools": [
     {
-      "name": "hello_world",
+      "name": "%s",
       "kind": "read",
       "description": "Returns a greeting and echoes the input JSON",
       "command": "sh hello.sh",
@@ -719,7 +723,7 @@ let scaffold ?id dir =
   ]
 }
 |}
-                   id id supported_sdk_version));
+                   id id supported_sdk_version tool_name));
           Stdlib.Out_channel.with_open_bin script_path (fun oc ->
               Stdlib.Out_channel.output_string oc
                 "#!/bin/sh\nprintf 'hello from fp-agent plugin: '\ncat\n");
@@ -743,8 +747,8 @@ dune exec -- fp-agent --check-plugin .
 
 ```sh
 dune exec -- fp-agent --run-plugin-tool . \
-  --plugin-tool hello_world \
-  --plugin-args-file examples/hello_world.args.json
+  --plugin-tool %s \
+  --plugin-args-file examples/%s.args.json
 ```
 
 The tool receives JSON args on stdin and can use:
@@ -765,6 +769,6 @@ Install it with:
 dune exec -- fp-agent --install-plugin .
 ```
 |}
-                   id));
+                   id tool_name tool_name));
           Ok dir
         with exn -> Error ("plugin scaffold failed: " ^ Exn.to_string exn))

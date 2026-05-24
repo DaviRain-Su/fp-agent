@@ -544,7 +544,10 @@ let test_run_tool_reports_unknown_tool () =
 let test_scaffold_creates_valid_plugin () =
   with_temp_dir "fp_agent_plugin_scaffold" (fun root ->
       let dir = Stdlib.Filename.concat root "starter" in
-      match Plugin.scaffold ~id:"com.example.scaffold" dir with
+      match
+        Plugin.scaffold ~id:"com.example.scaffold" ~tool_name:"scaffold_echo"
+          dir
+      with
       | Error e -> Alcotest.failf "scaffold failed: %s" e
       | Ok created -> (
           Alcotest.(check string) "created dir" dir created;
@@ -559,7 +562,7 @@ let test_scaffold_creates_valid_plugin () =
             "sample args exists" true
             (Stdlib.Sys.file_exists
                (Stdlib.Filename.concat dir
-                  (Stdlib.Filename.concat "examples" "hello_world.args.json")));
+                  (Stdlib.Filename.concat "examples" "scaffold_echo.args.json")));
           let readme =
             Stdlib.In_channel.with_open_bin
               (Stdlib.Filename.concat dir "README.md")
@@ -576,6 +579,9 @@ let test_scaffold_creates_valid_plugin () =
               Alcotest.(check int)
                 "scaffold sdk version" Plugin.supported_sdk_version
                 manifest.sdk_version;
+              let tool = Option.value_exn (List.hd manifest.tools) in
+              Alcotest.(check string)
+                "scaffold tool" "scaffold_echo" tool.tool_name;
               Alcotest.(check int) "one tool" 1 (List.length manifest.tools)))
 
 let test_check_rejects_invalid_manifest () =

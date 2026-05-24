@@ -276,13 +276,25 @@ let test_new_plugin_custom_id_cli () =
         plugin_dir;
         "--plugin-id";
         "com.example.named_plugin";
+        "--plugin-tool-name";
+        "named_echo";
       ]
   in
   assert_success "new plugin custom id" created;
+  Alcotest.(check bool)
+    "custom tool args created" true
+    (Stdlib.Sys.file_exists
+       (Stdlib.Filename.concat plugin_dir
+          (Stdlib.Filename.concat "examples" "named_echo.args.json")));
   let checked = run ~env [ bin; "--check-plugin"; plugin_dir ] in
   assert_success "check custom id plugin" checked;
   assert_contains "custom id in check output" checked.stdout
     "com.example.named_plugin";
+  assert_contains "custom tool in check output" checked.stdout "named_echo";
+  let smoked = run ~env [ bin; "--smoke-plugin"; plugin_dir ] in
+  assert_success "smoke custom tool plugin" smoked;
+  assert_contains "custom tool smoke output" smoked.stdout
+    "smoke ok: named_echo";
   let installed = run ~env [ bin; "--install-plugin"; plugin_dir ] in
   assert_success "install custom id plugin" installed;
   Alcotest.(check bool)
@@ -303,10 +315,26 @@ let test_new_plugin_custom_id_cli () =
   in
   assert_failure "new plugin invalid custom id" invalid;
   assert_contains "invalid custom id stderr" invalid.stderr "plugin id";
+  let invalid_tool =
+    run ~env
+      [
+        bin;
+        "--new-plugin";
+        Stdlib.Filename.concat root "bad-tool";
+        "--plugin-tool-name";
+        "bad tool";
+      ]
+  in
+  assert_failure "new plugin invalid custom tool" invalid_tool;
+  assert_contains "invalid custom tool stderr" invalid_tool.stderr "tool name";
   let stray = run ~env [ bin; "--plugin-id"; "com.example.only" ] in
   assert_failure "plugin id without new plugin" stray;
   assert_contains "stray plugin id stderr" stray.stderr
-    "--plugin-id requires --new-plugin DIR"
+    "--plugin-id requires --new-plugin DIR";
+  let stray_tool = run ~env [ bin; "--plugin-tool-name"; "named_echo" ] in
+  assert_failure "plugin tool name without new plugin" stray_tool;
+  assert_contains "stray plugin tool name stderr" stray_tool.stderr
+    "--plugin-tool-name requires --new-plugin DIR"
 
 let test_plugin_tool_debug_cli () =
   let root = tmp_dir "fp-agent-cli-plugin-run-" in

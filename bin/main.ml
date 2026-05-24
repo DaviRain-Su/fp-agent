@@ -1525,13 +1525,14 @@ let run_plugin_smoke_cli dir replace_plugin workspace_opt =
       in
       loop manifest.tools
 
-let dispatch new_plugin plugin_id check_plugin install_plugin smoke_plugin
-    replace_plugin list_plugins remove_plugin run_plugin_tool plugin_tool
-    plugin_args plugin_args_file task provider api_base model workspace
-    max_steps confirm resume tui yolo =
+let dispatch new_plugin plugin_id plugin_tool_name check_plugin install_plugin
+    smoke_plugin replace_plugin list_plugins remove_plugin run_plugin_tool
+    plugin_tool plugin_args plugin_args_file task provider api_base model
+    workspace max_steps confirm resume tui yolo =
   match
     ( new_plugin,
       plugin_id,
+      plugin_tool_name,
       check_plugin,
       install_plugin,
       smoke_plugin,
@@ -1539,19 +1540,23 @@ let dispatch new_plugin plugin_id check_plugin install_plugin smoke_plugin
       remove_plugin,
       run_plugin_tool )
   with
-  | Some path, plugin_id, _, _, _, _, _, _ -> (
-      match Plugin.scaffold ?id:plugin_id path with
+  | Some path, plugin_id, plugin_tool_name, _, _, _, _, _, _ -> (
+      match Plugin.scaffold ?id:plugin_id ?tool_name:plugin_tool_name path with
       | Ok dst ->
           Stdlib.Printf.printf "created plugin scaffold: %s\n" dst;
           0
       | Error e ->
           Stdlib.prerr_endline ("plugin scaffold error: " ^ e);
           1)
-  | None, Some _, _, _, _, _, _, _ ->
+  | None, Some _, _, _, _, _, _, _, _ ->
       Stdlib.prerr_endline
         "plugin scaffold error: --plugin-id requires --new-plugin DIR";
       1
-  | None, None, Some path, _, _, _, _, _ -> (
+  | None, None, Some _, _, _, _, _, _, _ ->
+      Stdlib.prerr_endline
+        "plugin scaffold error: --plugin-tool-name requires --new-plugin DIR";
+      1
+  | None, None, None, Some path, _, _, _, _, _ -> (
       match Plugin.check ~replace:replace_plugin path with
       | Ok manifest ->
           Stdlib.print_endline "plugin manifest ok:";
@@ -1560,7 +1565,7 @@ let dispatch new_plugin plugin_id check_plugin install_plugin smoke_plugin
       | Error e ->
           Stdlib.prerr_endline ("plugin check error: " ^ e);
           1)
-  | None, None, None, Some path, _, _, _, _ -> (
+  | None, None, None, None, Some path, _, _, _, _ -> (
       match Plugin.install ~replace:replace_plugin path with
       | Ok dst ->
           Stdlib.Printf.printf "installed plugin: %s\n" dst;
@@ -1568,12 +1573,12 @@ let dispatch new_plugin plugin_id check_plugin install_plugin smoke_plugin
       | Error e ->
           Stdlib.prerr_endline ("plugin install error: " ^ e);
           1)
-  | None, None, None, None, Some path, _, _, _ ->
+  | None, None, None, None, None, Some path, _, _, _ ->
       run_plugin_smoke_cli path replace_plugin workspace
-  | None, None, None, None, None, true, _, _ ->
+  | None, None, None, None, None, None, true, _, _ ->
       print_installed_plugins ();
       0
-  | None, None, None, None, None, false, Some id, _ -> (
+  | None, None, None, None, None, None, false, Some id, _ -> (
       match Plugin.remove id with
       | Ok dst ->
           Stdlib.Printf.printf "removed plugin: %s\n" dst;
@@ -1581,14 +1586,14 @@ let dispatch new_plugin plugin_id check_plugin install_plugin smoke_plugin
       | Error e ->
           Stdlib.prerr_endline ("plugin remove error: " ^ e);
           1)
-  | None, None, None, None, None, false, None, Some dir ->
+  | None, None, None, None, None, None, false, None, Some dir ->
       run_plugin_tool_cli dir plugin_tool plugin_args plugin_args_file workspace
-  | None, None, None, None, None, false, None, None when replace_plugin ->
+  | None, None, None, None, None, None, false, None, None when replace_plugin ->
       Stdlib.prerr_endline
         "plugin error: --replace-plugin requires --install-plugin DIR or \
          --check-plugin DIR or --smoke-plugin DIR";
       1
-  | None, None, None, None, None, false, None, None ->
+  | None, None, None, None, None, None, false, None, None ->
       with_setup provider api_base model workspace max_steps
         (fun config workspace ->
           match task with
@@ -1709,6 +1714,13 @@ let () =
       & info [ "plugin-id" ] ~docv:"ID"
           ~doc:"Manifest id to use with --new-plugin.")
   in
+  let plugin_tool_name =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "plugin-tool-name" ] ~docv:"NAME"
+          ~doc:"Initial tool name to use with --new-plugin.")
+  in
   let provider =
     Arg.(
       value
@@ -1781,11 +1793,11 @@ let () =
   let doc = "A type-safe local CLI code agent harness." in
   let term =
     Term.(
-      const dispatch $ new_plugin $ plugin_id $ check_plugin $ install_plugin
-      $ smoke_plugin $ replace_plugin $ list_plugins $ remove_plugin
-      $ run_plugin_tool $ plugin_tool $ plugin_args $ plugin_args_file $ task
-      $ provider $ api_base $ model $ workspace $ max_steps $ confirm $ resume
-      $ tui $ yolo)
+      const dispatch $ new_plugin $ plugin_id $ plugin_tool_name $ check_plugin
+      $ install_plugin $ smoke_plugin $ replace_plugin $ list_plugins
+      $ remove_plugin $ run_plugin_tool $ plugin_tool $ plugin_args
+      $ plugin_args_file $ task $ provider $ api_base $ model $ workspace
+      $ max_steps $ confirm $ resume $ tui $ yolo)
   in
   let info = Cmd.info "fp-agent" ~version:"0.1.0" ~doc in
   Stdlib.exit (Cmd.eval' (Cmd.v info term))

@@ -121,8 +121,15 @@ Use `--plugin-id` when you know the final manifest id up front:
 dune exec -- fp-agent --new-plugin my-plugin --plugin-id com.example.my_plugin
 ```
 
+Use `--plugin-tool-name` when the starter should scaffold the real first tool
+instead of `hello_world`:
+
+```sh
+dune exec -- fp-agent --new-plugin my-plugin --plugin-tool-name my_tool
+```
+
 The scaffold includes `fp-agent-plugin.json`, `hello.sh`, a README with the
-local development commands, and `examples/hello_world.args.json` for a first
+local development commands, and `examples/<tool>.args.json` for a first
 `--run-plugin-tool` smoke test.
 
 Validate it before installing:

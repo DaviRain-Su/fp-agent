@@ -73,7 +73,8 @@ val check : ?replace:bool -> string -> (manifest, string) result
     discovered plugins. When [replace] is [true], an existing installed plugin
     with the same id is ignored for conflict checks. *)
 
-val scaffold : ?id:string -> string -> (string, string) result
+val scaffold :
+  ?id:string -> ?tool_name:string -> string -> (string, string) result
 (** Create a starter plugin directory and return its path. *)
 
 val run_tool :

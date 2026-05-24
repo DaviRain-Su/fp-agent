@@ -127,6 +127,7 @@ Create, test, and install a plugin into the user plugin home:
 ```sh
 dune exec -- fp-agent --new-plugin my-plugin
 dune exec -- fp-agent --new-plugin my-plugin --plugin-id com.example.my_plugin
+dune exec -- fp-agent --new-plugin my-plugin --plugin-tool-name my_tool
 dune exec -- fp-agent --check-plugin my-plugin
 dune exec -- fp-agent --smoke-plugin my-plugin
 dune exec -- fp-agent --check-plugin my-plugin --replace-plugin
@@ -225,6 +226,7 @@ Options:
   fullscreen shell when no task is supplied (needs a real terminal)
 - `--new-plugin DIR` — create a starter plugin directory, then exit
 - `--plugin-id ID` — manifest id to use with `--new-plugin`
+- `--plugin-tool-name NAME` — initial tool name to use with `--new-plugin`
 - `--check-plugin DIR` — validate a plugin directory, then exit
 - `--smoke-plugin DIR` — validate a plugin directory and run each tool with
   `examples/<tool>.args.json`
