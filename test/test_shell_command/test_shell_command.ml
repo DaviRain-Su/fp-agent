@@ -89,6 +89,13 @@ let test_parse () =
   require_command "plugin install" Shell_command.PluginInstall
     "--replace ./my-plugin"
     (Shell_command.parse "/plugin-install --replace ./my-plugin");
+  require_command "plugin package" Shell_command.PluginPackage
+    "--output ./my-plugin.fp-plugin.tar.gz ./my-plugin"
+    (Shell_command.parse
+       "/plugin-package --output ./my-plugin.fp-plugin.tar.gz ./my-plugin");
+  require_command "plugin package alias" Shell_command.PluginPackage
+    "./my-plugin"
+    (Shell_command.parse "/plugin-pack ./my-plugin");
   require_command "plugin remove alias" Shell_command.PluginRemove "local.foo"
     (Shell_command.parse "/plugin-uninstall local.foo");
   require_command "plugin smoke" Shell_command.PluginSmoke
@@ -199,10 +206,18 @@ let test_metadata () =
     "plugin dev group" "Plugins" (entry "/plugin-dev [--replace] <dir>").group;
   Alcotest.(check bool)
     "palette has plugin install" true
-    (List.mem palette "/plugin-install [--replace] <dir>" ~equal:String.equal);
+    (List.mem palette "/plugin-install [--replace] <dir|package>"
+       ~equal:String.equal);
   Alcotest.(check string)
     "plugin install group" "Plugins"
-    (entry "/plugin-install [--replace] <dir>").group;
+    (entry "/plugin-install [--replace] <dir|package>").group;
+  Alcotest.(check bool)
+    "palette has plugin package" true
+    (List.mem palette "/plugin-package [--replace] [--output FILE] <dir>"
+       ~equal:String.equal);
+  Alcotest.(check string)
+    "plugin package group" "Plugins"
+    (entry "/plugin-package [--replace] [--output FILE] <dir>").group;
   Alcotest.(check bool)
     "palette has plugin remove" true
     (List.mem palette "/plugin-remove <id>" ~equal:String.equal);
@@ -318,7 +333,11 @@ let test_acceptance () =
     (Shell_command.accept (entry "/plugin-check [--replace] <dir>"));
   require_acceptance "plugin install draft"
     ("draft", "/plugin-install ")
-    (Shell_command.accept (entry "/plugin-install [--replace] <dir>"));
+    (Shell_command.accept (entry "/plugin-install [--replace] <dir|package>"));
+  require_acceptance "plugin package draft"
+    ("draft", "/plugin-package ")
+    (Shell_command.accept
+       (entry "/plugin-package [--replace] [--output FILE] <dir>"));
   require_acceptance "plugin remove draft"
     ("draft", "/plugin-remove ")
     (Shell_command.accept (entry "/plugin-remove <id>"));

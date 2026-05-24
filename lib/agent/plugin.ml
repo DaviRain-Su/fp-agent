@@ -31,6 +31,12 @@ type tool_conflict = {
 
 type smoke_result = { tool_name : string; args_file : string; output : string }
 
+type package_result = {
+  package_path : string;
+  manifest : manifest;
+  smoke_results : smoke_result list;
+}
+
 let manifest_file = "fp-agent-plugin.json"
 let supported_sdk_version = 1
 let default_timeout_sec = 60
@@ -265,6 +271,16 @@ let validate_plugin_id id =
   | Ok () when String.equal id "." || String.equal id ".." ->
       Error "plugin id cannot be '.' or '..'"
   | Ok () -> Ok ()
+
+let sanitize_id_part s =
+  let chars =
+    String.to_list s
+    |> List.map ~f:(fun c -> if is_plugin_id_char c then c else '-')
+  in
+  let id =
+    String.of_char_list chars |> String.strip ~drop:(fun c -> Char.equal c '-')
+  in
+  if String.is_empty id then "plugin" else id
 
 let validate_sdk_version version =
   if version <= 0 then Error "sdk_version must be positive"
@@ -564,6 +580,18 @@ let search_roots = default_search_roots
 let has_manifest dir =
   Stdlib.Sys.file_exists (Stdlib.Filename.concat dir manifest_file)
 
+let is_directory path =
+  match Unix.lstat path with
+  | { st_kind = Unix.S_DIR; _ } -> true
+  | _ -> false
+  | exception _ -> false
+
+let is_regular_file path =
+  match Unix.lstat path with
+  | { st_kind = Unix.S_REG; _ } -> true
+  | _ -> false
+  | exception _ -> false
+
 let dirs_in_root root =
   if has_manifest root then [ root ]
   else
@@ -574,12 +602,7 @@ let dirs_in_root root =
         Array.to_list entries
         |> List.filter_map ~f:(fun name ->
             let dir = Stdlib.Filename.concat root name in
-            if
-              Stdlib.Sys.file_exists dir
-              && Stdlib.Sys.is_directory dir
-              && has_manifest dir
-            then Some dir
-            else None)
+            if is_directory dir && has_manifest dir then Some dir else None)
 
 let discover_dirs dirs =
   List.fold dirs ~init:{ manifests = []; errors = [] } ~f:(fun acc dir ->
@@ -797,14 +820,6 @@ let smoke_arg_candidates dir tool_name =
 let smoke_case_dir dir tool_name =
   Stdlib.Filename.concat (Stdlib.Filename.concat dir "examples") tool_name
 
-let is_regular_file path =
-  Stdlib.Sys.file_exists path
-  &&
-  match Stdlib.Sys.is_directory path with
-  | true -> false
-  | false -> true
-  | exception _ -> false
-
 let smoke_case_files dir tool_name =
   let case_dir = smoke_case_dir dir tool_name in
   if not (Stdlib.Sys.file_exists case_dir) then []
@@ -934,16 +949,21 @@ let copy_file src dst =
             (Stdlib.In_channel.input_all input)))
 
 let rec copy_tree src dst =
-  if Stdlib.Sys.is_directory src then (
-    mkdir_p dst;
-    Stdlib.Sys.readdir src
-    |> Array.iter ~f:(fun name ->
-        if String.equal name ".git" || String.equal name "_build" then ()
-        else
-          copy_tree
-            (Stdlib.Filename.concat src name)
-            (Stdlib.Filename.concat dst name)))
-  else copy_file src dst
+  match Unix.lstat src with
+  | { st_kind = Unix.S_DIR; _ } ->
+      mkdir_p dst;
+      Stdlib.Sys.readdir src
+      |> Array.iter ~f:(fun name ->
+          if
+            String.equal name ".git" || String.equal name "_build"
+            || String.is_suffix name ~suffix:".fp-plugin.tar.gz"
+          then ()
+          else
+            copy_tree
+              (Stdlib.Filename.concat src name)
+              (Stdlib.Filename.concat dst name))
+  | { st_kind = Unix.S_REG; _ } -> copy_file src dst
+  | _ -> ()
 
 let rec remove_tree path =
   match Unix.lstat path with
@@ -959,10 +979,16 @@ let temp_install_dir home id =
   Unix.unlink path;
   path
 
+let temp_dir ?temp_dir prefix =
+  let path = Stdlib.Filename.temp_file ?temp_dir prefix ".tmp" in
+  Unix.unlink path;
+  Unix.mkdir path 0o755;
+  path
+
 let cleanup_staged_dir path =
   if Stdlib.Sys.file_exists path then try remove_tree path with _ -> ()
 
-let install ?(replace = false) src_dir =
+let install_dir ?(replace = false) src_dir =
   match (load_manifest src_dir, install_home ()) with
   | Error e, _ -> Error e
   | _, None -> Error "cannot determine plugin install home"
@@ -985,6 +1011,139 @@ let install ?(replace = false) src_dir =
               cleanup_staged_dir staged;
               Error ("plugin install failed: " ^ Exn.to_string exn)))
 
+let archive_member_safe member_path =
+  let member_path = String.strip member_path in
+  (not (String.is_empty member_path))
+  && (not (String.is_prefix member_path ~prefix:"/"))
+  &&
+  let parts =
+    String.split member_path ~on:'/'
+    |> List.filter ~f:(fun part -> not (String.is_empty part))
+  in
+  not (List.exists parts ~f:(String.equal ".."))
+
+let tar_members archive =
+  let command = Printf.sprintf "tar -tzf %s" (Stdlib.Filename.quote archive) in
+  match Shell.run ~command ~timeout_sec:30 with
+  | Error e -> Error e
+  | Ok { exit_code = 0; stdout; _ } ->
+      let members =
+        stdout |> String.split_lines |> List.map ~f:String.strip
+        |> List.filter ~f:(fun line -> not (String.is_empty line))
+      in
+      if List.is_empty members then Error "plugin package is empty"
+      else if List.for_all members ~f:archive_member_safe then Ok members
+      else Error "plugin package contains unsafe archive paths"
+  | Ok result ->
+      Error
+        (Printf.sprintf "cannot inspect plugin package (exit %d): %s"
+           result.exit_code (output_of_result result))
+
+let extract_package package_path dst =
+  match tar_members package_path with
+  | Error _ as e -> e
+  | Ok _ -> (
+      let command =
+        Printf.sprintf "tar -xzf %s -C %s"
+          (Stdlib.Filename.quote package_path)
+          (Stdlib.Filename.quote dst)
+      in
+      match Shell.run ~command ~timeout_sec:30 with
+      | Error e -> Error e
+      | Ok { exit_code = 0; _ } -> Ok ()
+      | Ok result ->
+          Error
+            (Printf.sprintf "cannot extract plugin package (exit %d): %s"
+               result.exit_code (output_of_result result)))
+
+let package_manifest_dir extracted =
+  match dirs_in_root extracted with
+  | [ dir ] -> Ok dir
+  | [] -> Error "plugin package does not contain fp-agent-plugin.json"
+  | dirs ->
+      Error
+        ("plugin package contains multiple plugin manifests: "
+        ^ String.concat dirs ~sep:", ")
+
+let install_package ?(replace = false) package_path =
+  if not (is_regular_file package_path) then
+    Error ("plugin package is not a file: " ^ package_path)
+  else
+    let extracted = temp_dir "fp_agent_plugin_package" in
+    Exn.protect
+      ~f:(fun () ->
+        match extract_package package_path extracted with
+        | Error _ as e -> e
+        | Ok () -> (
+            match package_manifest_dir extracted with
+            | Error _ as e -> e
+            | Ok dir -> install_dir ~replace dir))
+      ~finally:(fun () -> cleanup_staged_dir extracted)
+
+let install ?(replace = false) src =
+  if is_directory src then install_dir ~replace src
+  else if is_regular_file src then install_package ~replace src
+  else if Stdlib.Sys.file_exists src then
+    Error ("plugin source is not a directory or regular package file: " ^ src)
+  else Error ("plugin source does not exist: " ^ src)
+
+let default_package_path manifest =
+  let file =
+    Printf.sprintf "%s-%s.fp-plugin.tar.gz"
+      (sanitize_id_part manifest.id)
+      (sanitize_id_part manifest.version)
+  in
+  Stdlib.Filename.concat
+    (Stdlib.Filename.dirname (absolute_dir manifest.dir))
+    file
+
+let package ?(replace = false) ?output ~workspace dir =
+  match check ~replace dir with
+  | Error _ as e -> e
+  | Ok manifest -> (
+      match smoke ~replace ~workspace dir with
+      | Error _ as e -> e
+      | Ok smoke_results ->
+          let package_path =
+            Option.value_map output
+              ~default:(default_package_path manifest)
+              ~f:absolute_dir
+          in
+          if is_directory package_path then
+            Error ("plugin package output is a directory: " ^ package_path)
+          else if
+            Stdlib.Sys.file_exists package_path
+            && not (is_regular_file package_path)
+          then
+            Error
+              ("plugin package output is not a regular file: " ^ package_path)
+          else (
+            mkdir_p (Stdlib.Filename.dirname package_path);
+            let staged = temp_dir "fp_agent_plugin_package_build" in
+            Exn.protect
+              ~f:(fun () ->
+                let package_root =
+                  Stdlib.Filename.concat staged (sanitize_id_part manifest.id)
+                in
+                copy_tree dir package_root;
+                if is_regular_file package_path then Unix.unlink package_path;
+                let command =
+                  Printf.sprintf "tar -czf %s -C %s %s"
+                    (Stdlib.Filename.quote package_path)
+                    (Stdlib.Filename.quote staged)
+                    (Stdlib.Filename.quote
+                       (Stdlib.Filename.basename package_root))
+                in
+                match Shell.run ~command ~timeout_sec:30 with
+                | Error e -> Error e
+                | Ok { exit_code = 0; _ } ->
+                    Ok { package_path; manifest; smoke_results }
+                | Ok result ->
+                    Error
+                      (Printf.sprintf "plugin package failed (exit %d): %s"
+                         result.exit_code (output_of_result result)))
+              ~finally:(fun () -> cleanup_staged_dir staged)))
+
 let remove id =
   match (validate_plugin_id id, install_home ()) with
   | Error e, _ -> Error e
@@ -998,16 +1157,6 @@ let remove id =
           remove_tree dst;
           Ok dst
         with exn -> Error ("plugin remove failed: " ^ Exn.to_string exn))
-
-let sanitize_id_part s =
-  let chars =
-    String.to_list s
-    |> List.map ~f:(fun c -> if is_plugin_id_char c then c else '-')
-  in
-  let id =
-    String.of_char_list chars |> String.strip ~drop:(fun c -> Char.equal c '-')
-  in
-  if String.is_empty id then "plugin" else id
 
 type scaffold_template = {
   template_id : string;

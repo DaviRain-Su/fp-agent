@@ -187,6 +187,58 @@ let test_install_plugin_copies_to_home () =
                 "missing remove rejected" true
                 (Result.is_error (Plugin.remove "com.example.install"))))
 
+let test_package_plugin_installs_archive () =
+  with_temp_dir "fp_agent_plugin_package" (fun root ->
+      let src = Stdlib.Filename.concat root "src" in
+      let home = Stdlib.Filename.concat root "home" in
+      let package_path =
+        Stdlib.Filename.concat root "com.example.package.fp-plugin.tar.gz"
+      in
+      mkdir_p src;
+      write_plugin src ~id:"com.example.package"
+        ~tool_name:"plugin_package_echo" ~kind:"read"
+        ~script:"printf 'packaged input='; cat\n";
+      write
+        (Stdlib.Filename.concat src
+           (Stdlib.Filename.concat "examples" "plugin_package_echo.args.json"))
+        {|{"message":"from-package"}|};
+      Unix.putenv "FP_AGENT_PLUGIN_PATH" "";
+      Unix.putenv "FP_AGENT_PLUGIN_HOME" home;
+      match
+        Plugin.package ~output:package_path ~workspace:(workspace root) src
+      with
+      | Error e -> Alcotest.failf "package failed: %s" e
+      | Ok result -> (
+          Alcotest.(check string)
+            "package path" package_path result.package_path;
+          Alcotest.(check string)
+            "package manifest id" "com.example.package" result.manifest.id;
+          Alcotest.(check int)
+            "smoke result count" 1
+            (List.length result.smoke_results);
+          Alcotest.(check bool)
+            "package file created" true
+            (Stdlib.Sys.file_exists package_path);
+          match Plugin.install package_path with
+          | Error e -> Alcotest.failf "install package failed: %s" e
+          | Ok dst -> (
+              Alcotest.(check string)
+                "installed package path"
+                (Stdlib.Filename.concat home "com.example.package")
+                dst;
+              match
+                Plugin.run_tool ~dir:dst ~tool_name:"plugin_package_echo"
+                  ~workspace:(workspace root)
+                  ~args:(`Assoc [ ("message", `String "installed") ])
+              with
+              | Error e -> Alcotest.failf "run package failed: %s" e
+              | Ok (Tool_result.Error { message }) ->
+                  Alcotest.failf "package tool failed: %s" message
+              | Ok (Tool_result.Success { output }) ->
+                  Alcotest.(check bool)
+                    "installed package tool ran" true
+                    (String.is_substring output ~substring:"packaged input="))))
+
 let test_install_plugin_can_replace_existing () =
   with_temp_dir "fp_agent_plugin_replace" (fun root ->
       let src_v1 = Stdlib.Filename.concat root "src-v1" in
@@ -1168,6 +1220,8 @@ let () =
             test_plugin_write_policy_uses_path_bounds;
           Alcotest.test_case "install_plugin" `Quick
             test_install_plugin_copies_to_home;
+          Alcotest.test_case "package_plugin" `Quick
+            test_package_plugin_installs_archive;
           Alcotest.test_case "install_replace_plugin" `Quick
             test_install_plugin_can_replace_existing;
           Alcotest.test_case "discover_invalid_plugin" `Quick

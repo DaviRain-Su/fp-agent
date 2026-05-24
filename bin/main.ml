@@ -927,6 +927,52 @@ let parse_plugin_dir_arg ~usage raw =
         Error usage
     | None -> Ok (false, arg)
 
+let plugin_package_usage =
+  "usage: /plugin-package [--replace] [--output FILE] <dir>"
+
+let parse_plugin_package_args raw =
+  let tokens =
+    String.split (String.strip raw) ~on:' '
+    |> List.filter ~f:(fun s -> not (String.is_empty s))
+  in
+  let rec loop replace output dirs = function
+    | [] -> (
+        match List.rev dirs with
+        | [ dir ] -> Ok (replace, output, dir)
+        | [] -> Error plugin_package_usage
+        | _ ->
+            Error "plugin package error: expected exactly one plugin directory")
+    | ("--replace" | "--replace-plugin") :: rest -> loop true output dirs rest
+    | ("--output" | "--out" | "--package-output" | "--plugin-package-output")
+      :: value :: rest ->
+        loop replace (Some value) dirs rest
+    | ("--output" | "--out" | "--package-output" | "--plugin-package-output")
+      :: [] ->
+        Error plugin_package_usage
+    | flag :: _ when String.is_prefix flag ~prefix:"--" ->
+        Error ("plugin package error: unknown option " ^ flag)
+    | dir :: rest -> loop replace output (dir :: dirs) rest
+  in
+  loop false None [] tokens
+
+let plugin_package_lines ~workspace args =
+  match parse_plugin_package_args args with
+  | Error e -> [ e ]
+  | Ok (replace, output, dir) -> (
+      match Plugin.package ~replace ?output ~workspace dir with
+      | Error e -> [ "plugin package error: " ^ e ]
+      | Ok result ->
+          [
+            "plugin package ok: " ^ result.package_path;
+            "plugin id: " ^ result.manifest.id;
+            "version: " ^ result.manifest.version;
+            Printf.sprintf "smoke_cases: %d" (List.length result.smoke_results);
+            "next: /plugin-install --replace " ^ result.package_path;
+            "next: dune exec -- fp-agent --install-plugin "
+            ^ Stdlib.Filename.quote result.package_path
+            ^ " --replace-plugin";
+          ])
+
 let plugin_check_lines args =
   match
     parse_plugin_dir_arg ~usage:"usage: /plugin-check [--replace] <dir>" args
@@ -940,7 +986,8 @@ let plugin_check_lines args =
 
 let plugin_install_lines args =
   match
-    parse_plugin_dir_arg ~usage:"usage: /plugin-install [--replace] <dir>" args
+    parse_plugin_dir_arg
+      ~usage:"usage: /plugin-install [--replace] <dir|package>" args
   with
   | Error e -> [ e ]
   | Ok (replace, dir) -> (
@@ -1490,6 +1537,10 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
     view.append_lines ("[tui] /plugin-install" :: plugin_install_lines arg);
     ignore (view.refresh_tooling ())
   in
+  let package_plugin arg =
+    view.append_lines
+      ("[tui] /plugin-package" :: plugin_package_lines ~workspace arg)
+  in
   let remove_plugin arg =
     view.append_lines ("[tui] /plugin-remove" :: plugin_remove_lines arg);
     ignore (view.refresh_tooling ())
@@ -1528,6 +1579,7 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
     | Command (PluginDev, arg) -> dev_plugin arg
     | Command (PluginCheck, arg) -> check_plugin arg
     | Command (PluginInstall, arg) -> install_plugin arg
+    | Command (PluginPackage, arg) -> package_plugin arg
     | Command (PluginRemove, arg) -> remove_plugin arg
     | Command (PluginSmoke, arg) -> smoke_plugin arg
     | Command (PluginRun, arg) -> run_plugin arg
@@ -2094,6 +2146,11 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
         | Command (PluginInstall, arg) ->
             List.iter (plugin_install_lines arg) ~f:Stdlib.print_endline;
             loop ()
+        | Command (PluginPackage, arg) ->
+            List.iter
+              (plugin_package_lines ~workspace arg)
+              ~f:Stdlib.print_endline;
+            loop ()
         | Command (PluginRemove, arg) ->
             List.iter (plugin_remove_lines arg) ~f:Stdlib.print_endline;
             loop ()
@@ -2340,6 +2397,31 @@ let run_plugin_dev_cli dir replace_plugin workspace_opt =
           List.iter lines ~f:(fun line -> Stdlib.Printf.printf "%s\n%!" line);
           0)
 
+let run_plugin_package_cli dir output replace_plugin workspace_opt =
+  match workspace_for_plugin_debug workspace_opt with
+  | Error e ->
+      Stdlib.prerr_endline ("plugin package error: " ^ e);
+      1
+  | Ok workspace -> (
+      match Plugin.package ~replace:replace_plugin ?output ~workspace dir with
+      | Error e ->
+          Stdlib.prerr_endline ("plugin package error: " ^ e);
+          1
+      | Ok result ->
+          List.iter
+            [
+              "plugin package ok: " ^ result.package_path;
+              "plugin id: " ^ result.manifest.id;
+              "version: " ^ result.manifest.version;
+              Printf.sprintf "smoke_cases: %d"
+                (List.length result.smoke_results);
+              "next: --install-plugin "
+              ^ Stdlib.Filename.quote result.package_path
+              ^ " --replace-plugin";
+            ]
+            ~f:(fun line -> Stdlib.Printf.printf "%s\n%!" line);
+          0)
+
 let cli_provider_compat ~local_compat ~no_developer_role ~no_reasoning_effort
     ~no_usage_in_streaming ~max_tokens_field =
   let compat =
@@ -2430,9 +2512,10 @@ let dispatch add_provider provider_base provider_models provider_api
     provider_no_usage_in_streaming provider_max_tokens_field provider_max_tokens
     replace_provider new_plugin plugin_id plugin_tool_name plugin_kind
     plugin_template check_plugin install_plugin smoke_plugin dev_plugin
-    replace_plugin list_plugins doctor_plugins plugin_sdk remove_plugin
-    run_plugin_tool plugin_tool plugin_args plugin_args_file task provider
-    api_base model workspace max_steps confirm resume tui yolo =
+    package_plugin plugin_package_output replace_plugin list_plugins
+    doctor_plugins plugin_sdk remove_plugin run_plugin_tool plugin_tool
+    plugin_args plugin_args_file task provider api_base model workspace
+    max_steps confirm resume tui yolo =
   match add_provider with
   | Some name ->
       run_provider_add_cli name provider_base provider_models provider_api
@@ -2453,6 +2536,13 @@ let dispatch add_provider provider_base provider_models provider_api
   | None when plugin_sdk ->
       List.iter (Tui_command.plugin_sdk_lines ()) ~f:Stdlib.print_endline;
       0
+  | None
+    when Option.is_some plugin_package_output && Option.is_none package_plugin
+    ->
+      Stdlib.prerr_endline
+        "plugin package error: --plugin-package-output requires \
+         --package-plugin DIR";
+      1
   | None -> (
       match
         ( new_plugin,
@@ -2464,6 +2554,7 @@ let dispatch add_provider provider_base provider_models provider_api
           install_plugin,
           smoke_plugin,
           dev_plugin,
+          package_plugin,
           list_plugins,
           doctor_plugins,
           remove_plugin,
@@ -2474,6 +2565,7 @@ let dispatch add_provider provider_base provider_models provider_api
           plugin_tool_name,
           plugin_kind,
           plugin_template,
+          _,
           _,
           _,
           _,
@@ -2493,24 +2585,24 @@ let dispatch add_provider provider_base provider_models provider_api
           | Error e ->
               Stdlib.prerr_endline ("plugin scaffold error: " ^ e);
               1)
-      | None, Some _, _, _, _, _, _, _, _, _, _, _, _ ->
+      | None, Some _, _, _, _, _, _, _, _, _, _, _, _, _ ->
           Stdlib.prerr_endline
             "plugin scaffold error: --plugin-id requires --new-plugin DIR";
           1
-      | None, None, Some _, _, _, _, _, _, _, _, _, _, _ ->
+      | None, None, Some _, _, _, _, _, _, _, _, _, _, _, _ ->
           Stdlib.prerr_endline
             "plugin scaffold error: --plugin-tool-name requires --new-plugin \
              DIR";
           1
-      | None, None, None, Some _, _, _, _, _, _, _, _, _, _ ->
+      | None, None, None, Some _, _, _, _, _, _, _, _, _, _, _ ->
           Stdlib.prerr_endline
             "plugin scaffold error: --plugin-kind requires --new-plugin DIR";
           1
-      | None, None, None, None, Some _, _, _, _, _, _, _, _, _ ->
+      | None, None, None, None, Some _, _, _, _, _, _, _, _, _, _ ->
           Stdlib.prerr_endline
             "plugin scaffold error: --plugin-template requires --new-plugin DIR";
           1
-      | None, None, None, None, None, Some path, _, _, _, _, _, _, _ -> (
+      | None, None, None, None, None, Some path, _, _, _, _, _, _, _, _ -> (
           match Plugin.check ~replace:replace_plugin path with
           | Ok manifest ->
               Stdlib.print_endline "plugin manifest ok:";
@@ -2519,7 +2611,7 @@ let dispatch add_provider provider_base provider_models provider_api
           | Error e ->
               Stdlib.prerr_endline ("plugin check error: " ^ e);
               1)
-      | None, None, None, None, None, None, Some path, _, _, _, _, _, _ -> (
+      | None, None, None, None, None, None, Some path, _, _, _, _, _, _, _ -> (
           match Plugin.install ~replace:replace_plugin path with
           | Ok dst ->
               Stdlib.Printf.printf "installed plugin: %s\n" dst;
@@ -2534,20 +2626,63 @@ let dispatch add_provider provider_base provider_models provider_api
           | Error e ->
               Stdlib.prerr_endline ("plugin install error: " ^ e);
               1)
-      | None, None, None, None, None, None, None, Some path, _, _, _, _, _ ->
+      | None, None, None, None, None, None, None, Some path, _, _, _, _, _, _ ->
           run_plugin_smoke_cli path replace_plugin workspace
-      | None, None, None, None, None, None, None, None, Some path, _, _, _, _ ->
+      | None, None, None, None, None, None, None, None, Some path, _, _, _, _, _
+        ->
           run_plugin_dev_cli path replace_plugin workspace
-      | None, None, None, None, None, None, None, None, None, true, _, _, _ ->
+      | ( None,
+          None,
+          None,
+          None,
+          None,
+          None,
+          None,
+          None,
+          None,
+          Some path,
+          _,
+          _,
+          _,
+          _ ) ->
+          run_plugin_package_cli path plugin_package_output replace_plugin
+            workspace
+      | ( None,
+          None,
+          None,
+          None,
+          None,
+          None,
+          None,
+          None,
+          None,
+          None,
+          true,
+          _,
+          _,
+          _ ) ->
           print_installed_plugins ();
           0
-      | None, None, None, None, None, None, None, None, None, false, true, _, _
-        ->
+      | ( None,
+          None,
+          None,
+          None,
+          None,
+          None,
+          None,
+          None,
+          None,
+          None,
+          false,
+          true,
+          _,
+          _ ) ->
           List.iter
             (Tui_command.plugin_diagnostics_lines ())
             ~f:Stdlib.print_endline;
           0
       | ( None,
+          None,
           None,
           None,
           None,
@@ -2576,6 +2711,7 @@ let dispatch add_provider provider_base provider_models provider_api
           None,
           None,
           None,
+          None,
           false,
           false,
           None,
@@ -2591,16 +2727,19 @@ let dispatch add_provider provider_base provider_models provider_api
           None,
           None,
           None,
+          None,
           false,
           false,
           None,
           None )
         when replace_plugin ->
           Stdlib.prerr_endline
-            "plugin error: --replace-plugin requires --install-plugin DIR or \
-             --check-plugin DIR or --smoke-plugin DIR or --dev-plugin DIR";
+            "plugin error: --replace-plugin requires --install-plugin \
+             DIR|PACKAGE or --check-plugin DIR or --smoke-plugin DIR or \
+             --dev-plugin DIR or --package-plugin DIR";
           1
       | ( None,
+          None,
           None,
           None,
           None,
@@ -2640,10 +2779,10 @@ let () =
     Arg.(
       value
       & opt (some string) None
-      & info [ "install-plugin" ] ~docv:"DIR"
+      & info [ "install-plugin" ] ~docv:"DIR|PACKAGE"
           ~doc:
-            "Install a plugin directory containing fp-agent-plugin.json into \
-             the plugin home, then exit.")
+            "Install a plugin directory or .fp-plugin.tar.gz package into the \
+             plugin home, then exit.")
   in
   let replace_plugin =
     Arg.(
@@ -2720,6 +2859,25 @@ let () =
           ~doc:
             "Validate, smoke-test, install, refresh, and print next inspection \
              commands for a plugin directory, then exit.")
+  in
+  let package_plugin =
+    Arg.(
+      value
+      & opt (some string) None
+      & info
+          [ "package-plugin"; "plugin-package"; "pack-plugin" ]
+          ~docv:"DIR"
+          ~doc:
+            "Validate, smoke-test, and package a plugin directory as a \
+             distributable .fp-plugin.tar.gz archive, then exit.")
+  in
+  let plugin_package_output =
+    Arg.(
+      value
+      & opt (some string) None
+      & info
+          [ "plugin-package-output"; "plugin-output"; "package-output" ]
+          ~docv:"FILE" ~doc:"Output file for --package-plugin.")
   in
   let plugin_tool =
     Arg.(
@@ -2970,10 +3128,11 @@ let () =
       $ provider_max_tokens_field $ provider_max_tokens $ replace_provider
       $ new_plugin $ plugin_id $ plugin_tool_name $ plugin_kind
       $ plugin_template $ check_plugin $ install_plugin $ smoke_plugin
-      $ dev_plugin $ replace_plugin $ list_plugins $ doctor_plugins $ plugin_sdk
-      $ remove_plugin $ run_plugin_tool $ plugin_tool $ plugin_args
-      $ plugin_args_file $ task $ provider $ api_base $ model $ workspace
-      $ max_steps $ confirm $ resume $ tui $ yolo)
+      $ dev_plugin $ package_plugin $ plugin_package_output $ replace_plugin
+      $ list_plugins $ doctor_plugins $ plugin_sdk $ remove_plugin
+      $ run_plugin_tool $ plugin_tool $ plugin_args $ plugin_args_file $ task
+      $ provider $ api_base $ model $ workspace $ max_steps $ confirm $ resume
+      $ tui $ yolo)
   in
   let info = Cmd.info "fp-agent" ~version:"0.1.0" ~doc in
   Stdlib.exit (Cmd.eval' (Cmd.v info term))

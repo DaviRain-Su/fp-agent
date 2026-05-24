@@ -157,6 +157,7 @@ let plugin_diagnostics_lines () =
       "next: /plugins";
       "next: /plugin <id|tool>";
       "next: /plugin-check <dir>";
+      "next: /plugin-package --output <file> <dir>";
       "next: /plugin-dev --replace <dir>";
     ]
 
@@ -202,6 +203,7 @@ let plugin_sdk_lines () =
       "  /plugin-new --template python --id com.example.echo --tool-name \
        echo_json my-plugin";
       "  /plugin-dev --replace my-plugin";
+      "  /plugin-package --output my-plugin.fp-plugin.tar.gz my-plugin";
       "  /plugin-run my-plugin echo_json \
        @my-plugin/examples/echo_json.args.json";
       "next: /plugin-new --template python <dir>";

@@ -29,6 +29,12 @@ type tool_conflict = {
 
 type smoke_result = { tool_name : string; args_file : string; output : string }
 
+type package_result = {
+  package_path : string;
+  manifest : manifest;
+  smoke_results : smoke_result list;
+}
+
 type scaffold_template_info = {
   template_id : string;
   template_aliases : string list;
@@ -73,10 +79,19 @@ val register_all : unit -> unit
     plugin declares the same tool name. *)
 
 val install : ?replace:bool -> string -> (string, string) result
-(** Install a plugin directory into the user plugin home and return the
-    installed path. When [replace] is [true], an existing installed plugin with
-    the same id is replaced after the new plugin has been validated and staged.
-*)
+(** Install a plugin directory or [.fp-plugin.tar.gz] package into the user
+    plugin home and return the installed path. When [replace] is [true], an
+    existing installed plugin with the same id is replaced after the new plugin
+    has been validated and staged. *)
+
+val package :
+  ?replace:bool ->
+  ?output:string ->
+  workspace:Workspace.t ->
+  string ->
+  (package_result, string) result
+(** Validate and smoke-test a plugin directory, then create a distributable
+    [.fp-plugin.tar.gz] package. The package can be installed with [install]. *)
 
 val installed_manifests : unit -> manifest list
 (** Load valid manifests installed directly under the plugin home. *)

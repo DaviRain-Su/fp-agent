@@ -192,8 +192,27 @@ let test_plugin_lifecycle_cli () =
   let empty = run ~env [ bin; "--list-plugins" ] in
   assert_success "list plugins before install" empty;
   assert_contains "empty plugin list" empty.stdout "(no installed plugins)";
-  let installed = run ~env [ bin; "--install-plugin"; plugin_dir ] in
-  assert_success "install plugin" installed;
+  let package_path =
+    Stdlib.Filename.concat root "local.my-plugin.fp-plugin.tar.gz"
+  in
+  let packaged =
+    run ~env
+      [
+        bin;
+        "--package-plugin";
+        plugin_dir;
+        "--plugin-package-output";
+        package_path;
+      ]
+  in
+  assert_success "package plugin" packaged;
+  assert_contains "package output" packaged.stdout "plugin package ok:";
+  assert_contains "package install hint" packaged.stdout "--install-plugin";
+  Alcotest.(check bool)
+    "package file created" true
+    (Stdlib.Sys.file_exists package_path);
+  let installed = run ~env [ bin; "--install-plugin"; package_path ] in
+  assert_success "install plugin package" installed;
   assert_contains "install output" installed.stdout "installed plugin:";
   let installed_dir = Stdlib.Filename.concat home "local.my-plugin" in
   assert_contains "install plugin id hint" installed.stdout
@@ -249,8 +268,8 @@ let test_plugin_lifecycle_cli () =
   assert_failure "replace without install" replace_without_install;
   assert_contains "replace without install stderr"
     replace_without_install.stderr
-    "--replace-plugin requires --install-plugin DIR or --check-plugin DIR or \
-     --smoke-plugin DIR or --dev-plugin DIR";
+    "--replace-plugin requires --install-plugin DIR|PACKAGE or --check-plugin \
+     DIR or --smoke-plugin DIR or --dev-plugin DIR or --package-plugin DIR";
   let invalid_installed = Stdlib.Filename.concat home "invalid-plugin" in
   mkdir_p invalid_installed;
   write_file
@@ -310,6 +329,9 @@ let test_repl_installs_and_removes_plugin () =
   let root = tmp_dir "fp-agent-cli-repl-install-" in
   let plugin_dir = Stdlib.Filename.concat root "my-plugin" in
   let home = Stdlib.Filename.concat root "installed" in
+  let package_path =
+    Stdlib.Filename.concat root "local.repl-plugin.fp-plugin.tar.gz"
+  in
   let bin = fp_agent_bin () in
   let env =
     isolated_env root
@@ -331,6 +353,9 @@ let test_repl_installs_and_removes_plugin () =
              "/plugin-doctor";
              "/tool repl_echo";
              "/plugin-smoke --replace " ^ plugin_dir;
+             "/plugin-package --replace --output " ^ package_path ^ " "
+             ^ plugin_dir;
+             "/plugin-install --replace " ^ package_path;
              "/plugin-remove local.repl-plugin";
              "/plugin-dev --replace " ^ plugin_dir;
              "/tool repl_echo";
@@ -367,6 +392,9 @@ let test_repl_installs_and_removes_plugin () =
     "next: /plugin-check <dir>";
   assert_contains "tool available after install" repl.stdout "name: repl_echo";
   assert_contains "smoke output" repl.stdout "smoke ok: repl_echo";
+  assert_contains "package output" repl.stdout "plugin package ok:";
+  assert_contains "package install hint" repl.stdout
+    ("next: /plugin-install --replace " ^ package_path);
   assert_contains "dev check output" repl.stdout
     "plugin dev check ok: local.repl-plugin";
   assert_contains "dev smoke output" repl.stdout "plugin dev smoke ok:";

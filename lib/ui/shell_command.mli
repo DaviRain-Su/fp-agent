@@ -8,6 +8,7 @@ type id =
   | PluginDev
   | PluginCheck
   | PluginInstall
+  | PluginPackage
   | PluginRemove
   | PluginSmoke
   | PluginRun

@@ -10,6 +10,7 @@ type id =
   | PluginDev
   | PluginCheck
   | PluginInstall
+  | PluginPackage
   | PluginRemove
   | PluginSmoke
   | PluginRun
@@ -133,11 +134,19 @@ let specs =
     };
     {
       id = PluginInstall;
-      command = "/plugin-install [--replace] <dir>";
-      description = "install a plugin directory";
+      command = "/plugin-install [--replace] <dir|package>";
+      description = "install a plugin directory or package";
       aliases = [];
       palette = true;
       acceptance = Draft "/plugin-install ";
+    };
+    {
+      id = PluginPackage;
+      command = "/plugin-package [--replace] [--output FILE] <dir>";
+      description = "package a plugin for distribution";
+      aliases = [ "/plugin-pack" ];
+      palette = true;
+      acceptance = Draft "/plugin-package ";
     };
     {
       id = PluginRemove;
@@ -423,7 +432,8 @@ let command_token command =
 let group_of_id = function
   | Tools | Tool -> "Tools"
   | Plugins | Plugin | PluginNew | PluginDev | PluginCheck | PluginInstall
-  | PluginRemove | PluginSmoke | PluginRun | PluginDoctor | PluginSdk ->
+  | PluginPackage | PluginRemove | PluginSmoke | PluginRun | PluginDoctor
+  | PluginSdk ->
       "Plugins"
   | Sessions | Tree | NewSession | Resume -> "Sessions"
   | Model | ModelNext | Models | Providers | Provider | ProviderAdd -> "Models"

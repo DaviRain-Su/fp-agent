@@ -93,6 +93,7 @@ dune exec -- fp-agent
 > /plugin-new --id local.my-plugin --tool-name my_tool --kind read --template python my-plugin
 > /plugin-dev --replace my-plugin
 > /plugin-check my-plugin
+> /plugin-package --output my-plugin.fp-plugin.tar.gz my-plugin
 > /plugin-install --replace my-plugin
 > /plugin-smoke --replace my-plugin
 > /plugin-run my-plugin my_tool '{"message":"hi"}'
@@ -166,6 +167,7 @@ dune exec -- fp-agent
 > /plugin-new --id local.my-plugin --tool-name my_tool --kind read --template python my-plugin
 > /plugin-dev --replace my-plugin
 > /plugin-check my-plugin
+> /plugin-package --output my-plugin.fp-plugin.tar.gz my-plugin
 > /plugin-install --replace my-plugin
 > /plugin-smoke --replace my-plugin
 > /plugin-run my-plugin my_tool '{"message":"hi"}'
@@ -214,8 +216,9 @@ diagnostics, and tool-name conflicts. `/plugins` and `--list-plugins` also
 surface invalid manifest diagnostics instead of silently hiding broken plugin
 directories, and report tool-name conflicts when a plugin would shadow a built-in
 or earlier discovered plugin tool.
-Scaffold, install, and dev commands print follow-up `/plugin`, `/tool`, and
-`/plugin-run` commands when the manifest includes runnable example args.
+Scaffold, package, install, and dev commands print follow-up `/plugin`,
+`/tool`, `/plugin-install`, and `/plugin-run` commands when the manifest
+includes runnable example args.
 
 ### Event-sourced sessions and forking
 
@@ -291,11 +294,11 @@ copy. Two consequences:
   SDK changes.
 - **Plugin install management** (`/plugin-new [--id ID] [--tool-name NAME]
   [--kind KIND] [--template NAME] <dir>`, `/plugin-dev [--replace] <dir>`,
-  `/plugin-check <dir>`, `/plugin-install [--replace] <dir>`,
-  `/plugin-remove <id>`) scaffolds, validates, smoke-tests, installs, and
-  removes plugins from the REPL or fullscreen TUI, then reloads the in-process
-  tool registry so `/tools`, the status strip, and later model calls see the
-  updated plugin set.
+  `/plugin-check <dir>`, `/plugin-package [--output FILE] <dir>`,
+  `/plugin-install [--replace] <dir|package>`, `/plugin-remove <id>`)
+  scaffolds, validates, smoke-tests, packages, installs, and removes plugins
+  from the REPL or fullscreen TUI, then reloads the in-process tool registry so
+  `/tools`, the status strip, and later model calls see the updated plugin set.
 - **Plugin SDK discovery** (`/plugin-sdk`, `--plugin-sdk`) lists the supported
   manifest SDK version, scaffold templates, runtime environment variables, and
   next commands for plugin authors.
@@ -367,12 +370,16 @@ Options:
   `examples/<tool>.args.json` plus `examples/<tool>/*.json` cases
 - `--dev-plugin DIR` / `--plugin-dev DIR` — validate, smoke-test, install,
   refresh, and print plugin/tool inspection next steps, then exit
+- `--package-plugin DIR` / `--plugin-package DIR` — validate, smoke-test, and
+  create a distributable `.fp-plugin.tar.gz` package
+- `--plugin-package-output FILE` — output path for `--package-plugin`
 - `--replace-plugin` with `--check-plugin` — validate replacement
   compatibility against the currently installed plugin with the same id
 - `--run-plugin-tool DIR --plugin-tool NAME --plugin-args JSON` — run a plugin
   tool locally for development, then exit
 - `--plugin-args-file FILE` — read local plugin tool JSON args from a file
-- `--install-plugin DIR` — validate and install a plugin directory, then exit
+- `--install-plugin DIR|PACKAGE` — validate and install a plugin directory or
+  `.fp-plugin.tar.gz` package, then exit
 - `--replace-plugin` — allow `--install-plugin` or `--dev-plugin` to replace an
   existing installed plugin after staging the new copy
 - `--list-plugins` — list plugins installed in the plugin home, then exit

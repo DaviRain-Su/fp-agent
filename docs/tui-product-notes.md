@@ -187,9 +187,13 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   `--dev-plugin DIR`, which validate, smoke-test, install, refresh tools, and
   print inspection next steps in one command.
 - Plugin install management is now available inside the REPL and fullscreen TUI
-  as `/plugin-new`, `/plugin-check`, `/plugin-install`, and `/plugin-remove`,
-  with tool registry and status-count reloads after install/remove so current
-  sessions see updated tools.
+  as `/plugin-new`, `/plugin-check`, `/plugin-package`, `/plugin-install`, and
+  `/plugin-remove`, with tool registry and status-count reloads after
+  install/remove so current sessions see updated tools.
+- Plugin packages can now be created with
+  `/plugin-package [--replace] [--output FILE] <dir>` or `--package-plugin`.
+  The package command validates the manifest, runs smoke cases, and writes a
+  `.fp-plugin.tar.gz` archive that `/plugin-install` can install directly.
 - Plugin scaffold/install/remove output now includes actionable next commands:
   scaffold points at validation, smoke, and replace-install; install points at
   the installed plugin id, each registered tool, and runnable `/plugin-run`

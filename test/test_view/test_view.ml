@@ -236,7 +236,7 @@ let test_command_palette () =
   Alcotest.(check bool)
     "filter can use group and command" true
     (List.exists plugin_group ~f:(fun entry ->
-         String.equal entry.command "/plugin-install [--replace] <dir>"));
+         String.equal entry.command "/plugin-install [--replace] <dir|package>"));
   let queried =
     View.set_palette_query ~command_count:(List.length filtered)
       ~query:"api-base" opened

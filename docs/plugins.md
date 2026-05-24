@@ -112,6 +112,7 @@ Use the REPL command:
 /plugin-new --id com.example.echo --tool-name echo_json --kind read --template python my-plugin
 /plugin-dev --replace my-plugin
 /plugin-check my-plugin
+/plugin-package --output my-plugin.fp-plugin.tar.gz my-plugin
 /plugin-install --replace my-plugin
 /plugin-smoke --replace my-plugin
 /plugin-run my-plugin echo_json '{"message":"hi"}'
@@ -162,12 +163,17 @@ reads JSON args from disk:
 step: validate the manifest, run smoke examples, install the plugin, refresh the
 tool registry, and print the next `/plugin` and `/tool` inspection commands.
 
+`/plugin-package [--replace] [--output FILE] <dir>` validates and smoke-tests a
+plugin directory, then writes a distributable `.fp-plugin.tar.gz` package. The
+generated package can be installed with `/plugin-install --replace <package>`.
+
 `/plugin-new [--id ID] [--tool-name NAME] [--kind KIND] [--template NAME]
-<dir>`, `/plugin-check [--replace] <dir>`, `/plugin-install [--replace] <dir>`,
-and `/plugin-remove <id>` expose the same workflow as individual steps inside a
-live REPL or fullscreen TUI session. Install/remove commands reload the
-in-process tool registry, so `/tools` and later model calls see the updated
-plugin set.
+<dir>`, `/plugin-check [--replace] <dir>`,
+`/plugin-package [--replace] [--output FILE] <dir>`,
+`/plugin-install [--replace] <dir|package>`, and `/plugin-remove <id>` expose
+the same workflow as individual steps inside a live REPL or fullscreen TUI
+session. Install/remove commands reload the in-process tool registry, so
+`/tools` and later model calls see the updated plugin set.
 
 ## Install
 
@@ -243,6 +249,7 @@ dune exec -- fp-agent
 > /plugin-new --id com.example.echo --tool-name echo_json --kind read --template python my-plugin
 > /plugin-dev --replace my-plugin
 > /plugin-check my-plugin
+> /plugin-package --output my-plugin.fp-plugin.tar.gz my-plugin
 > /plugin-install --replace my-plugin
 > /plugin-smoke --replace my-plugin
 > /plugin-run my-plugin echo_json '{"message":"hi"}'
@@ -256,9 +263,10 @@ dune exec -- fp-agent --run-plugin-tool my-plugin \
 `--dev-plugin DIR` (alias `--plugin-dev DIR`) runs the same one-step development
 loop without opening the REPL: validate, smoke-test, install, refresh, and print
 the next plugin/tool inspection commands. Add `--replace-plugin` when iterating
-on an already installed plugin. Scaffold, install, and dev commands also print a
-`/plugin-run` next step when `examples/<tool>.args.json` is present, so the
-generated plugin can be exercised immediately.
+on an already installed plugin. Scaffold, package, install, and dev commands
+also print next steps, and scaffold/install/dev include a `/plugin-run` hint
+when `examples/<tool>.args.json` is present, so the generated plugin can be
+exercised immediately.
 
 The command loads the manifest, validates the JSON args, runs the tool from the
 plugin directory, and prints stdout. It uses `--workspace` or `WORKSPACE_ROOT`
@@ -271,9 +279,23 @@ Install a local plugin directory:
 dune exec -- fp-agent --install-plugin examples/plugins/echo
 ```
 
-The installer validates the manifest and copies the plugin into the plugin
-home. It does not overwrite an existing plugin with the same id, and it rejects
-tool-name conflicts before copying.
+Package a plugin for distribution:
+
+```sh
+dune exec -- fp-agent --package-plugin examples/plugins/echo \
+  --plugin-package-output echo.fp-plugin.tar.gz
+```
+
+Install a packaged plugin:
+
+```sh
+dune exec -- fp-agent --install-plugin echo.fp-plugin.tar.gz
+```
+
+The installer validates the manifest and copies the plugin into the plugin home,
+whether the source is a directory or a `.fp-plugin.tar.gz` package. It does not
+overwrite an existing plugin with the same id, and it rejects tool-name
+conflicts before copying.
 
 During plugin development, reinstall a changed plugin with:
 
