@@ -169,6 +169,8 @@ let print_help () =
     \  /tools             list available tools\n\
     \  /sessions          list sessions in this workspace\n\
     \  /resume <dir>      switch to a session (name under sessions/ or a path)\n\
+    \  /diff              show uncommitted changes (git)\n\
+    \  /undo              revert the last turn's changes (git)\n\
     \  /exit, /quit       leave the REPL\n\
      Anything else is sent to the agent as a task (context carries across \
      turns)."
@@ -206,6 +208,62 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
     log := Event_log.create ~session_dir:dir;
     Stdlib.Printf.printf "switched to %s\n%!" dir
   in
+  let is_git = Stdlib.Sys.file_exists (Stdlib.Filename.concat root ".git") in
+  let git args =
+    Shell.run
+      ~command:(Printf.sprintf "git -C %s %s" (Stdlib.Filename.quote root) args)
+      ~timeout_sec:30
+  in
+  (* Keep the agent's own session log out of git operations so /undo never
+     touches the event log we are actively writing. *)
+  let exclude = "':(exclude).ocaml-agent'" in
+  (* One git snapshot per task turn, so /undo reverts just the last turn. *)
+  let checkpoints = ref [] in
+  let checkpoint () =
+    if is_git then (
+      ignore (git ("add -A -- . " ^ exclude) : (Shell.result, string) Result.t);
+      let sha =
+        match git "stash create" with
+        | Ok { stdout; _ } -> String.strip stdout
+        | Error _ -> ""
+      in
+      let sha =
+        if String.is_empty sha then
+          match git "rev-parse HEAD" with
+          | Ok { stdout; _ } -> String.strip stdout
+          | Error _ -> ""
+        else sha
+      in
+      checkpoints := sha :: !checkpoints)
+  in
+  let undo () =
+    match !checkpoints with
+    | [] -> Stdlib.print_endline "nothing to undo"
+    | sha :: rest ->
+        checkpoints := rest;
+        if (not is_git) || String.is_empty sha then
+          Stdlib.print_endline "no snapshot to restore"
+        else (
+          ignore
+            (git (Printf.sprintf "checkout %s -- . %s" sha exclude)
+              : (Shell.result, string) Result.t);
+          ignore
+            (git "clean -fd -e .ocaml-agent" : (Shell.result, string) Result.t);
+          Stdlib.print_endline "reverted the last turn's changes")
+  in
+  let show_diff () =
+    if not is_git then Stdlib.print_endline "(workspace is not a git repo)"
+    else (
+      (match git ("diff -- . " ^ exclude) with
+      | Ok { stdout; _ } when not (String.is_empty (String.strip stdout)) ->
+          Stdlib.print_string stdout
+      | _ -> Stdlib.print_endline "(no tracked changes)");
+      match git ("ls-files --others --exclude-standard -- . " ^ exclude) with
+      | Ok { stdout; _ } when not (String.is_empty (String.strip stdout)) ->
+          Stdlib.print_endline "untracked:";
+          Stdlib.print_string stdout
+      | _ -> ())
+  in
   Stdlib.Printf.eprintf
     "fp-agent REPL — model %s. Type /help for commands, /exit to quit.\n\
      session: %s\n\
@@ -213,6 +271,7 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
     config.Config.model !session;
   warn_yolo yolo;
   let run_task task =
+    checkpoint ();
     let initial_history =
       match Transcript.of_session ~session_dir:!session with
       | Ok h -> h
@@ -243,6 +302,12 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
           loop ())
         else if String.equal line "/sessions" then (
           print_sessions sessions_root !session;
+          loop ())
+        else if String.equal line "/diff" then (
+          show_diff ();
+          loop ())
+        else if String.equal line "/undo" then (
+          undo ();
           loop ())
         else if String.is_prefix line ~prefix:"/resume " then (
           let arg = String.strip (String.drop_prefix line 8) in

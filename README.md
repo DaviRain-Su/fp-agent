@@ -49,6 +49,8 @@ Omit the task to start a REPL that keeps context across turns:
 dune exec -- fp-agent
 > create a file hello.txt with the text hi
 > now add a second line "bye" to it
+> /diff              # show uncommitted changes (git)
+> /undo              # revert the last turn's changes (git)
 > /sessions          # list sessions in this workspace
 > /resume <name>     # switch to a past session
 > /tools             # preview available tools
