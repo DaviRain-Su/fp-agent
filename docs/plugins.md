@@ -296,6 +296,9 @@ The installer validates the manifest and copies the plugin into the plugin home,
 whether the source is a directory or a `.fp-plugin.tar.gz` package. It does not
 overwrite an existing plugin with the same id, and it rejects tool-name
 conflicts before copying.
+Every install writes `fp-agent-install.json` beside the manifest. `/plugins`,
+`/plugin <id|tool>`, and `--list-plugins` read that receipt to show the install
+source. Package installs also record the package sha256 and byte size.
 
 Audit a packaged plugin before installing it:
 

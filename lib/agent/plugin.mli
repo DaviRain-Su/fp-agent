@@ -14,7 +14,15 @@ type manifest = {
   version : string;
   sdk_version : int;
   dir : string;
+  install_receipt : install_receipt option;
   tools : plugin_tool list;
+}
+
+and install_receipt = {
+  source_kind : string;
+  source_path : string;
+  package_sha256 : string option;
+  package_bytes : int option;
 }
 
 type load_error = { dir : string; message : string }

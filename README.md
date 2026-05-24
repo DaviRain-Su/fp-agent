@@ -219,6 +219,10 @@ or earlier discovered plugin tool.
 Scaffold, package, install, and dev commands print follow-up `/plugin`,
 `/tool`, `/plugin-install`, and `/plugin-run` commands when the manifest
 includes runnable example args.
+Installed plugins also get an `fp-agent-install.json` receipt. `/plugins`,
+`/plugin`, and `--list-plugins` surface whether the plugin came from a
+directory or package, and packaged installs keep the package sha256 and size for
+later audits.
 
 ### Event-sourced sessions and forking
 

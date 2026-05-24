@@ -477,6 +477,7 @@ let test_plugin_inspector_lines () =
       version = "0.1.0";
       sdk_version = 1;
       dir = "/tmp/echo";
+      install_receipt = None;
       tools =
         [
           {
@@ -513,6 +514,28 @@ let test_plugin_inspector_lines () =
   Alcotest.(check bool)
     "shows sdk version" true
     (String.is_substring joined ~substring:"sdk_version: 1");
+  let installed_plugin =
+    {
+      plugin with
+      install_receipt =
+        Some
+          {
+            source_kind = "package";
+            source_path = "/tmp/echo.fp-plugin.tar.gz";
+            package_sha256 = Some "abc123";
+            package_bytes = Some 42;
+          };
+    }
+  in
+  let installed_joined =
+    String.concat (View.plugin_inspector_lines installed_plugin) ~sep:"\n"
+  in
+  Alcotest.(check bool)
+    "shows install source" true
+    (String.is_substring installed_joined ~substring:"source_kind: package");
+  Alcotest.(check bool)
+    "shows install hash" true
+    (String.is_substring installed_joined ~substring:"package_sha256: abc123");
   Alcotest.(check bool)
     "shows timeout" true
     (String.is_substring joined ~substring:"timeout: 7s");

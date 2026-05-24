@@ -176,6 +176,17 @@ let test_install_plugin_copies_to_home () =
             "installed manifest listed" true
             (List.exists installed ~f:(fun (m : Plugin.manifest) ->
                  String.equal m.id "com.example.install"));
+          (match Plugin.load_manifest dst with
+          | Error e -> Alcotest.failf "installed manifest failed: %s" e
+          | Ok manifest -> (
+              match manifest.install_receipt with
+              | None -> Alcotest.fail "expected install receipt"
+              | Some receipt ->
+                  Alcotest.(check string)
+                    "directory install source kind" "directory"
+                    receipt.source_kind;
+                  Alcotest.(check string)
+                    "directory install source path" src receipt.source_path));
           match Plugin.remove "com.example.install" with
           | Error e -> Alcotest.failf "remove failed: %s" e
           | Ok removed ->
@@ -239,6 +250,24 @@ let test_package_plugin_installs_archive () =
                 "installed package path"
                 (Stdlib.Filename.concat home "com.example.package")
                 dst;
+              (match Plugin.load_manifest dst with
+              | Error e -> Alcotest.failf "installed package manifest: %s" e
+              | Ok manifest -> (
+                  match manifest.install_receipt with
+                  | None -> Alcotest.fail "expected package install receipt"
+                  | Some receipt ->
+                      Alcotest.(check string)
+                        "package install source kind" "package"
+                        receipt.source_kind;
+                      Alcotest.(check string)
+                        "package install source path" package_path
+                        receipt.source_path;
+                      Alcotest.(check bool)
+                        "package install source hash" true
+                        (Option.is_some receipt.package_sha256);
+                      Alcotest.(check bool)
+                        "package install source bytes" true
+                        (Option.is_some receipt.package_bytes)));
               match
                 Plugin.run_tool ~dir:dst ~tool_name:"plugin_package_echo"
                   ~workspace:(workspace root)

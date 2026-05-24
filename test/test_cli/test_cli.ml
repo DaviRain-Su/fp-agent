@@ -241,6 +241,11 @@ let test_plugin_lifecycle_cli () =
   Alcotest.(check bool)
     "installed readme" true
     (Stdlib.Sys.file_exists (Stdlib.Filename.concat installed_dir "README.md"));
+  let listed_package = run ~env [ bin; "--list-plugins" ] in
+  assert_success "list package install" listed_package;
+  assert_contains "list package receipt" listed_package.stdout
+    "installed_from=package";
+  assert_contains "list package receipt hash" listed_package.stdout "sha256=";
   let duplicate = run ~env [ bin; "--install-plugin"; plugin_dir ] in
   assert_failure "install duplicate plugin" duplicate;
   assert_contains "duplicate install stderr" duplicate.stderr
@@ -306,6 +311,7 @@ let test_plugin_lifecycle_cli () =
   assert_success "list plugins after install" listed;
   assert_contains "list plugin id" listed.stdout "local.my-plugin";
   assert_contains "list plugin tool" listed.stdout "hello_world";
+  assert_contains "list plugin receipt" listed.stdout "installed_from=directory";
   assert_contains "list invalid plugin section" listed.stdout
     "Invalid installed plugins:";
   assert_contains "list invalid plugin error" listed.stdout "at least one tool";

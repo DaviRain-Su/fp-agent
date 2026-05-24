@@ -527,6 +527,27 @@ let plugin_tool_lines (tool : Plugin.plugin_tool) =
       :: List.map (json_preview_lines schema) ~f:(( ^ ) "    ")
 
 let plugin_inspector_lines (plugin : Plugin.manifest) =
+  let install_lines =
+    match plugin.install_receipt with
+    | None -> []
+    | Some receipt ->
+        let package_lines =
+          [
+            Option.map receipt.package_bytes ~f:(fun bytes ->
+                Printf.sprintf "package_bytes: %d" bytes);
+            Option.map receipt.package_sha256 ~f:(fun hash ->
+                "package_sha256: " ^ hash);
+          ]
+          |> List.filter_opt
+        in
+        [
+          "";
+          "Install";
+          "source_kind: " ^ receipt.source_kind;
+          "source_path: " ^ receipt.source_path;
+        ]
+        @ package_lines
+  in
   [
     "Plugin";
     "id: " ^ plugin.id;
@@ -535,9 +556,8 @@ let plugin_inspector_lines (plugin : Plugin.manifest) =
     Printf.sprintf "sdk_version: %d" plugin.sdk_version;
     "dir: " ^ plugin.dir;
     Printf.sprintf "tools: %d" (List.length plugin.tools);
-    "";
-    "Tools";
   ]
+  @ install_lines @ [ ""; "Tools" ]
   @ List.concat_map plugin.tools ~f:plugin_tool_lines
 
 (* Classify a display line so the renderer can pick a color. Mirrors the icons

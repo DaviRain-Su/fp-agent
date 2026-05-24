@@ -197,6 +197,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - `/plugin-check [--replace] <dir|package>` and `--check-plugin` now provide a
   read-only install preview for packages, including package byte size, sha256
   when available, archive member count, manifest details, and conflict checks.
+- Plugin installs now write an `fp-agent-install.json` receipt. `/plugins`,
+  `/plugin`, and `--list-plugins` surface install source metadata, including
+  package sha256 and byte size for packaged plugins.
 - Plugin scaffold/install/remove output now includes actionable next commands:
   scaffold points at validation, smoke, and replace-install; install points at
   the installed plugin id, each registered tool, and runnable `/plugin-run`

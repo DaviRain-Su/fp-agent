@@ -16,7 +16,15 @@ type manifest = {
   version : string;
   sdk_version : int;
   dir : string;
+  install_receipt : install_receipt option;
   tools : plugin_tool list;
+}
+
+and install_receipt = {
+  source_kind : string;
+  source_path : string;
+  package_sha256 : string option;
+  package_bytes : int option;
 }
 
 type load_error = { dir : string; message : string }
@@ -47,6 +55,7 @@ type source_info = {
 }
 
 let manifest_file = "fp-agent-plugin.json"
+let receipt_file = "fp-agent-install.json"
 let supported_sdk_version = 1
 let default_timeout_sec = 60
 let max_output_bytes = 32 * 1024
@@ -516,6 +525,33 @@ let validate_tool_list (tools : plugin_tool list) =
     | Some name -> Error ("duplicate tool name: " ^ name)
     | None -> Ok tools
 
+let read_install_receipt dir =
+  let path = Stdlib.Filename.concat dir receipt_file in
+  if not (Stdlib.Sys.file_exists path) then None
+  else
+    match Unix.lstat path with
+    | { st_kind = Unix.S_REG; _ } -> (
+        match Yojson.Safe.from_file path with
+        | exception _ -> None
+        | json -> (
+            match
+              ( json_string json [ "source_kind"; "sourceKind" ],
+                json_string json [ "source_path"; "sourcePath" ] )
+            with
+            | Some source_kind, Some source_path ->
+                Some
+                  {
+                    source_kind;
+                    source_path;
+                    package_sha256 =
+                      json_string json [ "package_sha256"; "packageSha256" ];
+                    package_bytes =
+                      json_int json [ "package_bytes"; "packageBytes" ];
+                  }
+            | _ -> None))
+    | _ -> None
+    | exception _ -> None
+
 let rec load_manifest dir =
   let path = Stdlib.Filename.concat dir manifest_file in
   match Unix.lstat path with
@@ -561,6 +597,7 @@ and load_regular_manifest dir path =
                           version = Option.value version ~default:"0.0.0";
                           sdk_version;
                           dir;
+                          install_receipt = read_install_receipt dir;
                           tools;
                         })))
       | Error e, _, _, _, _ -> Error e
@@ -972,6 +1009,7 @@ let rec copy_tree src dst =
       |> Array.iter ~f:(fun name ->
           if
             String.equal name ".git" || String.equal name "_build"
+            || String.equal name receipt_file
             || String.is_suffix name ~suffix:".fp-plugin.tar.gz"
           then ()
           else
@@ -1004,7 +1042,47 @@ let temp_dir ?temp_dir prefix =
 let cleanup_staged_dir path =
   if Stdlib.Sys.file_exists path then try remove_tree path with _ -> ()
 
-let install_dir ?(replace = false) src_dir =
+let install_receipt_to_json (receipt : install_receipt) =
+  let fields =
+    [
+      ("source_kind", `String receipt.source_kind);
+      ("source_path", `String receipt.source_path);
+    ]
+  in
+  let fields =
+    match receipt.package_sha256 with
+    | None -> fields
+    | Some hash -> fields @ [ ("package_sha256", `String hash) ]
+  in
+  match receipt.package_bytes with
+  | None -> `Assoc fields
+  | Some bytes -> `Assoc (fields @ [ ("package_bytes", `Int bytes) ])
+
+let write_install_receipt dir (receipt : install_receipt) =
+  let path = Stdlib.Filename.concat dir receipt_file in
+  Stdlib.Out_channel.with_open_bin path (fun oc ->
+      Stdlib.Out_channel.output_string oc
+        (Yojson.Safe.pretty_to_string (install_receipt_to_json receipt));
+      Stdlib.Out_channel.output_char oc '\n')
+
+let install_receipt_of_source_info (info : source_info) : install_receipt =
+  {
+    source_kind = info.source_kind;
+    source_path = absolute_dir info.source_path;
+    package_sha256 = info.package_sha256;
+    package_bytes = info.package_bytes;
+  }
+
+let directory_install_receipt src_dir : install_receipt =
+  {
+    source_kind = "directory";
+    source_path = absolute_dir src_dir;
+    package_sha256 = None;
+    package_bytes = None;
+  }
+
+let install_dir ?(replace = false) ?receipt src_dir =
+  let receipt : install_receipt option = receipt in
   match (load_manifest src_dir, install_home ()) with
   | Error e, _ -> Error e
   | _, None -> Error "cannot determine plugin install home"
@@ -1020,6 +1098,7 @@ let install_dir ?(replace = false) src_dir =
             let staged = temp_install_dir home manifest.id in
             try
               copy_tree src_dir staged;
+              Option.iter receipt ~f:(write_install_receipt staged);
               if Stdlib.Sys.file_exists dst then remove_tree dst;
               Unix.rename staged dst;
               Ok dst
@@ -1150,22 +1229,26 @@ let inspect_source ?(replace = false) src =
   else Error ("plugin source does not exist: " ^ src)
 
 let install_package ?(replace = false) package_path =
-  if not (is_regular_file package_path) then
-    Error ("plugin package is not a file: " ^ package_path)
-  else
-    let extracted = temp_dir "fp_agent_plugin_package" in
-    Exn.protect
-      ~f:(fun () ->
-        match extract_package package_path extracted with
-        | Error _ as e -> e
-        | Ok () -> (
-            match package_manifest_dir extracted with
-            | Error _ as e -> e
-            | Ok dir -> install_dir ~replace dir))
-      ~finally:(fun () -> cleanup_staged_dir extracted)
+  match inspect_package ~replace package_path with
+  | Error _ as e -> e
+  | Ok info ->
+      let extracted = temp_dir "fp_agent_plugin_package" in
+      Exn.protect
+        ~f:(fun () ->
+          match extract_package package_path extracted with
+          | Error _ as e -> e
+          | Ok () -> (
+              match package_manifest_dir extracted with
+              | Error _ as e -> e
+              | Ok dir ->
+                  install_dir ~replace
+                    ~receipt:(install_receipt_of_source_info info)
+                    dir))
+        ~finally:(fun () -> cleanup_staged_dir extracted)
 
 let install ?(replace = false) src =
-  if is_directory src then install_dir ~replace src
+  if is_directory src then
+    install_dir ~replace ~receipt:(directory_install_receipt src) src
   else if is_regular_file src then install_package ~replace src
   else if Stdlib.Sys.file_exists src then
     Error ("plugin source is not a directory or regular package file: " ^ src)

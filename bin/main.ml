@@ -2312,6 +2312,12 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
 let print_plugin_summary (plugin : Plugin.manifest) =
   Stdlib.Printf.printf "%s %s (%s, sdk %d)\n  %s\n" plugin.id plugin.name
     plugin.version plugin.sdk_version plugin.dir;
+  Option.iter plugin.install_receipt ~f:(fun receipt ->
+      Stdlib.Printf.printf "  installed_from=%s path=%s" receipt.source_kind
+        receipt.source_path;
+      Option.iter receipt.package_sha256 ~f:(fun hash ->
+          Stdlib.Printf.printf " sha256=%s" hash);
+      Stdlib.print_newline ());
   List.iter plugin.tools ~f:(fun tool ->
       Stdlib.Printf.printf "  - %-18s %-5s permissions=%s %s\n" tool.tool_name
         (tool_kind_label tool.tool_kind)

@@ -68,6 +68,19 @@ let tool_detail_lines query =
     | None -> [ "no tool matching: " ^ query ]
     | Some tool -> View.tool_inspector_lines tool
 
+let plugin_receipt_lines (plugin : Plugin.manifest) =
+  match plugin.install_receipt with
+  | None -> []
+  | Some receipt ->
+      let hash =
+        Option.value_map receipt.package_sha256 ~default:"" ~f:(fun hash ->
+            " sha256=" ^ hash)
+      in
+      [
+        Printf.sprintf "  installed_from=%s path=%s%s" receipt.source_kind
+          receipt.source_path hash;
+      ]
+
 let plugins_lines () =
   let discovery = Plugin.discover () in
   let manifest_lines =
@@ -78,7 +91,8 @@ let plugins_lines () =
             Printf.sprintf "%s %s (%s, sdk %d)" plugin.id plugin.name
               plugin.version plugin.sdk_version
             :: ("  " ^ plugin.dir)
-            :: List.map plugin.tools ~f:(fun tool ->
+            :: plugin_receipt_lines plugin
+            @ List.map plugin.tools ~f:(fun tool ->
                 Printf.sprintf "  - %-18s %-5s permissions=%s %s" tool.tool_name
                   (tool_kind_label tool.tool_kind)
                   (Plugin.permissions_label tool.tool_permissions)
