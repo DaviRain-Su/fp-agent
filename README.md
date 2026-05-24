@@ -134,6 +134,8 @@ copy. Two consequences:
 - **TUI prompt editor groundwork** keeps multiline draft editing pure and
   testable: insert text, newline, delete/backspace, cursor movement, and
   rendering with a visible cursor.
+- **TUI shell controller groundwork** centralizes prompt submission, command
+  palette movement, and event inspection selection in a pure state machine.
 
 Options:
 

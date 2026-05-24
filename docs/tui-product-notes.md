@@ -50,6 +50,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   byte cursor, insert/newline/backspace/delete, cursor movement, empty checks,
   and rendering with a visible cursor. This is the reusable base for the
   fullscreen interactive shell.
+- `Tui_shell` centralizes prompt submission, command palette movement, and
+  event inspection selection in a pure controller. The current TUI already uses
+  it for palette and event-selection actions.
 - The REPL exposes the same inspector through `/inspect [index]`, so event-log
   review works even outside a full-screen TUI and can target historical events.
 - The REPL exposes plugin inspection through `/plugin <id|tool>`, showing

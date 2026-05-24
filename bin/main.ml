@@ -124,8 +124,7 @@ let make_tui_reporter ~provider ~model ~session ~header =
   let current_delta = ref "" in
   let phase = make_phase () in
   let events = ref [] in
-  let selection = ref View.Follow_latest in
-  let palette = ref View.Palette_closed in
+  let shell = ref (Tui_shell.create ()) in
   let i = ref 0 in
   let visible_lines () =
     if String.is_empty !current_delta then !lines
@@ -137,53 +136,46 @@ let make_tui_reporter ~provider ~model ~session ~header =
       current_delta := "")
   in
   let drain_input ~page_size =
-    let command_count = List.length View.command_palette_entries in
-    let palette_open () =
-      Option.is_some (View.palette_index ~command_count !palette)
+    let palette_open () = Tui_shell.palette_open !shell in
+    let apply action =
+      let result = Tui_shell.handle !shell action in
+      shell := result.state
     in
-    let toggle_palette () =
-      palette := View.toggle_palette ~command_count !palette
-    in
-    let close_palette () = palette := View.Palette_closed in
-    let move_palette delta =
-      palette := View.move_palette ~command_count ~delta !palette
-    in
-    let move delta =
-      selection :=
-        View.move_selection ~event_count:(List.length !events) ~delta !selection
-    in
-    let select_first () =
-      selection := View.select_event ~event_count:(List.length !events) ~index:0
-    in
-    let follow_latest () = selection := View.Follow_latest in
     let rec loop () =
       if Notty_unix.Term.pending term then (
         (match Notty_unix.Term.event term with
-        | `Key (`Escape, _) when palette_open () -> close_palette ()
-        | `Key (`Enter, _) when palette_open () -> close_palette ()
-        | `Key (`ASCII '/', _) | `Key (`ASCII '?', _) -> toggle_palette ()
+        | `Key (`Escape, _) when palette_open () ->
+            apply Tui_shell.Close_palette
+        | `Key (`Enter, _) when palette_open () -> apply Tui_shell.Close_palette
+        | `Key (`ASCII '/', _) | `Key (`ASCII '?', _) ->
+            apply Tui_shell.Toggle_palette
         | (`Key (`Arrow `Up, _) | `Key (`ASCII 'k', _)) when palette_open () ->
-            move_palette (-1)
+            apply (Tui_shell.Move_palette (-1))
         | (`Key (`Arrow `Down, _) | `Key (`ASCII 'j', _)) when palette_open ()
           ->
-            move_palette 1
-        | `Key (`Page `Up, _) when palette_open () -> move_palette (-page_size)
-        | `Key (`Page `Down, _) when palette_open () -> move_palette page_size
-        | `Key (`Home, _) when palette_open () -> palette := View.Palette_open 0
-        | `Key (`End, _) when palette_open () ->
-            palette := View.Palette_open (command_count - 1)
+            apply (Tui_shell.Move_palette 1)
+        | `Key (`Page `Up, _) when palette_open () ->
+            apply (Tui_shell.Move_palette (-page_size))
+        | `Key (`Page `Down, _) when palette_open () ->
+            apply (Tui_shell.Move_palette page_size)
+        | `Key (`Home, _) when palette_open () -> apply Tui_shell.Palette_home
+        | `Key (`End, _) when palette_open () -> apply Tui_shell.Palette_end
         | `Mouse (`Press (`Scroll `Up), _, _) when palette_open () ->
-            move_palette (-1)
+            apply (Tui_shell.Move_palette (-1))
         | `Mouse (`Press (`Scroll `Down), _, _) when palette_open () ->
-            move_palette 1
-        | `Key (`Arrow `Up, _) | `Key (`ASCII 'k', _) -> move (-1)
-        | `Key (`Arrow `Down, _) | `Key (`ASCII 'j', _) -> move 1
-        | `Key (`Page `Up, _) -> move (-page_size)
-        | `Key (`Page `Down, _) -> move page_size
-        | `Key (`Home, _) -> select_first ()
-        | `Key (`End, _) | `Key (`ASCII 'G', _) -> follow_latest ()
-        | `Mouse (`Press (`Scroll `Up), _, _) -> move (-1)
-        | `Mouse (`Press (`Scroll `Down), _, _) -> move 1
+            apply (Tui_shell.Move_palette 1)
+        | `Key (`Arrow `Up, _) | `Key (`ASCII 'k', _) ->
+            apply (Tui_shell.Move_event (-1))
+        | `Key (`Arrow `Down, _) | `Key (`ASCII 'j', _) ->
+            apply (Tui_shell.Move_event 1)
+        | `Key (`Page `Up, _) -> apply (Tui_shell.Move_event (-page_size))
+        | `Key (`Page `Down, _) -> apply (Tui_shell.Move_event page_size)
+        | `Key (`Home, _) -> apply Tui_shell.Event_home
+        | `Key (`End, _) | `Key (`ASCII 'G', _) -> apply Tui_shell.Event_end
+        | `Mouse (`Press (`Scroll `Up), _, _) ->
+            apply (Tui_shell.Move_event (-1))
+        | `Mouse (`Press (`Scroll `Down), _, _) ->
+            apply (Tui_shell.Move_event 1)
         | `Resize _ | `End | `Paste _ | `Key _ | `Mouse _ -> ());
         loop ())
     in
@@ -192,17 +184,19 @@ let make_tui_reporter ~provider ~model ~session ~header =
   let redraw () =
     let w, h = Notty_unix.Term.size term in
     let body_rows = Int.max 1 (h - 4) in
+    shell := Tui_shell.set_event_count (List.length !events) !shell;
     drain_input ~page_size:body_rows;
     let event_count = List.length !events in
+    let shell_state = Tui_shell.set_event_count event_count !shell in
+    shell := shell_state;
     let selected_event =
       Option.bind
-        (View.selection_index ~event_count !selection)
+        (Tui_shell.selected_event_index shell_state)
         ~f:(List.nth !events)
     in
-    let selection_label = View.selection_label ~event_count !selection in
-    let command_count = List.length View.command_palette_entries in
-    let palette_index = View.palette_index ~command_count !palette in
-    let palette_label = View.palette_label ~command_count !palette in
+    let selection_label = Tui_shell.selection_label shell_state in
+    let palette_index = Tui_shell.selected_command_index shell_state in
+    let palette_label = Tui_shell.palette_label shell_state in
     let palette_lines =
       Option.map palette_index ~f:(fun selected ->
           View.command_palette_lines ~selected View.command_palette_entries)
@@ -309,6 +303,7 @@ let make_tui_reporter ~provider ~model ~session ~header =
   redraw ();
   let on_event e =
     events := !events @ [ e ];
+    shell := Tui_shell.set_event_count (List.length !events) !shell;
     update_phase phase e;
     (match e with
     | Model_delta { content } -> current_delta := !current_delta ^ content
