@@ -14,3 +14,6 @@ val of_yojson : Yojson.Safe.t -> (t, string) result
 val to_display : t -> string option
 (** A concise one-line rendering for live display, or [None] to omit the event
     from the live view (it is still written to the event log). *)
+
+val describe_tool : Tool_call.t -> string
+(** A short human-readable description of a tool call, e.g. "read_file a.ml". *)

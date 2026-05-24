@@ -43,6 +43,46 @@ let run config workspace event_log client task =
   Lwt_main.run
     (Agent_loop.run ~config ~model_client:client ~event_log ~workspace ~task ())
 
+let write_then_final () =
+  scripted
+    [
+      Model_action.Tool_call
+        (Tool_call.Write_file { path = "out.txt"; content = "hi" });
+      Model_action.Final_answer { answer = "done" };
+    ]
+
+let run_with_approval config workspace event_log client task ~approve =
+  let policy = { Policy.approve_commands = true; approve_writes = true } in
+  let on_approval _ _ = Lwt.return approve in
+  Lwt_main.run
+    (Agent_loop.run ~policy ~on_approval ~config ~model_client:client ~event_log
+       ~workspace ~task ())
+
+let test_approval_denied () =
+  with_env (fun config workspace event_log _ ->
+      let outcome =
+        run_with_approval config workspace event_log (write_then_final ())
+          "write" ~approve:false
+      in
+      Alcotest.(check string)
+        "still completes" "completed"
+        (Agent_loop.status_to_string outcome.status);
+      let file = Stdlib.Filename.concat (Workspace.root workspace) "out.txt" in
+      Alcotest.(check bool)
+        "file not written when denied" false
+        (Stdlib.Sys.file_exists file))
+
+let test_approval_granted () =
+  with_env (fun config workspace event_log _ ->
+      let _ =
+        run_with_approval config workspace event_log (write_then_final ())
+          "write" ~approve:true
+      in
+      let file = Stdlib.Filename.concat (Workspace.root workspace) "out.txt" in
+      Alcotest.(check bool)
+        "file written when approved" true
+        (Stdlib.Sys.file_exists file))
+
 let test_tool_then_final () =
   with_env (fun config workspace event_log session_dir ->
       let client =
@@ -104,5 +144,7 @@ let () =
           Alcotest.test_case "tool_then_final" `Quick test_tool_then_final;
           Alcotest.test_case "max_steps" `Quick test_max_steps;
           Alcotest.test_case "model_error" `Quick test_model_error;
+          Alcotest.test_case "approval_denied" `Quick test_approval_denied;
+          Alcotest.test_case "approval_granted" `Quick test_approval_granted;
         ] );
     ]

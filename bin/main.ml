@@ -24,8 +24,19 @@ let print_changes root =
         Stdlib.print_string stdout
     | _ -> ()
 
+(* Blocking Y/n prompt on stdin; defaults to deny on EOF or anything but yes. *)
+let prompt_approval tc reason =
+  Stdlib.Printf.eprintf "\nAPPROVE? %s\n  %s\n  [y/N] %!" reason
+    (Event.describe_tool tc);
+  let answer =
+    match Stdlib.In_channel.input_line Stdlib.stdin with
+    | Some s -> String.lowercase (String.strip s)
+    | None -> ""
+  in
+  Lwt.return (String.equal answer "y" || String.equal answer "yes")
+
 let run_agent task provider_opt api_base_opt model_opt workspace_opt
-    max_steps_opt =
+    max_steps_opt confirm =
   match
     Config.load ?provider:provider_opt ?api_base:api_base_opt ?model:model_opt
       ()
@@ -57,10 +68,15 @@ let run_agent task provider_opt api_base_opt model_opt workspace_opt
             | Some line -> Stdlib.Printf.eprintf "%s\n%!" line
             | None -> ()
           in
+          let policy =
+            if confirm then
+              { Policy.approve_commands = true; approve_writes = true }
+            else Policy.default
+          in
           let outcome =
             Lwt_main.run
-              (Agent_loop.run ~on_event ~config ~model_client ~event_log
-                 ~workspace ~task ())
+              (Agent_loop.run ~on_event ~policy ~on_approval:prompt_approval
+                 ~config ~model_client ~event_log ~workspace ~task ())
           in
           Event_log.close event_log;
           print_summary outcome;
@@ -111,11 +127,19 @@ let () =
       & info [ "max-steps" ] ~docv:"N"
           ~doc:"Maximum agent steps (defaults to the MAX_STEPS env var or 30).")
   in
+  let confirm =
+    Arg.(
+      value & flag
+      & info [ "confirm" ]
+          ~doc:
+            "Ask for confirmation on stdin before each shell command or file \
+             modification.")
+  in
   let doc = "A type-safe local CLI code agent harness." in
   let term =
     Term.(
       const run_agent $ task $ provider $ api_base $ model $ workspace
-      $ max_steps)
+      $ max_steps $ confirm)
   in
   let info = Cmd.info "fp-agent" ~version:"0.1.0" ~doc in
   Stdlib.exit (Cmd.eval' (Cmd.v info term))

@@ -47,3 +47,17 @@ let check ~workspace ~tool_call =
       match dangerous_command_reason command with
       | Some reason -> Permission.Deny reason
       | None -> Permission.Allow)
+
+(* Approval policy: which already-safe tool calls additionally require explicit
+   human confirmation. Independent of the deny-list above. *)
+type t = { approve_commands : bool; approve_writes : bool }
+
+let default = { approve_commands = false; approve_writes = false }
+
+let approval_reason t (tool_call : Tool_call.t) =
+  match tool_call with
+  | Run_command _ when t.approve_commands ->
+      Some "shell command requires approval"
+  | (Write_file _ | Edit_file _) when t.approve_writes ->
+      Some "file modification requires approval"
+  | _ -> None

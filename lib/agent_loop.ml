@@ -27,8 +27,9 @@ let truncate_history ~system messages =
   in
   system :: take [] max_history_chars (List.rev messages)
 
-let run ?(on_event = fun _ -> ()) ~(config : Config.t) ~model_client ~event_log
-    ~workspace ~task () =
+let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
+    ?(on_approval = fun _ _ -> Lwt.return false) ~(config : Config.t)
+    ~model_client ~event_log ~workspace ~task () =
   let log e =
     Event_log.append event_log e;
     on_event e
@@ -82,16 +83,33 @@ let run ?(on_event = fun _ -> ()) ~(config : Config.t) ~model_client ~event_log
     | Final_answer { answer } ->
         goto Agent_state.Completed;
         finish Completed answer n
-    | Tool_call tc ->
+    | Tool_call tc -> (
         goto Agent_state.Executing_tool;
         log (Event.Tool_call tc);
         let permission = Policy.check ~workspace ~tool_call:tc in
         log (Event.Policy_decision { tool_call = tc; permission });
-        let result = Tool_runner.run ~workspace ~tool_call:tc in
-        log (Event.Tool_result result);
-        goto Agent_state.Observing_result;
-        add_msg (Message.user (observation_of_result result));
-        goto Agent_state.Waiting_for_model;
-        step (n + 1)
+        let after_result result =
+          log (Event.Tool_result result);
+          goto Agent_state.Observing_result;
+          add_msg (Message.user (observation_of_result result));
+          goto Agent_state.Waiting_for_model;
+          step (n + 1)
+        in
+        let execute () =
+          after_result (Tool_runner.run ~workspace ~tool_call:tc)
+        in
+        (* Deny is enforced by the runner; for allowed calls, gate risky ones
+           on human approval when the policy asks for it. *)
+        if not (Permission.is_allow permission) then execute ()
+        else
+          match Policy.approval_reason policy tc with
+          | None -> execute ()
+          | Some reason ->
+              Lwt.bind (on_approval tc reason) (fun approved ->
+                  if approved then execute ()
+                  else
+                    after_result
+                      (Tool_result.Error
+                         { message = "user did not approve: " ^ reason })))
   in
   step 1
