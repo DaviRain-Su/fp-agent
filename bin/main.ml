@@ -39,6 +39,13 @@ type tui_view = {
   take_submitted : unit -> string option;
   set_runtime : provider:string -> model:string -> api_base:string -> unit;
   set_session : session_dir:string -> events:Event.t list -> unit;
+  request_approval : Tool_call.t -> string -> bool Lwt.t;
+}
+
+type approval_request = {
+  tool_call : Tool_call.t;
+  reason : string;
+  resolver : bool Lwt.u;
 }
 
 let spinner_frames = [| "⠋"; "⠙"; "⠹"; "⠸"; "⠼"; "⠴"; "⠦"; "⠧"; "⠇"; "⠏" |]
@@ -140,6 +147,7 @@ let make_tui_view ~initial_events ~provider ~model ~api_base ~workspace_root
   let phase = make_phase () in
   let events = ref initial_events in
   let shell = ref (Tui_shell.create ()) in
+  let approval = ref None in
   let submitted = ref [] in
   let i = ref 0 in
   let visible_lines () =
@@ -174,6 +182,34 @@ let make_tui_view ~initial_events ~provider ~model ~api_base ~workspace_root
     lines := event_display_lines new_events;
     current_delta := "";
     shell := Tui_shell.set_event_count (List.length new_events) !shell
+  in
+  let request_approval tool_call reason =
+    match !approval with
+    | Some _ ->
+        append_lines
+          [ "[tui] approval busy; denying: " ^ Event.describe_tool tool_call ];
+        Lwt.return false
+    | None ->
+        let promise, resolver = Lwt.wait () in
+        approval := Some { tool_call; reason; resolver };
+        append_lines
+          [
+            "[tui] approval required: " ^ reason;
+            "  " ^ Event.describe_tool tool_call;
+          ];
+        promise
+  in
+  let resolve_approval approved =
+    match !approval with
+    | None -> ()
+    | Some request ->
+        approval := None;
+        Lwt.wakeup_later request.resolver approved;
+        append_lines
+          [
+            (if approved then "[tui] approved: " else "[tui] denied: ")
+            ^ Event.describe_tool request.tool_call;
+          ]
   in
   let has_key_modifier mods modifier =
     List.mem mods modifier ~equal:Poly.equal
@@ -232,33 +268,40 @@ let make_tui_view ~initial_events ~provider ~model ~api_base ~workspace_root
   in
   let drain_input ~page_size =
     let apply input =
-      let result = Tui_shell.handle_input ~page_size !shell input in
-      shell := result.state;
-      (match result.submitted with
-      | None -> ()
-      | Some prompt -> submitted := !submitted @ [ prompt ]);
-      let feedback =
-        match result.dispatched_command with
-        | None -> Tui_shell.feedback_lines result
-        | Some command ->
-            let context : Tui_command.context =
-              {
-                provider = !provider_ref;
-                model = !model_ref;
-                api_base = !api_base_ref;
-                workspace_root;
-                sessions_root;
-                session_dir = !session_ref;
-                events = !events;
-                selected_event_index =
-                  Tui_shell.selected_event_index result.state;
-              }
-            in
-            Option.value
-              (Tui_command.run context command)
-              ~default:(Tui_shell.feedback_lines result)
-      in
-      match feedback with [] -> () | feedback -> append_lines feedback
+      match !approval with
+      | Some _ -> (
+          match Tui_shell.approval_decision_of_input input with
+          | None -> ()
+          | Some Tui_shell.Approve -> resolve_approval true
+          | Some Tui_shell.Deny -> resolve_approval false)
+      | None -> (
+          let result = Tui_shell.handle_input ~page_size !shell input in
+          shell := result.state;
+          (match result.submitted with
+          | None -> ()
+          | Some prompt -> submitted := !submitted @ [ prompt ]);
+          let feedback =
+            match result.dispatched_command with
+            | None -> Tui_shell.feedback_lines result
+            | Some command ->
+                let context : Tui_command.context =
+                  {
+                    provider = !provider_ref;
+                    model = !model_ref;
+                    api_base = !api_base_ref;
+                    workspace_root;
+                    sessions_root;
+                    session_dir = !session_ref;
+                    events = !events;
+                    selected_event_index =
+                      Tui_shell.selected_event_index result.state;
+                  }
+                in
+                Option.value
+                  (Tui_command.run context command)
+                  ~default:(Tui_shell.feedback_lines result)
+          in
+          match feedback with [] -> () | feedback -> append_lines feedback)
     in
     let rec loop () =
       if Notty_unix.Term.pending term then (
@@ -294,6 +337,10 @@ let make_tui_view ~initial_events ~provider ~model ~api_base ~workspace_root
              (Tui_shell.visible_command_entries shell_state))
       else None
     in
+    let approval_lines =
+      Option.map !approval ~f:(fun request ->
+          View.approval_prompt_lines request.tool_call ~reason:request.reason)
+    in
     let prompt_lines =
       if View.prompt_is_empty shell_state.draft then []
       else "" :: View.prompt_editor_lines shell_state.draft
@@ -327,8 +374,10 @@ let make_tui_view ~initial_events ~provider ~model ~api_base ~workspace_root
       | None ->
           let shown =
             View.viewport ~rows:body_rows ~cols:w
-              (Option.value palette_lines
-                 ~default:(visible_lines () @ prompt_lines))
+              (Option.value approval_lines
+                 ~default:
+                   (Option.value palette_lines
+                      ~default:(visible_lines () @ prompt_lines)))
           in
           I.vcat
             (List.init body_rows ~f:(fun idx ->
@@ -339,22 +388,25 @@ let make_tui_view ~initial_events ~provider ~model ~api_base ~workspace_root
               (visible_lines ())
           in
           let inspector =
-            (match palette_lines with
+            (match approval_lines with
               | Some lines -> lines
-              | None ->
-                  let event_lines =
-                    match selected_event with
-                    | None ->
-                        View.inspector_lines status
-                          ~focus_label:("Selected event: " ^ selection_label)
-                          ~last_event:"waiting for first event"
-                    | Some event ->
-                        View.inspector_lines status
-                          ~focus_label:("Selected event: " ^ selection_label)
-                          ~last_event:(View.event_summary event)
-                        @ ("" :: View.event_inspector_lines event)
-                  in
-                  prompt_lines @ event_lines)
+              | None -> (
+                  match palette_lines with
+                  | Some lines -> lines
+                  | None ->
+                      let event_lines =
+                        match selected_event with
+                        | None ->
+                            View.inspector_lines status
+                              ~focus_label:("Selected event: " ^ selection_label)
+                              ~last_event:"waiting for first event"
+                        | Some event ->
+                            View.inspector_lines status
+                              ~focus_label:("Selected event: " ^ selection_label)
+                              ~last_event:(View.event_summary event)
+                            @ ("" :: View.event_inspector_lines event)
+                      in
+                      prompt_lines @ event_lines))
             |> View.viewport ~rows:body_rows ~cols:panes.inspector_cols
           in
           I.vcat
@@ -380,7 +432,9 @@ let make_tui_view ~initial_events ~provider ~model ~api_base ~workspace_root
     let rule = I.string A.(fg lightblue) (String.make (Int.max 1 w) '-') in
     let footer =
       let hint =
-        if Tui_shell.palette_open shell_state then
+        if Option.is_some !approval then
+          "approval required | Y approve | N/Esc deny"
+        else if Tui_shell.palette_open shell_state then
           Printf.sprintf "%s | type filter | up/down choose | Esc close"
             palette_label
         else
@@ -431,13 +485,8 @@ let make_tui_view ~initial_events ~provider ~model ~api_base ~workspace_root
     take_submitted;
     set_runtime;
     set_session;
+    request_approval;
   }
-
-let make_tui_reporter ~initial_events ~provider ~model ~api_base ~workspace_root
-    ~session_dir ~sessions_root ~header =
-  (make_tui_view ~initial_events ~provider ~model ~api_base ~workspace_root
-     ~session_dir ~sessions_root ~header)
-    .reporter
 
 (* Run [agent] (an Agent_loop.run promise) while ticking [reporter] on a timer
    for the spinner; stop ticking once the run resolves. *)
@@ -525,25 +574,28 @@ let run_oneshot config workspace ~confirm ~resume_opt ~tui ~yolo ~task =
   let initial_events =
     match Journal.read ~session_dir with Ok events -> events | Error _ -> []
   in
-  let reporter =
+  let reporter, on_approval =
     if tui then
-      make_tui_reporter ~initial_events ~provider:config.provider
-        ~model:config.model ~api_base:config.api_base ~workspace_root:root
-        ~session_dir
-        ~sessions_root:
-          (Stdlib.Filename.concat root
-             (Stdlib.Filename.concat ".ocaml-agent" "sessions"))
-        ~header:(Printf.sprintf "fp-agent  %s  —  %s" config.model task)
-    else make_plain_reporter ()
+      let view =
+        make_tui_view ~initial_events ~provider:config.provider
+          ~model:config.model ~api_base:config.api_base ~workspace_root:root
+          ~session_dir
+          ~sessions_root:
+            (Stdlib.Filename.concat root
+               (Stdlib.Filename.concat ".ocaml-agent" "sessions"))
+          ~header:(Printf.sprintf "fp-agent  %s  —  %s" config.model task)
+      in
+      (view.reporter, view.request_approval)
+    else (make_plain_reporter (), prompt_approval)
   in
   let policy = policy_of ~confirm in
   warn_yolo yolo;
   let outcome =
     Lwt_main.run
       (run_with_reporter reporter
-         (Agent_loop.run ~on_event:reporter.on_event ~policy
-            ~on_approval:prompt_approval ~initial_history ~yolo ~config
-            ~model_client ~event_log ~workspace ~task ()))
+         (Agent_loop.run ~on_event:reporter.on_event ~policy ~on_approval
+            ~initial_history ~yolo ~config ~model_client ~event_log ~workspace
+            ~task ()))
   in
   reporter.close ();
   Event_log.close event_log;
@@ -551,7 +603,7 @@ let run_oneshot config workspace ~confirm ~resume_opt ~tui ~yolo ~task =
   print_changes root;
   match outcome.status with Agent_loop.Completed -> 0 | _ -> 1
 
-let run_tui_repl config workspace ~resume_opt ~yolo =
+let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
   let root = Workspace.root workspace in
   let sessions_root =
     Stdlib.Filename.concat root
@@ -563,7 +615,7 @@ let run_tui_repl config workspace ~resume_opt ~yolo =
   let log = ref (Event_log.create ~session_dir:!session) in
   let config_ref = ref config in
   let model_client = ref (Model_client.create ~config) in
-  let policy = policy_of ~confirm:false in
+  let policy = policy_of ~confirm in
   let events () =
     match Journal.read ~session_dir:!session with
     | Ok events -> events
@@ -613,7 +665,7 @@ let run_tui_repl config workspace ~resume_opt ~yolo =
       Lwt_main.run
         (run_with_reporter view.reporter
            (Agent_loop.run ~on_event:view.reporter.on_event ~policy
-              ~on_approval:prompt_approval ~initial_history ~yolo
+              ~on_approval:view.request_approval ~initial_history ~yolo
               ~config:!config_ref ~model_client:!model_client ~event_log:!log
               ~workspace ~task ()))
     in
@@ -742,6 +794,12 @@ let run_tui_repl config workspace ~resume_opt ~yolo =
                (workspace bounds still apply).";
             ]
           else [])
+        @ (if confirm then
+             [
+               "[tui] confirm mode: writes and shell commands require approval \
+                in the fullscreen view.";
+             ]
+           else [])
         @ [
             Printf.sprintf "[tui] session: %s" !session;
             "[tui] Ctrl+Enter submits the prompt; type /exit then Ctrl+Enter \
@@ -1297,22 +1355,15 @@ let dispatch new_plugin check_plugin install_plugin list_plugins remove_plugin
   | None, None, None, false, None, Some dir ->
       run_plugin_tool_cli dir plugin_tool plugin_args workspace
   | None, None, None, false, None, None ->
-      if confirm && tui then (
-        Stdlib.prerr_endline
-          "--confirm cannot be combined with --tui; run without --tui when \
-           approval prompts are required.";
-        1)
-      else
-        with_setup provider api_base model workspace max_steps
-          (fun config workspace ->
-            match task with
-            | Some task ->
-                run_oneshot config workspace ~confirm ~resume_opt:resume ~tui
-                  ~yolo ~task
-            | None when tui ->
-                run_tui_repl config workspace ~resume_opt:resume ~yolo
-            | None ->
-                run_repl config workspace ~confirm ~resume_opt:resume ~yolo)
+      with_setup provider api_base model workspace max_steps
+        (fun config workspace ->
+          match task with
+          | Some task ->
+              run_oneshot config workspace ~confirm ~resume_opt:resume ~tui
+                ~yolo ~task
+          | None when tui ->
+              run_tui_repl config workspace ~confirm ~resume_opt:resume ~yolo
+          | None -> run_repl config workspace ~confirm ~resume_opt:resume ~yolo)
 
 let () =
   let open Cmdliner in
@@ -1431,8 +1482,9 @@ let () =
       value & flag
       & info [ "confirm" ]
           ~doc:
-            "Ask for confirmation on stdin before each shell command or file \
-             modification. Cannot be combined with --tui.")
+            "Ask for confirmation before each shell command or file \
+             modification. Fullscreen TUI mode renders the approval prompt in \
+             the active view.")
   in
   let resume =
     Arg.(

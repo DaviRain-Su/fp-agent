@@ -80,6 +80,11 @@ let assert_contains label haystack needle =
     label true
     (String.is_substring haystack ~substring:needle)
 
+let assert_not_contains label haystack needle =
+  Alcotest.(check bool)
+    label false
+    (String.is_substring haystack ~substring:needle)
+
 let isolated_env root =
   let home = Stdlib.Filename.concat root "home" in
   let workspace = Stdlib.Filename.concat root "workspace" in
@@ -347,22 +352,39 @@ let test_repl_inspects_session_events () =
   assert_contains "inspect range" repl.stdout "no event at index 3 (0..1)";
   assert_contains "inspect usage" repl.stdout "usage: /inspect [event-index]"
 
-let test_tui_confirm_conflict_fails_before_config () =
+let test_tui_confirm_reaches_config_for_oneshot () =
   let root = tmp_dir "fp-agent-cli-tui-" in
   let env = isolated_env root in
   let result =
-    run ~env [ fp_agent_bin (); "--confirm"; "--tui"; "touch a file" ]
+    run ~env
+      [
+        fp_agent_bin ();
+        "--provider";
+        "missing-provider";
+        "--confirm";
+        "--tui";
+        "touch a file";
+      ]
   in
-  assert_failure "confirm tui conflict" result;
-  assert_contains "conflict stderr" result.stderr
+  assert_failure "confirm tui config error" result;
+  assert_contains "config stderr" result.stderr
+    "config error: unknown provider: missing-provider";
+  assert_not_contains "no tui confirm conflict" result.stderr
     "--confirm cannot be combined with --tui"
 
-let test_tui_repl_confirm_conflict_fails_before_config () =
+let test_tui_confirm_reaches_config_for_repl () =
   let root = tmp_dir "fp-agent-cli-tui-repl-" in
   let env = isolated_env root in
-  let result = run ~env [ fp_agent_bin (); "--confirm"; "--tui" ] in
-  assert_failure "confirm tui repl conflict" result;
-  assert_contains "conflict stderr" result.stderr
+  let result =
+    run ~env
+      [
+        fp_agent_bin (); "--provider"; "missing-provider"; "--confirm"; "--tui";
+      ]
+  in
+  assert_failure "confirm tui repl config error" result;
+  assert_contains "config stderr" result.stderr
+    "config error: unknown provider: missing-provider";
+  assert_not_contains "no tui repl confirm conflict" result.stderr
     "--confirm cannot be combined with --tui"
 
 let () =
@@ -379,9 +401,9 @@ let () =
             test_repl_lists_and_switches_custom_provider_models;
           Alcotest.test_case "repl inspect events" `Quick
             test_repl_inspects_session_events;
-          Alcotest.test_case "tui confirm conflict" `Quick
-            test_tui_confirm_conflict_fails_before_config;
-          Alcotest.test_case "tui repl confirm conflict" `Quick
-            test_tui_repl_confirm_conflict_fails_before_config;
+          Alcotest.test_case "tui confirm config" `Quick
+            test_tui_confirm_reaches_config_for_oneshot;
+          Alcotest.test_case "tui repl confirm config" `Quick
+            test_tui_confirm_reaches_config_for_repl;
         ] );
     ]

@@ -52,6 +52,8 @@ type input =
   | Mouse_scroll_down
   | Unknown
 
+type approval_decision = Approve | Deny
+
 type result = {
   state : t;
   submitted : string option;
@@ -280,6 +282,15 @@ let handle_input ~page_size t input =
   match action_of_input ~page_size t input with
   | None -> no_submit t
   | Some action -> handle t action
+
+let approval_decision_of_input = function
+  | Text text -> (
+      match String.lowercase (String.strip text) with
+      | "y" | "yes" -> Some Approve
+      | "n" | "no" -> Some Deny
+      | _ -> None)
+  | Enter | Ctrl_enter | Escape -> Some Deny
+  | _ -> None
 
 let feedback_lines result =
   match

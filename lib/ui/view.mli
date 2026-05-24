@@ -124,6 +124,9 @@ val command_palette_lines :
   ?query:string -> selected:int option -> command_entry list -> string list
 (** Render the command palette as plain lines. *)
 
+val approval_prompt_lines : Tool_call.t -> reason:string -> string list
+(** Render a pending tool approval prompt as plain lines. *)
+
 type prompt_editor = { text : string; cursor : int }
 (** Multiline prompt draft plus byte cursor position. Kept pure so a fullscreen
     TUI can test input editing without a real terminal. *)

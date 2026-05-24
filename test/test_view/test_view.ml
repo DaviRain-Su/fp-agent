@@ -233,6 +233,32 @@ let test_command_palette () =
     "renders no matches" true
     (String.is_substring empty_lines ~substring:"no matching commands")
 
+let test_approval_prompt_lines () =
+  let tool_call =
+    Tool_call.make ~name:"write_file"
+      ~args:
+        (`Assoc
+           [ ("path", `String "README.md"); ("content", `String "updated") ])
+  in
+  let joined =
+    String.concat
+      (View.approval_prompt_lines tool_call
+         ~reason:"file modification requires approval")
+      ~sep:"\n"
+  in
+  Alcotest.(check bool)
+    "shows approval title" true
+    (String.is_substring joined ~substring:"Approval required");
+  Alcotest.(check bool)
+    "shows reason" true
+    (String.is_substring joined ~substring:"file modification requires approval");
+  Alcotest.(check bool)
+    "shows tool" true
+    (String.is_substring joined ~substring:"tool: write_file README.md");
+  Alcotest.(check bool)
+    "shows approval hint" true
+    (String.is_substring joined ~substring:"Y approve | N/Esc deny")
+
 let test_prompt_editor () =
   Alcotest.(check string) "empty text" "" View.prompt_empty.text;
   Alcotest.(check int) "empty cursor" 0 View.prompt_empty.cursor;
@@ -409,6 +435,8 @@ let () =
           Alcotest.test_case "token_usage" `Quick test_token_usage;
           Alcotest.test_case "event_selection" `Quick test_event_selection;
           Alcotest.test_case "command_palette" `Quick test_command_palette;
+          Alcotest.test_case "approval_prompt_lines" `Quick
+            test_approval_prompt_lines;
           Alcotest.test_case "prompt_editor" `Quick test_prompt_editor;
           Alcotest.test_case "event_summary" `Quick test_event_summary;
           Alcotest.test_case "event_inspector_lines" `Quick

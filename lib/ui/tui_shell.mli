@@ -53,6 +53,8 @@ type input =
   | Mouse_scroll_down
   | Unknown
 
+type approval_decision = Approve | Deny
+
 type result = {
   state : t;
   submitted : string option;
@@ -105,6 +107,10 @@ val action_of_input : page_size:int -> t -> input -> action option
 val handle_input : page_size:int -> t -> input -> result
 (** Translate and apply one abstract terminal input. Unknown or context-invalid
     input leaves the state unchanged. *)
+
+val approval_decision_of_input : input -> approval_decision option
+(** Translate input while an approval prompt is active. [Y] approves; [N],
+    Enter, or Escape deny. Other input is ignored. *)
 
 val feedback_lines : result -> string list
 (** Human-readable feedback for shell results that should be visible in the TUI

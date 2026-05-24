@@ -74,6 +74,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - Token usage is now derived from assistant-message events and shown in the
   status/inspector surfaces; `/usage` renders input, output, and total tokens
   from the current event log.
+- Fullscreen TUI confirm mode now renders approval prompts in the active view.
+  `Y` approves a pending tool call, while `N`, Enter, or Esc deny it; normal
+  prompt and palette input is paused until the approval is resolved.
 - The command palette controller now distinguishes close from accept: Enter
   returns the highlighted command entry, giving the future fullscreen shell a
   tested command-dispatch point while preserving the current overlay behavior.
@@ -102,8 +105,8 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - Code-review tasks add review-specific system guidance without rewriting the
   logged user event, preserving audit and replay fidelity.
 - CLI regression tests cover plugin lifecycle commands, REPL plugin/tool
-  discovery, custom provider model listing/switching, and `--confirm --tui`
-  rejection.
+  discovery, custom provider model listing/switching, and the `--confirm --tui`
+  argument path before a real terminal is opened.
 
 The web/product-reference pass still needs to be done with gstack `/browse`
 once that browser tool is available in this repo.

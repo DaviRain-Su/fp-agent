@@ -172,8 +172,8 @@ Options:
 - `--api-base URL` — override the provider's base URL
 - `-w`, `--workspace DIR` — workspace root (default: `WORKSPACE_ROOT` or cwd)
 - `--max-steps N` — max agent steps (default: `MAX_STEPS` or 30)
-- `--confirm` — ask for approval before each shell command or file write (not
-  compatible with `--tui`)
+- `--confirm` — ask for approval before each shell command or file write;
+  fullscreen TUI prompts accept `Y` to approve and `N`/Esc to deny
 - `--yolo` — bypass the dangerous-command deny-list (workspace bounds still apply)
 - `--resume SESSION_DIR` — replay a previous session's event log as context and continue
 - `--tui` — full-screen live view for one-shot tasks, or an interactive
@@ -287,7 +287,8 @@ Tools: `read_file`, `write_file`, `edit_file`, `list_files`, `run_command`,
 apply) — use with care.
 
 Use `--confirm` to require interactive approval before each shell command or
-file modification.
+file modification. In fullscreen TUI mode the approval prompt is rendered in
+the active view instead of stdin.
 
 ### Modules
 

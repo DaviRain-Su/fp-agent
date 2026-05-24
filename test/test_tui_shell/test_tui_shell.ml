@@ -255,6 +255,32 @@ let test_home_end_prompt_vs_events () =
   let state = input Tui_shell.End state in
   Alcotest.(check int) "end with draft moves cursor" 3 state.draft.cursor
 
+let approval_str = function
+  | Some Tui_shell.Approve -> "approve"
+  | Some Tui_shell.Deny -> "deny"
+  | None -> "none"
+
+let test_approval_input_mapping () =
+  Alcotest.(check string)
+    "y approves" "approve"
+    (approval_str (Tui_shell.approval_decision_of_input (Tui_shell.Text "y")));
+  Alcotest.(check string)
+    "yes approves" "approve"
+    (approval_str (Tui_shell.approval_decision_of_input (Tui_shell.Text "yes")));
+  Alcotest.(check string)
+    "n denies" "deny"
+    (approval_str (Tui_shell.approval_decision_of_input (Tui_shell.Text "n")));
+  Alcotest.(check string)
+    "escape denies" "deny"
+    (approval_str (Tui_shell.approval_decision_of_input Tui_shell.Escape));
+  Alcotest.(check string)
+    "enter denies" "deny"
+    (approval_str (Tui_shell.approval_decision_of_input Tui_shell.Enter));
+  Alcotest.(check string)
+    "other ignored" "none"
+    (approval_str
+       (Tui_shell.approval_decision_of_input (Tui_shell.Text "maybe")))
+
 let test_tui_command_model_log_and_inspect () =
   with_temp_dir "fp_agent_tui_command_events" (fun root ->
       let events =
@@ -389,6 +415,8 @@ let () =
             test_event_input_mapping;
           Alcotest.test_case "home_end_prompt_vs_events" `Quick
             test_home_end_prompt_vs_events;
+          Alcotest.test_case "approval_input_mapping" `Quick
+            test_approval_input_mapping;
           Alcotest.test_case "tui_command_model_log_inspect" `Quick
             test_tui_command_model_log_and_inspect;
           Alcotest.test_case "tui_command_sessions_diff" `Quick

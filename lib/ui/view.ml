@@ -232,6 +232,17 @@ let command_palette_lines ?(query = "") ~selected entries =
         in
         Printf.sprintf "%s%-24s %s" marker entry.command entry.description)
 
+let approval_prompt_lines tool_call ~reason =
+  [
+    "Approval required";
+    "reason: " ^ reason;
+    "tool: " ^ Event.describe_tool tool_call;
+    "args:";
+    Yojson.Safe.pretty_to_string tool_call.Tool_call.args;
+    "";
+    "Y approve | N/Esc deny";
+  ]
+
 type prompt_editor = { text : string; cursor : int }
 
 let prompt_make ?cursor text =
