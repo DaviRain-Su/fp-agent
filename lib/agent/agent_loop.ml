@@ -207,6 +207,14 @@ let compact_summary older =
   |> List.map ~f:compact_text_of_turn
   |> String.concat ~sep:"\n\n" |> compact_summary_bound
 
+let compact_event_of_turns turns =
+  match turns |> history_chunks |> split_recent_chunks with
+  | None -> None
+  | Some (older, recent) ->
+      let summary = compact_summary older in
+      if String.is_empty summary then None
+      else Some (Event.Context_compacted { summary; recent })
+
 (* Keep the most recent turns that fit the budget, so long sessions do not blow
    the context window. Tool exchanges must be kept or dropped as a unit;
    provider APIs reject orphaned tool_result blocks. *)
@@ -267,14 +275,11 @@ let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
     let current = Session_state.turns !st in
     if history_cost current < compact_threshold_chars then Lwt.return_unit
     else
-      match current |> history_chunks |> split_recent_chunks with
+      match compact_event_of_turns current with
       | None -> Lwt.return_unit
-      | Some (older, recent) ->
-          let summary = compact_summary older in
-          if String.is_empty summary then Lwt.return_unit
-          else (
-            emit (Event.Context_compacted { summary; recent });
-            Lwt.return_unit)
+      | Some event ->
+          emit event;
+          Lwt.return_unit
   in
   emit (Event.User_message { content = task });
   if review_task then

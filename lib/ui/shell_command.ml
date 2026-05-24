@@ -17,6 +17,7 @@ type id =
   | Inspect
   | Usage
   | Status
+  | Compact
   | Fork
   | Diff
   | Retry
@@ -170,6 +171,14 @@ let specs =
       aliases = [];
       palette = true;
       acceptance = Execute "/status";
+    };
+    {
+      id = Compact;
+      command = "/compact";
+      description = "summarize older session history";
+      aliases = [];
+      palette = true;
+      acceptance = Draft "/compact";
     };
     {
       id = Fork;

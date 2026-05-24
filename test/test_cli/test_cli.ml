@@ -544,6 +544,41 @@ let test_repl_inspects_session_events () =
   assert_contains "new session switched" repl.stdout "new session:";
   assert_contains "new session has empty log" repl.stdout "(no events yet)"
 
+let test_repl_compacts_session_events () =
+  let root = tmp_dir "fp-agent-cli-compact-" in
+  let env = isolated_env root in
+  let workspace =
+    match List.Assoc.find env "WORKSPACE_ROOT" ~equal:String.equal with
+    | Some path -> path
+    | None -> Alcotest.fail "missing workspace env"
+  in
+  let sessions_root =
+    Stdlib.Filename.concat workspace
+      (Stdlib.Filename.concat ".ocaml-agent" "sessions")
+  in
+  mkdir_p sessions_root;
+  let session_dir = Stdlib.Filename.concat sessions_root "compact-session" in
+  mkdir_p session_dir;
+  let log = Event_log.create ~session_dir in
+  List.iter (List.range 0 8) ~f:(fun i ->
+      Event_log.append log
+        (Event.User_message { content = Printf.sprintf "task-%d" i });
+      Event_log.append log
+        (Event.Assistant_message
+           {
+             content = [ Llm.Text (Printf.sprintf "answer-%d" i) ];
+             usage = Llm.zero_usage;
+           }));
+  Event_log.close log;
+  let repl =
+    run ~env ~stdin:"/compact\n/log\n/exit\n"
+      [ fp_agent_bin (); "--resume"; session_dir ]
+  in
+  assert_success "repl compact command" repl;
+  assert_contains "compact reports summary" repl.stdout
+    "compacted older history into";
+  assert_contains "log includes compaction" repl.stdout "context compacted"
+
 let test_tui_confirm_reaches_config_for_oneshot () =
   let root = tmp_dir "fp-agent-cli-tui-" in
   let env = isolated_env root in
@@ -593,6 +628,8 @@ let () =
             test_repl_lists_and_switches_custom_provider_models;
           Alcotest.test_case "repl inspect events" `Quick
             test_repl_inspects_session_events;
+          Alcotest.test_case "repl compact events" `Quick
+            test_repl_compacts_session_events;
           Alcotest.test_case "tui confirm config" `Quick
             test_tui_confirm_reaches_config_for_oneshot;
           Alcotest.test_case "tui repl confirm config" `Quick

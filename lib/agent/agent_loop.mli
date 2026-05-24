@@ -6,6 +6,11 @@ val max_history_chars_for_test : int
 val compact_threshold_chars_for_test : int
 val truncate_history_for_test : Llm.turn list -> Llm.turn list
 
+val compact_event_of_turns : Llm.turn list -> Event.t option
+(** Build a [Context_compacted] event from model-visible turns, preserving the
+    same recent-chunk boundary used by automatic compaction. Returns [None] when
+    there is not enough history to compact. *)
+
 val run :
   ?on_event:(Event.t -> unit) ->
   ?policy:Policy.t ->

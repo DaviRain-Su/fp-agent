@@ -244,6 +244,25 @@ let test_auto_compaction_preserves_summary () =
         "log has compaction event" true
         (String.is_substring contents ~substring:"Context_compacted"))
 
+let test_manual_compaction_event_preserves_recent_turns () =
+  let turns = List.init 8 ~f:(fun i -> Llm.user (Printf.sprintf "turn-%d" i)) in
+  match Agent_loop.compact_event_of_turns turns with
+  | None -> Alcotest.fail "expected compaction event"
+  | Some (Event.Context_compacted { summary; recent }) -> (
+      Alcotest.(check bool)
+        "summary has older turn" true
+        (String.is_substring summary ~substring:"turn-0");
+      Alcotest.(check bool)
+        "summary omits newest turn" false
+        (String.is_substring summary ~substring:"turn-7");
+      Alcotest.(check int) "keeps recent chunks" 6 (List.length recent);
+      match List.last recent with
+      | Some { Llm.role = Llm.User; content = [ Llm.Text "turn-7" ] } -> ()
+      | _ -> Alcotest.fail "newest turn not kept in recent history")
+  | Some event ->
+      Alcotest.failf "unexpected event: %s"
+        (Yojson.Safe.to_string (Event.to_yojson event))
+
 let test_code_review_task_adds_system_guidance_without_rewriting_user_event () =
   with_env (fun config workspace event_log session_dir ->
       let captured_system = ref "" in
@@ -440,6 +459,8 @@ let () =
             test_history_truncation_keeps_tool_exchange_atomic;
           Alcotest.test_case "auto_compaction" `Quick
             test_auto_compaction_preserves_summary;
+          Alcotest.test_case "manual_compaction_event" `Quick
+            test_manual_compaction_event_preserves_recent_turns;
           Alcotest.test_case "code_review_guidance" `Quick
             test_code_review_task_adds_system_guidance_without_rewriting_user_event;
           Alcotest.test_case "regular_task_system" `Quick

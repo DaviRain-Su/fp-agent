@@ -685,6 +685,30 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
         view.append_lines [ "[tui] /retry"; "retrying: " ^ oneline task ];
         run_task task
   in
+  let compact_session () =
+    match Transcript.of_session ~session_dir:!session with
+    | Error e -> view.append_lines [ "[tui] /compact"; "compact failed: " ^ e ]
+    | Ok turns -> (
+        match Agent_loop.compact_event_of_turns turns with
+        | None ->
+            view.append_lines
+              [
+                "[tui] /compact";
+                "nothing to compact yet (need more completed turns)";
+              ]
+        | Some (Event.Context_compacted { summary; recent } as event) ->
+            Event_log.append !log event;
+            view.reporter.on_event event;
+            view.append_lines
+              [
+                "[tui] /compact";
+                Printf.sprintf
+                  "compacted older history into %d chars; kept %d recent \
+                   turn(s)"
+                  (String.length summary) (List.length recent);
+              ]
+        | Some _ -> ())
+  in
   let current_model_lines command =
     Option.value
       (Tui_command.run (command_context ()) command)
@@ -799,6 +823,7 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
     | Command (Resume, arg) -> resume_session arg
     | Command (Fork, arg) -> fork_session arg
     | Command (Retry, _) -> retry_last_task ()
+    | Command (Compact, _) -> compact_session ()
     | Command (Undo, _) -> undo ()
     | Command _ -> (
         match Tui_command.run (command_context ()) raw with
@@ -1222,6 +1247,22 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
             Stdlib.Printf.printf "retrying: %s\n%!" (oneline task);
             run_task task)
   in
+  let compact_session () =
+    match Transcript.of_session ~session_dir:!session with
+    | Error e -> Stdlib.print_endline ("compact failed: " ^ e)
+    | Ok turns -> (
+        match Agent_loop.compact_event_of_turns turns with
+        | None ->
+            Stdlib.print_endline
+              "nothing to compact yet (need more completed turns)"
+        | Some (Event.Context_compacted { summary; recent } as event) ->
+            Event_log.append !log event;
+            Stdlib.Printf.printf
+              "compacted older history into %d chars; kept %d recent turn(s)\n\
+               %!"
+              (String.length summary) (List.length recent)
+        | Some _ -> ())
+  in
   let rec loop () =
     Stdlib.print_string "\n> ";
     Stdlib.Out_channel.flush Stdlib.stdout;
@@ -1276,6 +1317,9 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
             loop ()
         | Command (Retry, _) ->
             retry_last_task ();
+            loop ()
+        | Command (Compact, _) ->
+            compact_session ();
             loop ()
         | Command (Undo, _) ->
             undo ();

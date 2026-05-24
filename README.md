@@ -59,6 +59,7 @@ dune exec -- fp-agent
 > /log               # list this session's events with indices
 > /usage             # show token usage from the event log
 > /status            # show runtime/session/plugin status
+> /compact           # summarize older session history
 > /fork 3            # fork a new branch at event index 3 (or /fork for the end)
 > /tree              # show the session fork tree
 > /sessions          # list sessions in this workspace
@@ -152,6 +153,9 @@ copy. Two consequences:
   preview. With no index it inspects the latest event.
 - **Status** (`/status`) summarizes workspace, session, provider/model,
   event count, token usage, plugin diagnostics, and registered tool count.
+- **Compaction** (`/compact`) appends a `Context_compacted` event that replaces
+  older model-visible turns with a bounded summary while preserving the recent
+  turns needed to continue safely. The raw event log remains intact.
 - **TUI event navigation** (`--tui`) lets the inspector follow the latest event
   by default, or pin a historical event with Up/Down, PageUp/PageDown, Home,
   and End.
@@ -174,6 +178,8 @@ copy. Two consequences:
   logs alone.
 - **TUI retry** lets `/retry` rerun the latest user task in the active
   event-sourced session, using the currently selected provider/model runtime.
+- **TUI compaction** lets `/compact` manually summarize older context in the
+  active session when a long run needs a smaller model-visible history.
 - **TUI prompt editor** keeps multiline draft editing pure and testable:
   inserted text, seeded palette drafts, newline, delete/backspace, cursor
   movement, and rendering with a visible cursor all show inside the fullscreen
