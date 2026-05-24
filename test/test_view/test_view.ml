@@ -41,6 +41,62 @@ let test_viewport () =
     "zero cols" []
     (View.viewport ~rows:3 ~cols:0 [ "abcdef" ])
 
+let test_truncate_and_pad () =
+  Alcotest.(check string) "no truncation" "abc" (View.truncate ~cols:4 "abc");
+  Alcotest.(check string) "truncates" "abc…" (View.truncate ~cols:4 "abcdef");
+  Alcotest.(check string) "one col" "…" (View.truncate ~cols:1 "abcdef");
+  Alcotest.(check string) "zero col" "" (View.truncate ~cols:0 "abcdef");
+  Alcotest.(check string) "pads" "abc  " (View.pad_right ~cols:5 "abc");
+  Alcotest.(check string)
+    "pads truncated" "abcd…"
+    (View.pad_right ~cols:5 "abcdef")
+
+let test_split_panes () =
+  Alcotest.(check bool)
+    "narrow terminal is single pane" true
+    (Option.is_none (View.split_panes ~width:80));
+  match View.split_panes ~width:120 with
+  | None -> Alcotest.fail "expected wide terminal panes"
+  | Some panes ->
+      Alcotest.(check int) "timeline cols" 77 panes.timeline_cols;
+      Alcotest.(check int) "inspector cols" 40 panes.inspector_cols
+
+let test_status_and_inspector () =
+  let status : View.status =
+    {
+      provider = "local-llm";
+      model = "qwen36-rtx";
+      session = "2026-session";
+      phase = Some "running read_file…";
+      events = 12;
+      plugins = 2;
+      tools = 11;
+    }
+  in
+  let line = View.status_line status in
+  Alcotest.(check bool)
+    "status has provider/model" true
+    (String.is_substring line ~substring:"local-llm/qwen36-rtx");
+  Alcotest.(check bool)
+    "status has plugins" true
+    (String.is_substring line ~substring:"plugins 2");
+  Alcotest.(check (list string))
+    "inspector lines"
+    [
+      "Inspector";
+      "provider: local-llm";
+      "model: qwen36-rtx";
+      "session: 2026-session";
+      "phase: running read_file…";
+      "events: 12";
+      "plugins: 2";
+      "tools: 11";
+      "";
+      "Last event";
+      "→ read_file README.md";
+    ]
+    (View.inspector_lines status ~last_event:"→ read_file README.md")
+
 let kind_str = function
   | `Ok -> "ok"
   | `Err -> "err"
@@ -64,6 +120,10 @@ let () =
           Alcotest.test_case "display_lines" `Quick test_display_lines;
           Alcotest.test_case "wrap_line" `Quick test_wrap_line;
           Alcotest.test_case "viewport" `Quick test_viewport;
+          Alcotest.test_case "truncate_and_pad" `Quick test_truncate_and_pad;
+          Alcotest.test_case "split_panes" `Quick test_split_panes;
+          Alcotest.test_case "status_and_inspector" `Quick
+            test_status_and_inspector;
           Alcotest.test_case "classify" `Quick test_classify;
         ] );
     ]

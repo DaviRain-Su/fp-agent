@@ -31,6 +31,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 
 - Timeline viewport helpers are pure and unit-tested: long event lines wrap to
   terminal width before the newest visible rows are selected.
+- Wide TUI renders a two-pane timeline + inspector view. The inspector exposes
+  provider/model/session, phase, event count, plugin count, tool count, and last
+  event from the same event stream that drives the transcript.
 - CLI regression tests cover plugin lifecycle commands, REPL plugin/tool
   discovery, custom provider model listing/switching, and `--confirm --tui`
   rejection.

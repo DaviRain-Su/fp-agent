@@ -15,5 +15,34 @@ val viewport : rows:int -> cols:int -> string list -> string list
 (** Wrap lines to [cols] columns, then return the most recent [rows] visible
     rows. *)
 
+val truncate : cols:int -> string -> string
+(** Truncate display text to [cols] columns. *)
+
+val pad_right : cols:int -> string -> string
+(** Truncate, then right-pad display text to exactly [cols] bytes when possible.
+*)
+
+type panes = { timeline_cols : int; inspector_cols : int }
+
+val split_panes : width:int -> panes option
+(** Return a two-pane layout for wide terminals. Narrow terminals use the
+    single-pane timeline. *)
+
+type status = {
+  provider : string;
+  model : string;
+  session : string;
+  phase : string option;
+  events : int;
+  plugins : int;
+  tools : int;
+}
+
+val status_line : status -> string
+(** Render the compact status strip. *)
+
+val inspector_lines : status -> last_event:string -> string list
+(** Render the right-side run inspector as plain lines. *)
+
 val classify : string -> [ `Ok | `Err | `Action | `Plain ]
 (** Classify a display line by its leading icon so the renderer can color it. *)

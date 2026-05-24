@@ -66,6 +66,35 @@ let phase_label = function
   | `Thinking -> Some "thinking…"
   | `Running tool -> Some (Printf.sprintf "running %s…" tool)
 
+let summarize_event (e : Event.t) =
+  match Event.to_display e with
+  | Some line -> line
+  | None -> (
+      match e with
+      | User_message { content } ->
+          "user: "
+          ^ View.truncate ~cols:80
+              (String.substr_replace_all content ~pattern:"\n" ~with_:" ")
+      | Model_delta _ -> "model: streaming"
+      | Assistant_message { content; _ } -> (
+          match Llm.tool_uses content with
+          | [] -> "assistant: final answer"
+          | calls ->
+              Printf.sprintf "assistant: %d tool call%s" (List.length calls)
+                (if List.length calls = 1 then "" else "s"))
+      | Model_response { action = Tool_call tc } ->
+          "model: " ^ Event.describe_tool tc
+      | Model_response { action = Tool_calls calls } ->
+          Printf.sprintf "model: %d tool calls" (List.length calls)
+      | Model_response { action = Final_answer _ } -> "model: final answer"
+      | Policy_decision { permission; _ } ->
+          "policy: " ^ Permission.to_string permission
+      | State_transition { to_state; _ } ->
+          "state: " ^ Agent_state.to_string to_state
+      | Tool_call _ | Tool_result_message _ | Tool_result _
+      | Context_compacted _ | Graph_event _ ->
+          "event")
+
 (* Plain reporter: step lines + an animated spinner line on stderr. The spinner
    line is rewritten in place with CR + clear-to-EOL. *)
 let make_plain_reporter () =
@@ -111,15 +140,21 @@ let make_plain_reporter () =
   in
   { on_event; tick; close }
 
-(* Full-screen view: header, rule, scrolling body, and a footer status line
-   with the spinner. *)
-let make_tui_reporter ~header =
+(* Full-screen view: header, status strip, timeline, optional inspector, and a
+   footer phase line. *)
+let make_tui_reporter ~provider ~model ~session ~header =
   let module I = Notty.I in
   let module A = Notty.A in
   let term = Notty_unix.Term.create () in
+  let manifests = Plugin.manifests () in
+  Tool_loader.register_all ();
+  let plugin_count = List.length manifests in
+  let tool_count = List.length (Tool.all ()) in
   let lines = ref [] in
   let current_delta = ref "" in
   let phase = make_phase () in
+  let event_count = ref 0 in
+  let last_event = ref "waiting for first event" in
   let i = ref 0 in
   let visible_lines () =
     if String.is_empty !current_delta then !lines
@@ -133,8 +168,19 @@ let make_tui_reporter ~header =
   let redraw () =
     let w, h = Notty_unix.Term.size term in
     let body_rows = Int.max 1 (h - 4) in
-    let shown = View.viewport ~rows:body_rows ~cols:w (visible_lines ()) in
-    let colored s =
+    let phase_text = phase_label !(fst phase) in
+    let status : View.status =
+      {
+        provider;
+        model;
+        session;
+        phase = phase_text;
+        events = !event_count;
+        plugins = plugin_count;
+        tools = tool_count;
+      }
+    in
+    let colored ~cols s =
       let attr =
         match View.classify s with
         | `Ok -> A.fg A.green
@@ -142,13 +188,50 @@ let make_tui_reporter ~header =
         | `Action -> A.fg A.yellow
         | `Plain -> A.empty
       in
-      I.string attr s
+      I.string attr (View.pad_right ~cols s)
     in
-    let header_img = I.string A.(fg lightblue ++ st bold) header in
+    let row_at rows i = Option.value (List.nth rows i) ~default:"" in
+    let body =
+      match View.split_panes ~width:w with
+      | None ->
+          let shown =
+            View.viewport ~rows:body_rows ~cols:w (visible_lines ())
+          in
+          I.vcat
+            (List.init body_rows ~f:(fun idx ->
+                 colored ~cols:w (row_at shown idx)))
+      | Some panes ->
+          let timeline =
+            View.viewport ~rows:body_rows ~cols:panes.timeline_cols
+              (visible_lines ())
+          in
+          let inspector =
+            View.inspector_lines status ~last_event:!last_event
+            |> View.viewport ~rows:body_rows ~cols:panes.inspector_cols
+          in
+          I.vcat
+            (List.init body_rows ~f:(fun idx ->
+                 I.hcat
+                   [
+                     colored ~cols:panes.timeline_cols (row_at timeline idx);
+                     I.string A.(fg (gray 8)) " │ ";
+                     I.string
+                       A.(fg (gray 14))
+                       (View.pad_right ~cols:panes.inspector_cols
+                          (row_at inspector idx));
+                   ]))
+    in
+    let header_img =
+      I.string A.(fg lightblue ++ st bold) (View.truncate ~cols:w header)
+    in
+    let status_img =
+      I.string
+        A.(fg (gray 14))
+        (View.truncate ~cols:w (View.status_line status))
+    in
     let rule = I.string A.(fg lightblue) (String.make (Int.max 1 w) '-') in
-    let body = I.vcat (List.map shown ~f:colored) in
     let footer =
-      match phase_label !(fst phase) with
+      match phase_text with
       | None -> I.string A.(fg (gray 12)) "done — ctrl-c to exit"
       | Some label ->
           let frame = spinner_frames.(!i % Array.length spinner_frames) in
@@ -158,10 +241,12 @@ let make_tui_reporter ~header =
                (now () -. !(snd phase)))
     in
     Notty_unix.Term.image term
-      (I.vcat [ header_img; rule; body; I.void 0 1; footer ])
+      (I.vcat [ header_img; status_img; rule; body; footer ])
   in
   redraw ();
   let on_event e =
+    Int.incr event_count;
+    last_event := summarize_event e;
     update_phase phase e;
     (match e with
     | Model_delta { content } -> current_delta := !current_delta ^ content
@@ -268,7 +353,8 @@ let run_oneshot config workspace ~confirm ~resume_opt ~tui ~yolo ~task =
   let model_client = Model_client.create ~config in
   let reporter =
     if tui then
-      make_tui_reporter
+      make_tui_reporter ~provider:config.provider ~model:config.model
+        ~session:(Stdlib.Filename.basename session_dir)
         ~header:(Printf.sprintf "fp-agent  %s  —  %s" config.model task)
     else make_plain_reporter ()
   in
