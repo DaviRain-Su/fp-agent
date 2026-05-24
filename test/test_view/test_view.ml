@@ -194,6 +194,14 @@ let test_command_palette () =
   Alcotest.(check string)
     "filter command" "/provider <name> [model] [api-base]"
     (Option.value_exn (List.hd filtered)).command;
+  let plugin_group =
+    View.filter_command_palette_entries ~query:"plugins install"
+      View.command_palette_entries
+  in
+  Alcotest.(check bool)
+    "filter can use group and command" true
+    (List.exists plugin_group ~f:(fun entry ->
+         String.equal entry.command "/plugin-install [--replace] <dir>"));
   let queried =
     View.set_palette_query ~command_count:(List.length filtered)
       ~query:"api-base" opened
@@ -222,6 +230,9 @@ let test_command_palette () =
   Alcotest.(check bool)
     "renders selected marker" true
     (String.is_substring joined ~substring:("> " ^ selected_command.command));
+  Alcotest.(check bool)
+    "renders group header" true
+    (String.is_substring joined ~substring:"[Plugins]");
   Alcotest.(check bool)
     "renders plugin command" true
     (String.is_substring joined ~substring:"/plugins");

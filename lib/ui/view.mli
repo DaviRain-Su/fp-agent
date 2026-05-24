@@ -79,6 +79,7 @@ val select_event : event_count:int -> index:int -> event_selection
 type command_entry = Shell_command.entry = {
   command : string;
   description : string;
+  group : string;
 }
 
 val command_palette_entries : command_entry list
@@ -86,8 +87,8 @@ val command_palette_entries : command_entry list
 
 val filter_command_palette_entries :
   query:string -> command_entry list -> command_entry list
-(** Case-insensitive command palette filtering over command text and
-    description. Empty queries preserve all entries. *)
+(** Case-insensitive command palette filtering over command text, description,
+    and group. Empty queries preserve all entries. *)
 
 type palette_state =
   | Palette_closed

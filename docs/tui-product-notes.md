@@ -96,6 +96,10 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   latest non-empty user task, and submit it again through the current runtime.
   The command palette seeds `/retry` as a draft instead of auto-dispatching it,
   keeping reruns explicit.
+- The command palette now groups commands by workflow area such as Tools,
+  Plugins, Sessions, Models, Context, and Run Control. Filtering also matches
+  those group labels, so queries like `plugins install` can jump directly to
+  the right plugin command.
 - Fullscreen TUI and REPL `/compact` now append a `Context_compacted` event to
   the active log. The raw history remains auditable, while future replay uses a
   bounded summary plus recent turns.

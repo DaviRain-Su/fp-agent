@@ -28,7 +28,7 @@ type id =
   | Undo
   | Exit
 
-type entry = { command : string; description : string }
+type entry = { command : string; description : string; group : string }
 type acceptance = Execute of string | Draft of string
 
 type parse_result =

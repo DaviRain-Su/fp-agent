@@ -67,15 +67,24 @@ let test_parse () =
     | _ -> false)
 
 let test_metadata () =
+  let entry command =
+    Option.value_exn
+      (List.find Shell_command.palette_entries ~f:(fun entry ->
+           String.equal entry.command command))
+  in
   let palette =
     List.map Shell_command.palette_entries ~f:(fun entry -> entry.command)
   in
   Alcotest.(check bool)
     "palette has tools" true
     (List.mem palette "/tools" ~equal:String.equal);
+  Alcotest.(check string) "tools group" "Tools" (entry "/tools").group;
   Alcotest.(check bool)
     "palette has provider" true
     (List.mem palette "/provider <name> [model] [api-base]" ~equal:String.equal);
+  Alcotest.(check string)
+    "provider group" "Models"
+    (entry "/provider <name> [model] [api-base]").group;
   Alcotest.(check bool)
     "palette has usage" true
     (List.mem palette "/usage" ~equal:String.equal);
@@ -92,6 +101,9 @@ let test_metadata () =
   Alcotest.(check bool)
     "palette has plugin install" true
     (List.mem palette "/plugin-install [--replace] <dir>" ~equal:String.equal);
+  Alcotest.(check string)
+    "plugin install group" "Plugins"
+    (entry "/plugin-install [--replace] <dir>").group;
   Alcotest.(check bool)
     "palette has plugin remove" true
     (List.mem palette "/plugin-remove <id>" ~equal:String.equal);
@@ -110,7 +122,14 @@ let test_metadata () =
   Alcotest.(check bool)
     "palette has retry" true
     (List.mem palette "/retry" ~equal:String.equal);
+  Alcotest.(check string) "retry group" "Run Control" (entry "/retry").group;
   let help = Shell_command.help_text () in
+  Alcotest.(check bool)
+    "help has plugin group" true
+    (String.is_substring help ~substring:"Plugins:");
+  Alcotest.(check bool)
+    "help has run control group" true
+    (String.is_substring help ~substring:"Run Control:");
   Alcotest.(check bool)
     "help has alias" true
     (String.is_substring help ~substring:"/exit, /quit");

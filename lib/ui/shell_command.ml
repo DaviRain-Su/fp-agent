@@ -30,7 +30,7 @@ type id =
   | Undo
   | Exit
 
-type entry = { command : string; description : string }
+type entry = { command : string; description : string; group : string }
 type acceptance = Execute of string | Draft of string
 
 type spec = {
@@ -281,8 +281,23 @@ let command_token command =
   | None -> command
   | Some (token, _) -> token
 
+let group_of_id = function
+  | Tools | Tool -> "Tools"
+  | Plugins | Plugin | PluginNew | PluginCheck | PluginInstall | PluginRemove
+  | PluginSmoke ->
+      "Plugins"
+  | Sessions | Tree | NewSession | Resume -> "Sessions"
+  | Model | Models | Provider -> "Models"
+  | Log | Inspect | Usage | Status | Instructions -> "Context"
+  | Compact | Fork | Diff | Retry | Undo -> "Run Control"
+  | Help | Exit -> "Shell"
+
 let entry_of_spec spec =
-  { command = spec.command; description = spec.description }
+  {
+    command = spec.command;
+    description = spec.description;
+    group = group_of_id spec.id;
+  }
 
 let palette_entries =
   specs
@@ -298,8 +313,17 @@ let help_line spec =
   Printf.sprintf "  %-38s %s" command spec.description
 
 let help_text () =
+  let groups =
+    List.group specs ~break:(fun left right ->
+        not (String.equal (group_of_id left.id) (group_of_id right.id)))
+  in
+  let group_lines specs =
+    match specs with
+    | [] -> []
+    | first :: _ -> (group_of_id first.id ^ ":") :: List.map specs ~f:help_line
+  in
   String.concat ~sep:"\n"
-    (("Commands:" :: List.map specs ~f:help_line)
+    (("Commands:" :: List.concat_map groups ~f:group_lines)
     @ [
         " Anything else is sent to the agent as a task (context carries across \
          turns).";

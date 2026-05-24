@@ -140,6 +140,7 @@ let move_selection ~event_count ~delta selection =
 type command_entry = Shell_command.entry = {
   command : string;
   description : string;
+  group : string;
 }
 
 let command_palette_entries = Shell_command.palette_entries
@@ -153,7 +154,8 @@ let filter_command_palette_entries ~query entries =
   else
     List.filter entries ~f:(fun entry ->
         let haystack =
-          String.lowercase (entry.command ^ " " ^ entry.description)
+          String.lowercase
+            (entry.group ^ " " ^ entry.command ^ " " ^ entry.description)
         in
         List.for_all terms ~f:(fun term ->
             String.is_substring haystack ~substring:term))
@@ -224,13 +226,25 @@ let command_palette_lines ?(query = "") ~selected entries =
   @
   if List.is_empty entries then [ "  no matching commands" ]
   else
-    List.mapi entries ~f:(fun index entry ->
-        let marker =
-          match selected with
-          | Some selected when index = selected -> "> "
-          | _ -> "  "
-        in
-        Printf.sprintf "%s%-24s %s" marker entry.command entry.description)
+    let rec loop index last_group acc = function
+      | [] -> List.rev acc
+      | entry :: rest ->
+          let marker =
+            match selected with
+            | Some selected when index = selected -> "> "
+            | _ -> "  "
+          in
+          let line =
+            Printf.sprintf "%s%-24s %s" marker entry.command entry.description
+          in
+          let acc =
+            match last_group with
+            | Some group when String.equal group entry.group -> line :: acc
+            | _ -> line :: ("[" ^ entry.group ^ "]") :: acc
+          in
+          loop (index + 1) (Some entry.group) acc rest
+    in
+    loop 0 None [] entries
 
 let approval_prompt_lines tool_call ~reason =
   [
