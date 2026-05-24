@@ -54,6 +54,7 @@ type result = {
   state : t;
   submitted : string option;
   accepted_command : View.command_entry option;
+  dispatched_command : string option;
 }
 
 val create : ?command_count:int -> unit -> t
@@ -81,7 +82,9 @@ val palette_label : t -> string
 val handle : t -> action -> result
 (** Apply one input action. [Submit_prompt] returns the submitted prompt and
     clears the draft when the draft is not empty. [Accept_palette] closes the
-    palette and returns the highlighted command when one is selected. *)
+    palette, returns the highlighted command when one is selected, and either
+    dispatches safe no-arg commands or seeds the prompt draft for commands that
+    require user input. *)
 
 val action_of_input : page_size:int -> t -> input -> action option
 (** Translate abstract terminal input into a shell action. Palette navigation

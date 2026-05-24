@@ -20,6 +20,7 @@ type id =
   | Exit
 
 type entry = { command : string; description : string }
+type acceptance = Execute of string | Draft of string
 
 type spec = {
   id : id;
@@ -27,6 +28,7 @@ type spec = {
   description : string;
   aliases : string list;
   palette : bool;
+  acceptance : acceptance;
 }
 
 type parse_result =
@@ -43,6 +45,7 @@ let specs =
       description = "show this help";
       aliases = [];
       palette = false;
+      acceptance = Execute "/help";
     };
     {
       id = Tools;
@@ -50,6 +53,7 @@ let specs =
       description = "list available tools";
       aliases = [];
       palette = true;
+      acceptance = Execute "/tools";
     };
     {
       id = Tool;
@@ -57,6 +61,7 @@ let specs =
       description = "show tool details/schema";
       aliases = [];
       palette = true;
+      acceptance = Draft "/tool ";
     };
     {
       id = Plugins;
@@ -64,6 +69,7 @@ let specs =
       description = "list discovered plugins";
       aliases = [];
       palette = true;
+      acceptance = Execute "/plugins";
     };
     {
       id = Plugin;
@@ -71,6 +77,7 @@ let specs =
       description = "show plugin manifest/tool details";
       aliases = [];
       palette = true;
+      acceptance = Draft "/plugin ";
     };
     {
       id = Sessions;
@@ -78,6 +85,7 @@ let specs =
       description = "list sessions in this workspace";
       aliases = [];
       palette = true;
+      acceptance = Execute "/sessions";
     };
     {
       id = Tree;
@@ -85,6 +93,7 @@ let specs =
       description = "show the session fork tree";
       aliases = [];
       palette = true;
+      acceptance = Execute "/tree";
     };
     {
       id = Resume;
@@ -92,6 +101,7 @@ let specs =
       description = "switch to a session";
       aliases = [];
       palette = true;
+      acceptance = Draft "/resume ";
     };
     {
       id = Model;
@@ -99,6 +109,7 @@ let specs =
       description = "show or switch the current model";
       aliases = [];
       palette = true;
+      acceptance = Execute "/model";
     };
     {
       id = Models;
@@ -106,6 +117,7 @@ let specs =
       description = "list configured provider models";
       aliases = [];
       palette = true;
+      acceptance = Execute "/models";
     };
     {
       id = Provider;
@@ -113,6 +125,7 @@ let specs =
       description = "switch provider catalog entry";
       aliases = [];
       palette = true;
+      acceptance = Draft "/provider ";
     };
     {
       id = Log;
@@ -120,6 +133,7 @@ let specs =
       description = "list this session's events with indices";
       aliases = [];
       palette = true;
+      acceptance = Execute "/log";
     };
     {
       id = Inspect;
@@ -127,6 +141,7 @@ let specs =
       description = "show inspector details for an event";
       aliases = [];
       palette = true;
+      acceptance = Execute "/inspect";
     };
     {
       id = Fork;
@@ -134,6 +149,7 @@ let specs =
       description = "fork the session";
       aliases = [];
       palette = true;
+      acceptance = Draft "/fork ";
     };
     {
       id = Diff;
@@ -141,6 +157,7 @@ let specs =
       description = "show uncommitted changes";
       aliases = [];
       palette = true;
+      acceptance = Execute "/diff";
     };
     {
       id = Undo;
@@ -148,6 +165,7 @@ let specs =
       description = "revert the last turn's changes";
       aliases = [];
       palette = true;
+      acceptance = Draft "/undo";
     };
     {
       id = Exit;
@@ -155,6 +173,7 @@ let specs =
       description = "leave the REPL";
       aliases = [ "/quit" ];
       palette = false;
+      acceptance = Draft "/exit";
     };
   ]
 
@@ -191,6 +210,13 @@ let find_spec token =
   List.find specs ~f:(fun spec ->
       String.equal token (command_token spec.command)
       || List.exists spec.aliases ~f:(String.equal token))
+
+let accept (entry : entry) =
+  match
+    List.find specs ~f:(fun spec -> String.equal spec.command entry.command)
+  with
+  | None -> Draft entry.command
+  | Some spec -> spec.acceptance
 
 let parse raw =
   let line = String.strip raw in

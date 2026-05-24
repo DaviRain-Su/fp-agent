@@ -18,6 +18,7 @@ type id =
   | Exit
 
 type entry = { command : string; description : string }
+type acceptance = Execute of string | Draft of string
 
 type parse_result =
   | Empty
@@ -30,6 +31,10 @@ val palette_entries : entry list
 
 val help_text : unit -> string
 (** Render REPL help from the same command metadata. *)
+
+val accept : entry -> acceptance
+(** Resolve what accepting a palette entry should do. Safe no-arg commands can
+    execute directly; commands needing user input return a draft prefix. *)
 
 val parse : string -> parse_result
 (** Parse a REPL/TUI command line. Non-command input is returned as [Task]. *)

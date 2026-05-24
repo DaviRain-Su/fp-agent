@@ -63,6 +63,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - REPL slash commands and the TUI command palette are now backed by shared
   command metadata and parser tests. This keeps `/model` vs `/models`, aliases
   like `/quit`, and future command-palette dispatch behavior from drifting.
+- Palette acceptance now has explicit safety semantics: safe no-arg commands
+  can dispatch directly, while commands needing arguments or likely explicit
+  confirmation seed the prompt draft for user completion.
 - The REPL exposes the same inspector through `/inspect [index]`, so event-log
   review works even outside a full-screen TUI and can target historical events.
 - The REPL exposes plugin inspection through `/plugin <id|tool>`, showing

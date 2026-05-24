@@ -96,7 +96,25 @@ let test_palette_input_mapping () =
     (Tui_shell.palette_open result.state);
   Alcotest.(check (option string))
     "enter accepts selected command" (palette_command_at 4)
-    (accepted_command result.accepted_command)
+    (accepted_command result.accepted_command);
+  Alcotest.(check (option string))
+    "enter dispatches no-arg command" (Some "/sessions")
+    result.dispatched_command;
+  Alcotest.(check string)
+    "direct command leaves draft empty" "" result.state.draft.text
+
+let test_palette_accept_draft_mapping () =
+  let state =
+    Tui_shell.create () |> input Tui_shell.Slash |> input Tui_shell.Down
+  in
+  let result = Tui_shell.handle_input ~page_size:3 state Tui_shell.Enter in
+  Alcotest.(check (option string))
+    "accepts tool command" (Some "/tool <name>")
+    (accepted_command result.accepted_command);
+  Alcotest.(check (option string))
+    "draft command does not dispatch" None result.dispatched_command;
+  Alcotest.(check string) "seeds draft" "/tool " result.state.draft.text;
+  Alcotest.(check int) "draft cursor at end" 6 result.state.draft.cursor
 
 let test_event_selection_state () =
   let state = Tui_shell.create () |> Tui_shell.set_event_count 5 in
@@ -172,6 +190,8 @@ let () =
           Alcotest.test_case "palette_state" `Quick test_palette_state;
           Alcotest.test_case "palette_input_mapping" `Quick
             test_palette_input_mapping;
+          Alcotest.test_case "palette_accept_draft_mapping" `Quick
+            test_palette_accept_draft_mapping;
           Alcotest.test_case "event_selection_state" `Quick
             test_event_selection_state;
           Alcotest.test_case "event_input_mapping" `Quick

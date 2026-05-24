@@ -53,6 +53,7 @@ type result = {
   state : t;
   submitted : string option;
   accepted_command : View.command_entry option;
+  dispatched_command : string option;
 }
 
 let create ?command_count () =
@@ -91,7 +92,14 @@ let selection_label t =
 let palette_label t =
   View.palette_label ~command_count:t.command_count t.palette
 
-let no_submit state = { state; submitted = None; accepted_command = None }
+let no_submit state =
+  {
+    state;
+    submitted = None;
+    accepted_command = None;
+    dispatched_command = None;
+  }
+
 let page_delta page_size = Int.max 1 page_size
 let draft_has_text t = not (String.is_empty t.draft.text)
 let command_at index = List.nth View.command_palette_entries index
@@ -113,6 +121,7 @@ let handle_prompt t = function
           state = { t with draft = View.prompt_empty };
           submitted = Some t.draft.text;
           accepted_command = None;
+          dispatched_command = None;
         }
   | _ -> no_submit t
 
@@ -128,12 +137,27 @@ let handle t action =
   | Accept_palette -> (
       match Option.bind (selected_command_index t) ~f:command_at with
       | None -> no_submit { t with palette = View.Palette_closed }
-      | Some command ->
-          {
-            state = { t with palette = View.Palette_closed };
-            submitted = None;
-            accepted_command = Some command;
-          })
+      | Some command -> (
+          match Shell_command.accept command with
+          | Shell_command.Execute line ->
+              {
+                state = { t with palette = View.Palette_closed };
+                submitted = None;
+                accepted_command = Some command;
+                dispatched_command = Some line;
+              }
+          | Shell_command.Draft draft ->
+              {
+                state =
+                  {
+                    t with
+                    palette = View.Palette_closed;
+                    draft = View.prompt_make draft;
+                  };
+                submitted = None;
+                accepted_command = Some command;
+                dispatched_command = None;
+              }))
   | Move_palette delta ->
       no_submit
         {

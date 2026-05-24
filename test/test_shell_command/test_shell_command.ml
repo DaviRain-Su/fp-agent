@@ -13,6 +13,12 @@ let require_command name expected_id expected_args = function
       Alcotest.(check string) (name ^ " args") expected_args actual_args
   | _ -> Alcotest.failf "%s: expected command" name
 
+let require_acceptance name expected = function
+  | Shell_command.Execute line ->
+      Alcotest.(check (pair string string)) name expected ("execute", line)
+  | Shell_command.Draft draft ->
+      Alcotest.(check (pair string string)) name expected ("draft", draft)
+
 let test_parse () =
   Alcotest.(check bool)
     "empty" true
@@ -54,6 +60,23 @@ let test_metadata () =
     "help has task fallback" true
     (String.is_substring help ~substring:"Anything else is sent to the agent")
 
+let test_acceptance () =
+  let entry command =
+    Option.value_exn
+      (List.find Shell_command.palette_entries ~f:(fun entry ->
+           String.equal entry.command command))
+  in
+  require_acceptance "tools execute" ("execute", "/tools")
+    (Shell_command.accept (entry "/tools"));
+  require_acceptance "model execute" ("execute", "/model")
+    (Shell_command.accept (entry "/model [id]"));
+  require_acceptance "tool draft" ("draft", "/tool ")
+    (Shell_command.accept (entry "/tool <name>"));
+  require_acceptance "provider draft" ("draft", "/provider ")
+    (Shell_command.accept (entry "/provider <name> [model] [api-base]"));
+  require_acceptance "undo draft" ("draft", "/undo")
+    (Shell_command.accept (entry "/undo"))
+
 let () =
   Alcotest.run "shell_command"
     [
@@ -61,5 +84,6 @@ let () =
         [
           Alcotest.test_case "parse" `Quick test_parse;
           Alcotest.test_case "metadata" `Quick test_metadata;
+          Alcotest.test_case "acceptance" `Quick test_acceptance;
         ] );
     ]
