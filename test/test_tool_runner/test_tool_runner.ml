@@ -100,6 +100,19 @@ let test_make_dir () =
       let denied = run ws (Tool_call.Make_dir { path = "../escape" }) in
       Alcotest.(check bool) "escape denied" true (is_error denied))
 
+let test_apply_patch () =
+  with_workspace (fun ws _ ->
+      ignore
+        (run ws (Tool_call.Write_file { path = "p.txt"; content = "alpha\n" }));
+      let patch = "--- a/p.txt\n+++ b/p.txt\n@@ -1 +1 @@\n-alpha\n+beta\n" in
+      let r = run ws (Tool_call.Apply_patch { patch }) in
+      Alcotest.(check bool) "patch applied" true (is_success r);
+      let read = run ws (Tool_call.Read_file { path = "p.txt" }) in
+      Alcotest.(check bool)
+        "content patched" true
+        (String.is_substring (output read) ~substring:"beta"
+        && not (String.is_substring (output read) ~substring:"alpha")))
+
 let test_run_command () =
   with_workspace (fun ws _ ->
       let r =
@@ -165,6 +178,7 @@ let () =
           Alcotest.test_case "list_files" `Quick test_list_files;
           Alcotest.test_case "search" `Quick test_search;
           Alcotest.test_case "make_dir" `Quick test_make_dir;
+          Alcotest.test_case "apply_patch" `Quick test_apply_patch;
           Alcotest.test_case "run_command" `Quick test_run_command;
           Alcotest.test_case "policy_denied" `Quick test_policy_denied;
         ] );

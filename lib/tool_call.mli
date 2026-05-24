@@ -6,6 +6,7 @@ type t =
   | List_files of { path : string }
   | Search of { query : string; path : string option }
   | Make_dir of { path : string }
+  | Apply_patch of { patch : string }
 
 val yojson_of_t : t -> Yojson.Safe.t
 val t_of_yojson : Yojson.Safe.t -> t

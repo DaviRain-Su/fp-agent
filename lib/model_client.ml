@@ -18,6 +18,7 @@ Available tools and their args:
 - list_files  {"path": string}
 - search      {"query": string, "path": string (optional)}   (substring search across workspace files)
 - make_dir    {"path": string}
+- apply_patch {"patch": string}   (a unified diff applied with git apply)
 
 When the task is complete, finish with:
 {"action":"final_answer","summary": string, "details": string (optional)}
@@ -79,6 +80,9 @@ let build_tool tool args : (Tool_call.t, string) Result.t =
   | "make_dir" ->
       Result.map (get_string args "path") ~f:(fun path ->
           Tool_call.Make_dir { path })
+  | "apply_patch" ->
+      Result.map (get_string args "patch") ~f:(fun patch ->
+          Tool_call.Apply_patch { patch })
   | other -> Error ("unknown tool: " ^ other)
 
 let tool_names =

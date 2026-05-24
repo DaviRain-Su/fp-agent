@@ -9,6 +9,7 @@ type t =
   | List_files of { path : string }
   | Search of { query : string; path : string option }
   | Make_dir of { path : string }
+  | Apply_patch of { patch : string }
 [@@deriving yojson_of, of_yojson]
 
 let to_yojson = yojson_of_t

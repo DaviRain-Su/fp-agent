@@ -163,6 +163,33 @@ let exec_make_dir ws path =
         Tool_result.Success { output = "created directory " ^ path }
       with exn -> err (Exn.to_string exn))
 
+(* Apply a unified diff with `git apply`, which itself refuses paths that
+   escape the tree, run with the workspace as its working directory. *)
+let exec_apply_patch ws patch =
+  let root = Workspace.root ws in
+  let tmp = Stdlib.Filename.temp_file "fp_agent_patch" ".diff" in
+  let cleanup () = try Unix.unlink tmp with Unix.Unix_error _ -> () in
+  match write_file tmp patch with
+  | Error e ->
+      cleanup ();
+      err e
+  | Ok _ -> (
+      let cmd =
+        Printf.sprintf "git -C %s apply --whitespace=nowarn %s"
+          (Stdlib.Filename.quote root)
+          (Stdlib.Filename.quote tmp)
+      in
+      let result = Shell.run ~command:cmd ~timeout_sec:default_timeout_sec in
+      cleanup ();
+      match result with
+      | Error e -> err e
+      | Ok { exit_code = 0; _ } ->
+          Tool_result.Success { output = "patch applied" }
+      | Ok { stderr; exit_code; _ } ->
+          err
+            (Printf.sprintf "git apply failed (exit %d): %s" exit_code
+               (truncate stderr)))
+
 let execute ws (tool_call : Tool_call.t) =
   match tool_call with
   | Read_file { path } -> exec_read_file ws path
@@ -173,6 +200,7 @@ let execute ws (tool_call : Tool_call.t) =
   | Run_command { command; cwd } -> exec_run_command ws command cwd
   | Search { query; path } -> exec_search ws query path
   | Make_dir { path } -> exec_make_dir ws path
+  | Apply_patch { patch } -> exec_apply_patch ws patch
 
 let run ~workspace ~tool_call =
   match Policy.check ~workspace ~tool_call with
