@@ -244,6 +244,71 @@ let test_auto_compaction_preserves_summary () =
         "log has compaction event" true
         (String.is_substring contents ~substring:"Context_compacted"))
 
+let test_code_review_task_adds_system_guidance_without_rewriting_user_event () =
+  with_env (fun config workspace event_log session_dir ->
+      let captured_system = ref "" in
+      let captured_turns = ref [] in
+      let client =
+        Model_client.create_mock_with_request
+          ~send:(fun ~system ~tools_enabled turns ->
+            Alcotest.(check bool) "tools enabled" true tools_enabled;
+            captured_system := system;
+            captured_turns := turns;
+            Lwt.return (Ok ([ Llm.Text "reviewed" ], Llm.zero_usage)))
+      in
+      let outcome =
+        run config workspace event_log client "code review this change"
+      in
+      Alcotest.(check string)
+        "status completed" "completed"
+        (Agent_loop.status_to_string outcome.status);
+      Alcotest.(check bool)
+        "system has review guidance" true
+        (String.is_substring !captured_system ~substring:"Code review mode");
+      Alcotest.(check bool)
+        "system asks for diff stat" true
+        (String.is_substring !captured_system ~substring:"git diff --stat");
+      (match !captured_turns with
+      | [
+       { Llm.role = Llm.User; content = [ Llm.Text content ] };
+       { Llm.role = Llm.User; content = [ Llm.Text preflight ] };
+      ] ->
+          Alcotest.(check string)
+            "model sees original user task" "code review this change" content;
+          Alcotest.(check bool)
+            "model sees review preflight" true
+            (String.is_substring preflight ~substring:"[Code review preflight]")
+      | turns ->
+          Alcotest.failf "unexpected turns: %s"
+            (Yojson.Safe.to_string (`List (List.map turns ~f:Llm.turn_to_json))));
+      let log_path = Stdlib.Filename.concat session_dir "events.jsonl" in
+      let contents =
+        Stdlib.In_channel.with_open_bin log_path Stdlib.In_channel.input_all
+      in
+      Alcotest.(check bool)
+        "log has original task" true
+        (String.is_substring contents ~substring:"code review this change");
+      Alcotest.(check bool)
+        "log omits review guidance" false
+        (String.is_substring contents ~substring:"Code review mode"))
+
+let test_regular_task_uses_base_system_prompt () =
+  with_env (fun config workspace event_log _ ->
+      let captured_system = ref "" in
+      let client =
+        Model_client.create_mock_with_request
+          ~send:(fun ~system ~tools_enabled:_ _turns ->
+            captured_system := system;
+            Lwt.return (Ok ([ Llm.Text "done" ], Llm.zero_usage)))
+      in
+      let outcome = run config workspace event_log client "add a feature" in
+      Alcotest.(check string)
+        "status completed" "completed"
+        (Agent_loop.status_to_string outcome.status);
+      Alcotest.(check bool)
+        "regular task has no review guidance" false
+        (String.is_substring !captured_system ~substring:"Code review mode"))
+
 let test_max_steps () =
   with_env (fun config workspace event_log _ ->
       let config = { config with Config.max_steps = 3 } in
@@ -261,9 +326,9 @@ let test_max_steps_requests_final_answer_without_tools () =
   with_env (fun config workspace event_log _ ->
       let config = { config with Config.max_steps = 1 } in
       let saw_finalization = ref false in
+      let saw_review_nudge = ref false in
       let client =
-        Model_client.create_mock_with_options
-          ~send:(fun ~tools_enabled _turns ->
+        Model_client.create_mock_with_options ~send:(fun ~tools_enabled turns ->
             if tools_enabled then
               Lwt.return
                 (Ok
@@ -271,15 +336,87 @@ let test_max_steps_requests_final_answer_without_tools () =
                       (Model_action.Tool_call (Tool_call.list_files "."))))
             else (
               saw_finalization := true;
+              saw_review_nudge :=
+                List.exists turns ~f:(fun (turn : Llm.turn) ->
+                    List.exists turn.content ~f:(function
+                      | Llm.Text text ->
+                          String.is_substring text
+                            ~substring:"Review budget exhausted"
+                      | _ -> false));
               Lwt.return (Ok ([ Llm.Text "review summary" ], Llm.zero_usage))))
       in
       let outcome = run config workspace event_log client "review" in
       Alcotest.(check string)
-        "status completed" "completed"
+        "status max_steps" "max_steps_reached"
         (Agent_loop.status_to_string outcome.status);
       Alcotest.(check string) "summary" "review summary" outcome.summary;
       Alcotest.(check bool)
-        "tools disabled for finalization" true !saw_finalization)
+        "tools disabled for finalization" true !saw_finalization;
+      Alcotest.(check bool) "uses review nudge" true !saw_review_nudge)
+
+let test_review_task_injects_preflight () =
+  with_env (fun config workspace event_log _ ->
+      let saw_preflight = ref false in
+      let client =
+        Model_client.create_mock ~send:(fun turns ->
+            saw_preflight :=
+              List.exists turns ~f:(fun (turn : Llm.turn) ->
+                  List.exists turn.content ~f:(function
+                    | Llm.Text text ->
+                        String.is_substring text
+                          ~substring:"[Code review preflight]"
+                    | _ -> false));
+            Lwt.return
+              (Ok
+                 ( [ Llm.Text "Findings\nNo findings.\n\nTests run: not run." ],
+                   Llm.zero_usage )))
+      in
+      let outcome =
+        run config workspace event_log client "code review for this project"
+      in
+      Alcotest.(check string)
+        "status completed" "completed"
+        (Agent_loop.status_to_string outcome.status);
+      Alcotest.(check bool) "preflight sent to model" true !saw_preflight)
+
+let test_review_rejects_onboarding_answer () =
+  with_env (fun config workspace event_log _ ->
+      let calls = ref 0 in
+      let client =
+        Model_client.create_mock ~send:(fun _turns ->
+            Int.incr calls;
+            if !calls = 1 then
+              Lwt.return
+                (Ok
+                   ( [
+                       Llm.Text
+                         "## Codebase Onboarding Document\n\n\
+                          ### 1. High-Level Architecture\n\
+                          ...";
+                     ],
+                     Llm.zero_usage ))
+            else
+              Lwt.return
+                (Ok
+                   ( [
+                       Llm.Text
+                         "Findings\n\
+                          No findings.\n\n\
+                          Tests run: not run.\n\n\
+                          Residual risks: none.";
+                     ],
+                     Llm.zero_usage )))
+      in
+      let outcome =
+        run config workspace event_log client "code review for this project"
+      in
+      Alcotest.(check int) "bad answer retried" 2 !calls;
+      Alcotest.(check string)
+        "status completed" "completed"
+        (Agent_loop.status_to_string outcome.status);
+      Alcotest.(check bool)
+        "final summary is review" true
+        (String.is_substring outcome.summary ~substring:"Findings"))
 
 let test_model_error () =
   with_env (fun config workspace event_log _ ->
@@ -303,9 +440,17 @@ let () =
             test_history_truncation_keeps_tool_exchange_atomic;
           Alcotest.test_case "auto_compaction" `Quick
             test_auto_compaction_preserves_summary;
+          Alcotest.test_case "code_review_guidance" `Quick
+            test_code_review_task_adds_system_guidance_without_rewriting_user_event;
+          Alcotest.test_case "regular_task_system" `Quick
+            test_regular_task_uses_base_system_prompt;
           Alcotest.test_case "max_steps" `Quick test_max_steps;
           Alcotest.test_case "max_steps_finalizes" `Quick
             test_max_steps_requests_final_answer_without_tools;
+          Alcotest.test_case "review_preflight" `Quick
+            test_review_task_injects_preflight;
+          Alcotest.test_case "review_rejects_onboarding" `Quick
+            test_review_rejects_onboarding_answer;
           Alcotest.test_case "model_error" `Quick test_model_error;
           Alcotest.test_case "approval_denied" `Quick test_approval_denied;
           Alcotest.test_case "approval_granted" `Quick test_approval_granted;

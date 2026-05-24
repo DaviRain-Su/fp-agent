@@ -72,6 +72,11 @@ dune exec -- fp-agent
 Each turn replays the session's event log as context, so the agent remembers
 earlier turns. Meta-commands start with `/`; anything else is a task.
 
+Code review requests get a review-specific system instruction: the agent starts
+from `git status --short` and `git diff --stat`, inspects changed files and
+related code, and reports concise findings with evidence. The original user
+request remains unchanged in the event log for audit and resume.
+
 ### Plugins
 
 Third-party tools can be added as plugin directories with a

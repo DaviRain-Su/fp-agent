@@ -19,6 +19,16 @@ val create_mock_with_options :
   t
 (** Mock client that can observe request options. *)
 
+val create_mock_with_request :
+  send:
+    (system:string ->
+    tools_enabled:bool ->
+    Llm.turn list ->
+    (Llm.content list * Llm.usage, string) result Lwt.t) ->
+  t
+(** Mock client that can observe the system prompt, request options, and turns.
+*)
+
 val send :
   ?on_delta:(string -> unit) ->
   ?tools_enabled:bool ->

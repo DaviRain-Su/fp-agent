@@ -9,6 +9,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   resume, fork, replay, and audit remain first-class instead of bolted on.
 - Native tool transparency: show model text, tool calls, policy decisions,
   parallel batches, usage, and compaction as separate timeline events.
+- Review mode: code-review requests should bias the model toward diff-first,
+  evidence-grounded findings while preserving the original user request in the
+  event log.
 - Plugin-first surface: `/tools` and `/plugins` should make third-party
   capabilities visible, inspectable, and approval-aware.
 - Local-first control: provider/model switching, custom endpoints, and bounded
@@ -39,6 +42,8 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   to the live run.
 - The REPL exposes the same inspector through `/inspect [index]`, so event-log
   review works even outside a full-screen TUI and can target historical events.
+- Code-review tasks add review-specific system guidance without rewriting the
+  logged user event, preserving audit and replay fidelity.
 - CLI regression tests cover plugin lifecycle commands, REPL plugin/tool
   discovery, custom provider model listing/switching, and `--confirm --tui`
   rejection.

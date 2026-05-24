@@ -7,11 +7,74 @@ let max_parse_retries = 2
 let max_history_chars = 60_000
 let compact_threshold_chars = max_history_chars * 3 / 4
 let compact_keep_recent_chunks = 6
+let review_max_steps = 14
 
 let final_answer_nudge =
   "Tool budget exhausted. Do not call any more tools. Provide your best final \
    answer now based only on the context and tool observations already \
    available. If you use the fallback JSON format, return final_answer."
+
+let is_code_review_task task =
+  let s = String.lowercase task in
+  String.is_substring s ~substring:"code review"
+  || String.equal (String.strip s) "review"
+  || String.is_substring s ~substring:"review this"
+  || String.is_substring s ~substring:"review the"
+  || String.is_substring s ~substring:"review my"
+  || String.is_substring s ~substring:"review for"
+  || String.is_substring s ~substring:"审查"
+  || String.is_substring s ~substring:"代码 review"
+
+let review_task_guidance =
+  "Code review mode: find correctness, safety, regression, and maintainability \
+   issues in the current changes. Do not produce an architecture overview as \
+   the final answer. Start by inspecting git status --short and git diff \
+   --stat. Then inspect only changed files/diffs and directly related code. \
+   Prefer git diff <path> over reading whole files. Batch independent \
+   read-only commands when possible. Stop once you have enough evidence; final \
+   output must be a concise findings list with severity, file path/line \
+   evidence, tests run, and any residual risks. If there are no findings, say \
+   so and cite what you checked."
+
+let system_for_task task =
+  if is_code_review_task task then
+    Model_client.system_prompt ^ "\n\n" ^ review_task_guidance
+  else Model_client.system_prompt
+
+let review_final_answer_nudge =
+  "Review budget exhausted. Do not call any more tools. Produce a code review \
+   now, not an onboarding document or architecture overview. Use this format: \
+   Findings; Tests run; Residual risks. Each finding must include severity, \
+   file/path evidence, and a concrete reason. If there are no findings, say no \
+   findings and list the diffs/files checked."
+
+let bad_review_answer answer =
+  let s = String.lowercase answer in
+  (String.is_substring s ~substring:"codebase onboarding document"
+  || String.is_substring s ~substring:"high-level architecture"
+  || String.is_substring s ~substring:"repository layout")
+  && not (String.is_substring s ~substring:"finding")
+
+let review_preflight workspace =
+  let root = Workspace.root workspace in
+  let command =
+    Printf.sprintf
+      "cd %s && echo '--- git status --short ---' && git status --short && \
+       echo '--- git diff --stat ---' && git diff --stat && echo '--- git diff \
+       --cached --stat ---' && git diff --cached --stat"
+      (Stdlib.Filename.quote root)
+  in
+  match Shell.run ~command ~timeout_sec:10 with
+  | Error e -> "[Code review preflight failed]\n" ^ e
+  | Ok { stdout; stderr; exit_code } ->
+      Printf.sprintf
+        "[Code review preflight]\n\
+         exit_code=%d\n\
+         %s%s\n\n\
+         Use this preflight to scope the review. Inspect changed diffs next; \
+         do not write an architecture overview."
+        exit_code stdout
+        (if String.is_empty stderr then "" else "\n--- stderr ---\n" ^ stderr)
 
 let status_to_string = function
   | Completed -> "completed"
@@ -186,7 +249,15 @@ let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
     in
     emit (Event.State_transition { from_state; to_state })
   in
-  let system = Model_client.system_prompt in
+  let review_task = is_code_review_task task in
+  let system = system_for_task task in
+  let effective_max_steps =
+    if review_task then Int.min config.max_steps review_max_steps
+    else config.max_steps
+  in
+  let final_nudge =
+    if review_task then review_final_answer_nudge else final_answer_nudge
+  in
   let turns () = truncate_history (Session_state.turns !st) in
   let emit_delta content =
     if not (String.is_empty content) then
@@ -206,13 +277,15 @@ let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
             Lwt.return_unit)
   in
   emit (Event.User_message { content = task });
+  if review_task then
+    emit (Event.User_message { content = review_preflight workspace });
   goto Agent_state.Waiting_for_model;
   let finish status summary steps = Lwt.return { status; summary; steps } in
   let rec step n =
-    if n > config.max_steps then finalize_after_tool_budget ()
+    if n > effective_max_steps then finalize_after_tool_budget ()
     else send_with_retry 0 n
   and finalize_after_tool_budget () =
-    emit (Event.User_message { content = final_answer_nudge });
+    emit (Event.User_message { content = final_nudge });
     Lwt.bind
       (Model_client.send model_client ~on_delta:emit_delta ~tools_enabled:false
          ~system ~turns:(turns ()))
@@ -228,7 +301,7 @@ let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
             match Llm.final_text content with
             | Some answer ->
                 goto Agent_state.Completed;
-                finish Completed answer (Session_state.steps !st)
+                finish Max_steps_reached answer (Session_state.steps !st)
             | None ->
                 goto Agent_state.Failed;
                 finish Max_steps_reached
@@ -328,6 +401,19 @@ let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
     | _ :: _ as calls -> execute_batch calls
     | [] -> (
         match Llm.final_text content with
+        | Some answer when review_task && bad_review_answer answer ->
+            emit
+              (Event.User_message
+                 {
+                   content =
+                     "That response is not a code review. Do not provide an \
+                      onboarding document, architecture summary, repository \
+                      layout, or API overview. Produce only code-review \
+                      findings with severity, file/path evidence, tests run, \
+                      and residual risks. If there are no findings, say no \
+                      findings and cite the exact diffs/files checked.";
+                 });
+            step (n + 1)
         | Some answer ->
             goto Agent_state.Completed;
             finish Completed answer n

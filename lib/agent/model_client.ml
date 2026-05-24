@@ -1016,6 +1016,13 @@ let create_mock_with_options ~send =
         send ~tools_enabled turns);
   }
 
+let create_mock_with_request ~send =
+  {
+    send =
+      (fun ~on_delta:_ ~system ~tools_enabled turns ->
+        send ~system ~tools_enabled turns);
+  }
+
 let send ?(on_delta = fun _ -> ()) ?(tools_enabled = true) ~system t ~turns =
   t.send ~on_delta ~system ~tools_enabled turns
 
