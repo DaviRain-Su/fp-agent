@@ -20,7 +20,7 @@ let test_reconstruct () =
       Event_log.append log
         (Event.Tool_result (Tool_result.Success { output = "contents" }));
       Event_log.close log;
-      match Transcript.of_session ~session_dir with
+      match Transcript.messages_of_session ~session_dir with
       | Error e -> Alcotest.failf "reconstruct failed: %s" e
       | Ok messages ->
           Alcotest.(check int)

@@ -32,16 +32,28 @@ let with_env f =
         (Shell.run ~command:(Printf.sprintf "rm -rf %s" root) ~timeout_sec:10
           : (Shell.result, string) Result.t))
 
-(* A mock that returns a scripted sequence of actions, one per call. *)
+let content_of_action = function
+  | Model_action.Final_answer { answer } -> [ Llm.Text answer ]
+  | Tool_call tc ->
+      [ Llm.Tool_use { id = "call-0"; name = tc.name; input = tc.args } ]
+  | Tool_calls calls ->
+      List.mapi calls ~f:(fun i (tc : Tool_call.t) ->
+          Llm.Tool_use
+            { id = Printf.sprintf "call-%d" i; name = tc.name; input = tc.args })
+
+let response action = (content_of_action action, Llm.zero_usage)
+
+(* A mock that returns a scripted sequence of responses, one per call. *)
 let scripted actions =
-  let remaining = ref actions in
-  Model_client.create_mock ~send:(fun _messages ->
+  let remaining = ref (List.map actions ~f:response) in
+  Model_client.create_mock ~send:(fun _turns ->
       match !remaining with
       | a :: tl ->
           remaining := tl;
           Lwt.return (Ok a)
       | [] ->
-          Lwt.return (Ok (Model_action.Final_answer { answer = "exhausted" })))
+          Lwt.return
+            (Ok (response (Model_action.Final_answer { answer = "exhausted" }))))
 
 let run config workspace event_log client task =
   Lwt_main.run
@@ -152,14 +164,17 @@ let test_parallel_tool_batch_then_final () =
         |> List.length
       in
       Alcotest.(check int) "two tool call events" 2 (count "\"Tool_call\"");
-      Alcotest.(check int) "two tool result events" 2 (count "\"Tool_result\""))
+      Alcotest.(check int)
+        "two tool result events" 2
+        (count "\"Tool_result_message\""))
 
 let test_max_steps () =
   with_env (fun config workspace event_log _ ->
       let config = { config with Config.max_steps = 3 } in
       let client =
         Model_client.create_mock ~send:(fun _ ->
-            Lwt.return (Ok (Model_action.Tool_call (Tool_call.list_files "."))))
+            Lwt.return
+              (Ok (response (Model_action.Tool_call (Tool_call.list_files ".")))))
       in
       let outcome = run config workspace event_log client "loop forever" in
       Alcotest.(check string)

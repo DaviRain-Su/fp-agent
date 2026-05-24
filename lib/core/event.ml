@@ -4,9 +4,11 @@ open Ppx_yojson_conv_lib.Yojson_conv.Primitives
 type t =
   | User_message of { content : string }
   | Model_delta of { content : string }
+  | Assistant_message of { content : Llm.content list; usage : Llm.usage }
   | Model_response of { action : Model_action.t }
   | Policy_decision of { tool_call : Tool_call.t; permission : Permission.t }
   | Tool_call of Tool_call.t
+  | Tool_result_message of { id : string; result : Tool_result.t }
   | Tool_result of Tool_result.t
   | Graph_event of Graph_event.t
   | State_transition of { from_state : Agent_state.t; to_state : Agent_state.t }
@@ -39,6 +41,10 @@ let first_line s =
 let to_display (t : t) =
   match t with
   | Tool_call tc -> Some ("→ " ^ describe_tool tc)
+  | Tool_result_message { result = Success { output }; _ } ->
+      Some ("  ✓ " ^ first_line output)
+  | Tool_result_message { result = Error { message }; _ } ->
+      Some ("  ✗ " ^ first_line message)
   | Tool_result (Success { output }) -> Some ("  ✓ " ^ first_line output)
   | Tool_result (Error { message }) -> Some ("  ✗ " ^ first_line message)
   | Graph_event event -> Some ("graph: " ^ Graph_event.describe event)
@@ -46,6 +52,6 @@ let to_display (t : t) =
       Some ("  ✗ policy denied: " ^ reason)
   | Policy_decision { permission = Permission.Ask_user reason; _ } ->
       Some ("  ? needs approval: " ^ reason)
-  | User_message _ | Model_delta _ | Model_response _ | Policy_decision _
-  | State_transition _ ->
+  | User_message _ | Model_delta _ | Assistant_message _ | Model_response _
+  | Policy_decision _ | State_transition _ ->
       None

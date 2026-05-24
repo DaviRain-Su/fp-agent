@@ -8,6 +8,17 @@ open Fp_agent
 let read_file path =
   Stdlib.In_channel.with_open_bin path Stdlib.In_channel.input_all
 
+let content_of_action = function
+  | Model_action.Final_answer { answer } -> [ Llm.Text answer ]
+  | Tool_call tc ->
+      [ Llm.Tool_use { id = "call-0"; name = tc.name; input = tc.args } ]
+  | Tool_calls calls ->
+      List.mapi calls ~f:(fun i (tc : Tool_call.t) ->
+          Llm.Tool_use
+            { id = Printf.sprintf "call-%d" i; name = tc.name; input = tc.args })
+
+let response action = (content_of_action action, Llm.zero_usage)
+
 let test_edit_readme_e2e () =
   let root = Stdlib.Filename.temp_dir "fp_agent_e2e" "" in
   Exn.protect
@@ -55,7 +66,7 @@ let test_edit_readme_e2e () =
             match !actions with
             | a :: tl ->
                 actions := tl;
-                Lwt.return (Ok a)
+                Lwt.return (Ok (response a))
             | [] -> Alcotest.fail "model called more times than scripted")
       in
       let outcome =

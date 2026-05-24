@@ -7,14 +7,16 @@ val create : config:Config.t -> t
 (** Real HTTP client backed by [cohttp-lwt-unix]. *)
 
 val create_mock :
-  send:(Message.t list -> (Model_action.t, string) result Lwt.t) -> t
+  send:(Llm.turn list -> (Llm.content list * Llm.usage, string) result Lwt.t) ->
+  t
 (** Mock client driven by a caller-supplied [send] function. *)
 
 val send :
   ?on_delta:(string -> unit) ->
+  system:string ->
   t ->
-  messages:Message.t list ->
-  (Model_action.t, string) result Lwt.t
+  turns:Llm.turn list ->
+  (Llm.content list * Llm.usage, string) result Lwt.t
 (** Send the conversation and parse the next model action. [on_delta] is called
     with streamed assistant text chunks when the provider emits text deltas
     before the final parsed action is available. *)
@@ -27,6 +29,18 @@ val parse_action : string -> (Model_action.t, string) result
     for testing; tolerates accidental markdown code fences. *)
 
 val request_body_for_test :
-  config:Config.t -> messages:Message.t list -> Yojson.Safe.t
+  config:Config.t -> system:string -> turns:Llm.turn list -> Yojson.Safe.t
 (** Build the provider request JSON body without sending it. Exposed for
     request-shape tests. *)
+
+val request_headers_for_test :
+  config:Config.t ->
+  system:string ->
+  turns:Llm.turn list ->
+  (string * string) list
+
+val openai_complete_for_test :
+  string list -> (Llm.content list * Llm.usage, string) result
+
+val anthropic_complete_for_test :
+  string list -> (Llm.content list * Llm.usage, string) result

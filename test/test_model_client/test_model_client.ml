@@ -234,16 +234,106 @@ let test_parse_unknown_action () =
 
 let test_mock_client () =
   let client =
-    Model_client.create_mock ~send:(fun _messages ->
-        Lwt.return (Ok (Model_action.Final_answer { answer = "mocked" })))
+    Model_client.create_mock ~send:(fun _turns ->
+        Lwt.return (Ok ([ Llm.Text "mocked" ], Llm.zero_usage)))
   in
   let result =
-    Lwt_main.run (Model_client.send client ~messages:[ Message.user "hi" ])
+    Lwt_main.run
+      (Model_client.send client ~system:"sys" ~turns:[ Llm.user "hi" ])
   in
   match result with
-  | Ok (Model_action.Final_answer { answer }) ->
+  | Ok ([ Llm.Text answer ], _) ->
       Alcotest.(check string) "mock answer" "mocked" answer
   | _ -> Alcotest.fail "mock did not return final answer"
+
+let test_streaming_tool_ids () =
+  let openai_payloads =
+    [
+      {|{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_openai","function":{"name":"read_file","arguments":"{\"path\""}}]}}]}|};
+      {|{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":":\"README.md\"}"}}]}}]}|};
+      {|{"usage":{"prompt_tokens":11,"completion_tokens":5},"choices":[]}|};
+    ]
+  in
+  (match Model_client.openai_complete_for_test openai_payloads with
+  | Ok ([ Llm.Tool_use { id; name; input } ], usage) ->
+      Alcotest.(check string) "openai id" "call_openai" id;
+      Alcotest.(check string) "openai name" "read_file" name;
+      Alcotest.(check (option string))
+        "openai path" (Some "README.md")
+        (match Yojson.Safe.Util.member "path" input with
+        | `String s -> Some s
+        | _ -> None);
+      Alcotest.(check int) "openai input tokens" 11 usage.input_tokens;
+      Alcotest.(check int) "openai output tokens" 5 usage.output_tokens
+  | Ok _ -> Alcotest.fail "expected one openai tool_use"
+  | Error e -> Alcotest.failf "openai complete failed: %s" e);
+  let anthropic_payloads =
+    [
+      {|{"type":"message_start","message":{"usage":{"input_tokens":7,"output_tokens":1}}}|};
+      {|{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"call_anthropic","name":"list_files"}}|};
+      {|{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\"path\":\"lib\"}"}}|};
+      {|{"type":"content_block_stop","index":0}|};
+      {|{"type":"message_delta","usage":{"output_tokens":3}}|};
+    ]
+  in
+  match Model_client.anthropic_complete_for_test anthropic_payloads with
+  | Ok ([ Llm.Tool_use { id; name; input } ], usage) ->
+      Alcotest.(check string) "anthropic id" "call_anthropic" id;
+      Alcotest.(check string) "anthropic name" "list_files" name;
+      Alcotest.(check (option string))
+        "anthropic path" (Some "lib")
+        (match Yojson.Safe.Util.member "path" input with
+        | `String s -> Some s
+        | _ -> None);
+      Alcotest.(check int) "anthropic input tokens" 7 usage.input_tokens;
+      Alcotest.(check int) "anthropic output tokens" 3 usage.output_tokens
+  | Ok _ -> Alcotest.fail "expected one anthropic tool_use"
+  | Error e -> Alcotest.failf "anthropic complete failed: %s" e
+
+let test_request_preserves_tool_result_ids () =
+  let config =
+    {
+      Config.provider = "test";
+      api_key = "k";
+      api_base = "http://localhost/v1";
+      model = "m";
+      models = [ "m" ];
+      protocol = Provider.Openai;
+      compat = Config.default_compat;
+      max_tokens = None;
+      max_steps = 1;
+      workspace_root = ".";
+    }
+  in
+  let turns =
+    [
+      Llm.assistant
+        [
+          Llm.Tool_use
+            {
+              id = "call_keep";
+              name = "read_file";
+              input = `Assoc [ ("path", `String "README.md") ];
+            };
+        ];
+      {
+        Llm.role = Llm.User;
+        content = [ Llm.Tool_result { id = "call_keep"; content = "ok" } ];
+      };
+    ]
+  in
+  let body = Model_client.request_body_for_test ~config ~system:"sys" ~turns in
+  let open Yojson.Safe.Util in
+  let messages = body |> member "messages" |> to_list in
+  let assistant = List.nth_exn messages 1 in
+  let tool_msg = List.nth_exn messages 2 in
+  let tool_call = assistant |> member "tool_calls" |> to_list |> List.hd_exn in
+  Alcotest.(check string)
+    "assistant tool id" "call_keep"
+    (tool_call |> member "id" |> to_string);
+  Alcotest.(check string)
+    "tool result id" "call_keep"
+    (tool_msg |> member "tool_call_id" |> to_string)
 
 let test_config_providers () =
   Unix.putenv "KIMI_API_KEY" "kimi-secret";
@@ -262,7 +352,19 @@ let test_config_providers () =
       Alcotest.(check bool)
         "kimi uses anthropic protocol" true
         (match cfg.protocol with Provider.Anthropic -> true | _ -> false);
-      Alcotest.(check string) "kimi key" "kimi-secret" cfg.api_key
+      Alcotest.(check string) "kimi key" "kimi-secret" cfg.api_key;
+      let headers =
+        Model_client.request_headers_for_test ~config:cfg ~system:"sys"
+          ~turns:[ Llm.user "hi" ]
+      in
+      let header name =
+        List.Assoc.find headers name ~equal:(fun a b ->
+            String.equal (String.lowercase a) (String.lowercase b))
+      in
+      Alcotest.(check (option string))
+        "kimi x-api-key" (Some "kimi-secret") (header "x-api-key");
+      Alcotest.(check (option string))
+        "kimi user-agent" (Some "KimiCLI/1.5") (header "user-agent")
   | Error e -> Alcotest.failf "kimi load: %s" e);
   (match Config.load ~provider:"deepseek" () with
   | Ok cfg ->
@@ -321,8 +423,8 @@ let test_config_providers () =
         [ "qwen36-rtx"; "qwen-coder" ]
         cfg.models;
       let body =
-        Model_client.request_body_for_test ~config:cfg
-          ~messages:[ Message.system "sys"; Message.user "hi" ]
+        Model_client.request_body_for_test ~config:cfg ~system:"sys"
+          ~turns:[ Llm.user "hi" ]
       in
       let member = Yojson.Safe.Util.member in
       Alcotest.(check bool)
@@ -421,5 +523,11 @@ let () =
           Alcotest.test_case "unknown_action" `Quick test_parse_unknown_action;
         ] );
       ("client", [ Alcotest.test_case "mock" `Quick test_mock_client ]);
+      ( "provider_blocks",
+        [
+          Alcotest.test_case "streaming_tool_ids" `Quick test_streaming_tool_ids;
+          Alcotest.test_case "request_preserves_tool_result_ids" `Quick
+            test_request_preserves_tool_result_ids;
+        ] );
       ("config", [ Alcotest.test_case "providers" `Quick test_config_providers ]);
     ]

@@ -11,16 +11,29 @@ let status_to_string = function
   | Failed -> "failed"
   | Max_steps_reached -> "max_steps_reached"
 
-(* Keep the system prompt plus the most recent messages that fit the budget, so
+(* Keep the most recent turns that fit the budget, so
    long sessions do not blow the context window. *)
-let truncate_history ~system messages =
+let turn_cost (turn : Llm.turn) =
+  let content_cost = function
+    | Llm.Text s -> String.length s
+    | Llm.Thinking { text; signature } ->
+        String.length text + String.length signature
+    | Llm.Tool_use { name; input; id } ->
+        String.length id + String.length name
+        + String.length (Yojson.Safe.to_string input)
+    | Llm.Tool_result { id; content } ->
+        String.length id + String.length content
+  in
+  List.sum (module Int) turn.content ~f:content_cost + 16
+
+let truncate_history turns =
   let rec take acc budget = function
     | [] -> acc
-    | (m : Message.t) :: tl ->
-        let cost = String.length m.content + 16 in
-        if budget - cost < 0 then acc else take (m :: acc) (budget - cost) tl
+    | turn :: tl ->
+        let cost = turn_cost turn in
+        if budget - cost < 0 then acc else take (turn :: acc) (budget - cost) tl
   in
-  system :: take [] max_history_chars (List.rev messages)
+  take [] max_history_chars (List.rev turns)
 
 let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
     ?(on_approval = fun _ _ -> Lwt.return false) ?(initial_history = [])
@@ -28,7 +41,7 @@ let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
     ~task () =
   (* Single source of truth: live state is the fold of the events we emit, so
      it is identical by construction to replaying the log (resume/fork). *)
-  let st = ref { Session_state.empty with messages = initial_history } in
+  let st = ref { Session_state.empty with turns = initial_history } in
   let emit event =
     Event_log.append event_log event;
     on_event event;
@@ -43,8 +56,8 @@ let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
     in
     emit (Event.State_transition { from_state; to_state })
   in
-  let system = Message.system Model_client.system_prompt in
-  let messages () = truncate_history ~system (Session_state.messages !st) in
+  let system = Model_client.system_prompt in
+  let turns () = truncate_history (Session_state.turns !st) in
   let emit_delta content =
     if not (String.is_empty content) then
       on_event (Event.Model_delta { content })
@@ -60,8 +73,8 @@ let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
     else send_with_retry 0 n
   and send_with_retry retries n =
     Lwt.bind
-      (Model_client.send model_client ~on_delta:emit_delta
-         ~messages:(messages ()))
+      (Model_client.send model_client ~on_delta:emit_delta ~system
+         ~turns:(turns ()))
       (fun result ->
         match result with
         | Error e ->
@@ -81,11 +94,10 @@ let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
             else (
               goto Agent_state.Failed;
               finish Failed ("model interaction failed: " ^ e) (n - 1))
-        | Ok action ->
-            (* reduce derives the assistant message from this event *)
-            emit (Event.Model_response { action });
-            handle_action action n)
-  and handle_action action n =
+        | Ok (content, usage) ->
+            emit (Event.Assistant_message { content; usage });
+            handle_content content n)
+  and handle_content content n =
     let denied_result permission =
       match permission with
       | Permission.Deny reason ->
@@ -96,32 +108,39 @@ let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
       | Permission.Allow ->
           Tool_result.Error { message = "internal error: expected denial" }
     in
-    let prepare_tool_call tc =
+    let prepare_tool_call (id, tc) =
       emit (Event.Tool_call tc);
       let permission = Policy.check ~yolo ~workspace ~tool_call:tc () in
       emit (Event.Policy_decision { tool_call = tc; permission });
       if not (Permission.is_allow permission) then
-        Lwt.return (fun () -> Lwt.return (denied_result permission))
+        Lwt.return (id, fun () -> Lwt.return (denied_result permission))
       else
         match Policy.approval_reason policy tc with
         | None ->
-            Lwt.return (fun () ->
-                Tool_runner.run_lwt ~yolo ~workspace ~tool_call:tc ())
+            Lwt.return
+              ( id,
+                fun () -> Tool_runner.run_lwt ~yolo ~workspace ~tool_call:tc ()
+              )
         | Some reason ->
             Lwt.bind (on_approval tc reason) (fun approved ->
                 if approved then
-                  Lwt.return (fun () ->
-                      Tool_runner.run_lwt ~yolo ~workspace ~tool_call:tc ())
+                  Lwt.return
+                    ( id,
+                      fun () ->
+                        Tool_runner.run_lwt ~yolo ~workspace ~tool_call:tc () )
                 else
-                  Lwt.return (fun () ->
-                      Lwt.return
-                        (Tool_result.Error
-                           { message = "user did not approve: " ^ reason })))
+                  Lwt.return
+                    ( id,
+                      fun () ->
+                        Lwt.return
+                          (Tool_result.Error
+                             { message = "user did not approve: " ^ reason }) ))
     in
     let after_results results =
       (* reduce derives observation messages from these events. Results are
          emitted in request order even if execution completed out of order. *)
-      List.iter results ~f:(fun result -> emit (Event.Tool_result result));
+      List.iter results ~f:(fun (id, result) ->
+          emit (Event.Tool_result_message { id; result }));
       goto Agent_state.Observing_result;
       goto Agent_state.Waiting_for_model;
       step (n + 1)
@@ -135,14 +154,20 @@ let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
           goto Agent_state.Executing_tool;
           Lwt.bind (Lwt_list.map_s prepare_tool_call calls) (fun runners ->
               Lwt.bind
-                (Lwt.all (List.map runners ~f:(fun run -> run ())))
+                (Lwt.all
+                   (List.map runners ~f:(fun (id, run) ->
+                        Lwt.map (fun result -> (id, result)) (run ()))))
                 after_results)
     in
-    match (action : Model_action.t) with
-    | Final_answer { answer } ->
-        goto Agent_state.Completed;
-        finish Completed answer n
-    | Tool_call tc -> execute_batch [ tc ]
-    | Tool_calls calls -> execute_batch calls
+    match Llm.tool_uses content with
+    | _ :: _ as calls -> execute_batch calls
+    | [] -> (
+        match Llm.final_text content with
+        | Some answer ->
+            goto Agent_state.Completed;
+            finish Completed answer n
+        | None ->
+            goto Agent_state.Failed;
+            finish Failed "model returned no final text or tool calls" n)
   in
   step 1

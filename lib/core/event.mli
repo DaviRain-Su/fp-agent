@@ -1,9 +1,11 @@
 type t =
   | User_message of { content : string }
   | Model_delta of { content : string }
+  | Assistant_message of { content : Llm.content list; usage : Llm.usage }
   | Model_response of { action : Model_action.t }
   | Policy_decision of { tool_call : Tool_call.t; permission : Permission.t }
   | Tool_call of Tool_call.t
+  | Tool_result_message of { id : string; result : Tool_result.t }
   | Tool_result of Tool_result.t
   | Graph_event of Graph_event.t
   | State_transition of { from_state : Agent_state.t; to_state : Agent_state.t }

@@ -1,29 +1,23 @@
 open! Base
+open Llm
 
 (* The public client keeps the agent loop small, but internally this file now
    follows the ocaml-agent Llm shape: provider protocols stream into normalized
-   content blocks, and only then do we lower those blocks into Model_action.t. *)
+   content blocks. Legacy JSON actions are parsed only as a fallback. *)
 type t = {
   send :
     on_delta:(string -> unit) ->
-    Message.t list ->
-    (Model_action.t, string) Result.t Lwt.t;
+    system:string ->
+    Llm.turn list ->
+    (Llm.content list * Llm.usage, string) Result.t Lwt.t;
 }
-
-type role = User | Assistant
-
-type content =
-  | Text of string
-  | Thinking of string
-  | Tool_use of { id : string; name : string; input : Yojson.Safe.t }
-  | Tool_result of { id : string; content : string }
-
-type turn = { role : role; content : content list }
 
 let system_prompt =
   {|You are a coding agent operating inside a bounded workspace. You work toward the user's task by issuing tool calls and observing the results.
 
-On every turn you MUST reply with a SINGLE JSON object and nothing else. Do not wrap it in markdown code fences. Do not add prose before or after.
+If the provider offers native tool calling, use native tool calls. When you are done, answer normally with a concise final response.
+
+If native tool calling is unavailable or ignored, fall back to replying with a SINGLE JSON object and nothing else. Do not wrap fallback JSON in markdown code fences. Do not add prose before or after fallback JSON.
 
 To call a tool:
 {"action":"tool_call","tool":"<name>","args":{...}}
@@ -43,7 +37,7 @@ Available tools and their args:
 - apply_patch {"patch": string}   (a unified diff applied with git apply)
 - multi_edit  {"edits": [{"path": string, "old": string, "new": string}, ...]}   (applied atomically)
 
-When the task is complete, finish with:
+Fallback final answer:
 {"action":"final_answer","summary": string, "details": string (optional)}
 
 Rules:
@@ -333,87 +327,19 @@ let anthropic_tools () =
           ("input_schema", tool_parameters tool.name);
         ])
 
-(* --- History: Message.t <-> normalized turns --- *)
-
-let action_of_assistant_content content =
-  match Yojson.Safe.from_string content with
-  | json -> Model_action.of_yojson json
-  | exception _ -> Error "assistant content is not action JSON"
-
-let tool_calls_of_action = function
-  | Model_action.Tool_call tc -> [ tc ]
-  | Model_action.Tool_calls calls -> calls
-  | Final_answer _ -> []
-
-let final_answer_of_action = function
-  | Model_action.Final_answer { answer } -> Some answer
-  | Tool_call _ | Tool_calls _ -> None
-
-let is_tool_observation content = String.is_prefix content ~prefix:"TOOL_RESULT"
-
-let next_tool_id counter =
-  let id = Printf.sprintf "fp_call_%d" !counter in
-  Int.incr counter;
-  id
-
-let queue_push q x = q := !q @ [ x ]
-
-let queue_pop q =
-  match !q with
-  | x :: xs ->
-      q := xs;
-      Some x
-  | [] -> None
-
-let split_system messages =
-  let system, rest =
-    List.partition_tf messages ~f:(fun (m : Message.t) ->
-        String.equal m.role "system")
-  in
-  ( List.map system ~f:(fun (m : Message.t) -> m.content)
-    |> String.concat ~sep:"\n\n",
-    rest )
-
-let turns_of_messages messages =
-  let _system, messages = split_system messages in
-  let id_counter = ref 0 in
-  let pending_ids = ref [] in
-  List.map messages ~f:(fun (m : Message.t) ->
-      match m.role with
-      | "assistant" -> (
-          match action_of_assistant_content m.content with
-          | Ok action -> (
-              match tool_calls_of_action action with
-              | [] ->
-                  let text =
-                    Option.value
-                      (final_answer_of_action action)
-                      ~default:m.content
-                  in
-                  { role = Assistant; content = [ Text text ] }
-              | calls ->
-                  let content =
-                    List.map calls ~f:(fun (tc : Tool_call.t) ->
-                        let id = next_tool_id id_counter in
-                        queue_push pending_ids id;
-                        Tool_use { id; name = tc.name; input = tc.args })
-                  in
-                  { role = Assistant; content })
-          | Error _ -> { role = Assistant; content = [ Text m.content ] })
-      | "user" when is_tool_observation m.content -> (
-          match queue_pop pending_ids with
-          | Some id ->
-              {
-                role = User;
-                content = [ Tool_result { id; content = m.content } ];
-              }
-          | None -> { role = User; content = [] })
-      | _ -> { role = User; content = [ Text m.content ] })
+(* --- Provider serialization for normalized turns --- *)
 
 let anthropic_block = function
   | Text s -> `Assoc [ ("type", `String "text"); ("text", `String s) ]
-  | Thinking s ->
-      `Assoc [ ("type", `String "thinking"); ("thinking", `String s) ]
+  | Thinking { text; signature } ->
+      let fields =
+        [ ("type", `String "thinking"); ("thinking", `String text) ]
+      in
+      let fields =
+        if String.is_empty signature then fields
+        else fields @ [ ("signature", `String signature) ]
+      in
+      `Assoc fields
   | Tool_use { id; name; input } ->
       `Assoc
         [
@@ -476,6 +402,12 @@ let openai_messages ~system turns =
           List.filter_map t.content ~f:(function Text s -> Some s | _ -> None)
           |> String.concat ~sep:"\n"
         in
+        let reasoning =
+          List.filter_map t.content ~f:(function
+            | Thinking { text; _ } -> Some text
+            | _ -> None)
+          |> String.concat ~sep:"\n"
+        in
         let tool_calls =
           List.filter_map t.content ~f:(function
             | Tool_use { id; name; input } ->
@@ -498,6 +430,10 @@ let openai_messages ~system turns =
             ("role", `String "assistant");
             ("content", if String.is_empty text then `Null else `String text);
           ]
+        in
+        let fields =
+          if String.is_empty reasoning then fields
+          else fields @ [ ("reasoning_content", `String reasoning) ]
         in
         let fields =
           if List.is_empty tool_calls then fields
@@ -592,16 +528,35 @@ let parse_json_object_or_empty s =
   | _ -> `Assoc []
   | exception _ -> `Assoc []
 
+let content_of_action = function
+  | Model_action.Final_answer { answer } -> [ Text answer ]
+  | Tool_call tc ->
+      [ Tool_use { id = "fp_json_0"; name = tc.name; input = tc.args } ]
+  | Tool_calls calls ->
+      List.mapi calls ~f:(fun i (tc : Tool_call.t) ->
+          Tool_use
+            {
+              id = Printf.sprintf "fp_json_%d" i;
+              name = tc.name;
+              input = tc.args;
+            })
+
 let action_of_content_blocks blocks =
-  let tool_calls =
-    List.filter_map blocks ~f:(function
-      | Tool_use { name; input; _ } -> (
-          match build_tool name input with Ok tc -> Some tc | Error _ -> None)
-      | _ -> None)
+  let tool_blocks =
+    List.filter blocks ~f:(function Tool_use _ -> true | _ -> false)
   in
-  match tool_calls with
-  | [ tc ] -> Ok (Model_action.Tool_call tc)
-  | _ :: _ -> Ok (Model_action.Tool_calls tool_calls)
+  match tool_blocks with
+  | _ :: _ -> (
+      match
+        List.find_map tool_blocks ~f:(function
+          | Tool_use { name; input; _ } -> (
+              match build_tool name input with
+              | Ok _ -> None
+              | Error e -> Some e)
+          | _ -> None)
+      with
+      | Some e -> Error e
+      | None -> Ok tool_blocks)
   | [] ->
       let text =
         List.filter_map blocks ~f:(function Text s -> Some s | _ -> None)
@@ -609,8 +564,9 @@ let action_of_content_blocks blocks =
       in
       if String.is_empty text then
         Error "provider returned no text or tool_use blocks"
-      else if looks_like_internal_action_text text then parse_action text
-      else Ok (Model_action.Final_answer { answer = text })
+      else if looks_like_internal_action_text text then
+        Result.map (parse_action text) ~f:content_of_action
+      else Ok [ Text text ]
 
 (* --- Anthropic protocol --- *)
 
@@ -624,17 +580,24 @@ let assoc_set r key data =
 
 let assoc_find r key = List.Assoc.find !r key ~equal:Int.equal
 
-let anthropic_request (config : Config.t) messages =
-  let system, history = split_system messages in
-  let turns = turns_of_messages history in
+let anthropic_request (config : Config.t) ~system turns =
   let uri = Uri.of_string (config.api_base ^ "/v1/messages") in
+  let auth =
+    if String.is_empty config.api_key then []
+    else [ ("x-api-key", config.api_key) ]
+  in
+  let provider_headers =
+    if String.equal config.provider "kimi" then
+      [ ("User-Agent", "KimiCLI/1.5") ]
+    else []
+  in
   let headers =
     Cohttp.Header.of_list
-      [
-        ("Authorization", "Bearer " ^ config.api_key);
-        ("anthropic-version", "2023-06-01");
-        ("Content-Type", "application/json");
-      ]
+      (auth @ provider_headers
+      @ [
+          ("anthropic-version", "2023-06-01");
+          ("Content-Type", "application/json");
+        ])
   in
   let max_tokens = Option.value config.max_tokens ~default:4096 in
   let body_json =
@@ -654,10 +617,23 @@ let anthropic_complete ~on_delta payloads =
   let builders = ref [] in
   let blocks = ref [] in
   let delta_filter = create_delta_filter on_delta in
+  let input_tokens = ref 0 in
+  let output_tokens = ref 0 in
+  let read_usage json =
+    let open Yojson.Safe.Util in
+    (match member "input_tokens" json with
+    | `Int n -> input_tokens := n
+    | _ -> ());
+    match member "output_tokens" json with
+    | `Int n -> output_tokens := n
+    | _ -> ()
+  in
   let finish idx =
     match assoc_find builders idx with
     | Some (BText b) -> blocks := Text (Buffer.contents b) :: !blocks
-    | Some (BThinking b) -> blocks := Thinking (Buffer.contents b) :: !blocks
+    | Some (BThinking b) ->
+        blocks :=
+          Thinking { text = Buffer.contents b; signature = "" } :: !blocks
     | Some (BTool { id; name; json }) ->
         blocks :=
           Tool_use
@@ -675,6 +651,9 @@ let anthropic_complete ~on_delta payloads =
       | Some json -> (
           let open Yojson.Safe.Util in
           match member "type" json with
+          | `String "message_start" ->
+              read_usage (json |> member "message" |> member "usage")
+          | `String "message_delta" -> read_usage (member "usage" json)
           | `String "content_block_start" -> (
               let idx = json |> member "index" |> to_int in
               let block = json |> member "content_block" in
@@ -716,13 +695,12 @@ let anthropic_complete ~on_delta payloads =
     |> String.concat ~sep:""
   in
   flush_delta delta_filter final_text;
-  action_of_content_blocks blocks
+  Result.map (action_of_content_blocks blocks) ~f:(fun content ->
+      (content, { input_tokens = !input_tokens; output_tokens = !output_tokens }))
 
 (* --- OpenAI chat completions protocol --- *)
 
-let openai_request (config : Config.t) messages =
-  let system, history = split_system messages in
-  let turns = turns_of_messages history in
+let openai_request (config : Config.t) ~system turns =
   let uri = Uri.of_string (config.api_base ^ "/chat/completions") in
   let auth =
     if String.is_empty config.api_key then []
@@ -765,6 +743,8 @@ let openai_complete ~on_delta payloads =
   let reasoning = Buffer.create 256 in
   let tools = ref [] in
   let delta_filter = create_delta_filter on_delta in
+  let input_tokens = ref 0 in
+  let output_tokens = ref 0 in
   let get_tool idx =
     match assoc_find tools idx with
     | Some t -> t
@@ -778,6 +758,15 @@ let openai_complete ~on_delta payloads =
       | None -> ()
       | Some json -> (
           let open Yojson.Safe.Util in
+          (match member "usage" json with
+          | `Null -> ()
+          | usage -> (
+              (match member "prompt_tokens" usage with
+              | `Int n -> input_tokens := n
+              | _ -> ());
+              match member "completion_tokens" usage with
+              | `Int n -> output_tokens := n
+              | _ -> ()));
           match member "choices" json with
           | `List (choice :: _) -> (
               let delta = member "delta" choice in
@@ -813,7 +802,8 @@ let openai_complete ~on_delta payloads =
     if Buffer.length text > 0 then [ Text (Buffer.contents text) ] else []
   in
   let reasoning_blocks =
-    if Buffer.length reasoning > 0 then [ Thinking (Buffer.contents reasoning) ]
+    if Buffer.length reasoning > 0 then
+      [ Thinking { text = Buffer.contents reasoning; signature = "" } ]
     else []
   in
   let tool_blocks =
@@ -832,7 +822,8 @@ let openai_complete ~on_delta payloads =
   in
   let blocks = reasoning_blocks @ text_blocks @ tool_blocks in
   flush_delta delta_filter (Buffer.contents text);
-  action_of_content_blocks blocks
+  Result.map (action_of_content_blocks blocks) ~f:(fun content ->
+      (content, { input_tokens = !input_tokens; output_tokens = !output_tokens }))
 
 (* --- shared HTTP streaming plumbing --- *)
 
@@ -878,27 +869,47 @@ let post_and_complete ?(on_delta = fun _ -> ()) (uri, headers, body_json)
               (fun payloads -> complete ~on_delta payloads)
               (collect_sse_payloads rbody))
 
-let real_send (config : Config.t) ~on_delta messages =
+let real_send (config : Config.t) ~on_delta ~system turns =
   match config.protocol with
   | Provider.Openai ->
       post_and_complete ~on_delta
-        (openai_request config messages)
+        (openai_request config ~system turns)
         ~complete:openai_complete
   | Provider.Anthropic ->
       post_and_complete ~on_delta
-        (anthropic_request config messages)
+        (anthropic_request config ~system turns)
         ~complete:anthropic_complete
 
 let create ~config =
-  { send = (fun ~on_delta messages -> real_send config ~on_delta messages) }
+  {
+    send =
+      (fun ~on_delta ~system turns -> real_send config ~on_delta ~system turns);
+  }
 
-let create_mock ~send = { send = (fun ~on_delta:_ messages -> send messages) }
-let send ?(on_delta = fun _ -> ()) t ~messages = t.send ~on_delta messages
+let create_mock ~send =
+  { send = (fun ~on_delta:_ ~system:_ turns -> send turns) }
 
-let request_body_for_test ~config ~messages =
+let send ?(on_delta = fun _ -> ()) ~system t ~turns =
+  t.send ~on_delta ~system turns
+
+let request_body_for_test ~config ~system ~turns =
   let _, _, body =
     match config.Config.protocol with
-    | Provider.Openai -> openai_request config messages
-    | Provider.Anthropic -> anthropic_request config messages
+    | Provider.Openai -> openai_request config ~system turns
+    | Provider.Anthropic -> anthropic_request config ~system turns
   in
   body
+
+let request_headers_for_test ~config ~system ~turns =
+  let _, headers, _ =
+    match config.Config.protocol with
+    | Provider.Openai -> openai_request config ~system turns
+    | Provider.Anthropic -> anthropic_request config ~system turns
+  in
+  Cohttp.Header.to_list headers
+
+let openai_complete_for_test payloads =
+  openai_complete ~on_delta:(fun _ -> ()) payloads
+
+let anthropic_complete_for_test payloads =
+  anthropic_complete ~on_delta:(fun _ -> ()) payloads
