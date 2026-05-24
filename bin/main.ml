@@ -140,6 +140,28 @@ let make_tui_reporter ~provider ~model ~api_base ~workspace_root ~session_dir
   let has_key_modifier mods modifier =
     List.mem mods modifier ~equal:Poly.equal
   in
+  let text_of_uchar uchar =
+    let add_byte buffer byte = Buffer.add_char buffer (Stdlib.Char.chr byte) in
+    let code = Stdlib.Uchar.to_int uchar in
+    let buffer = Buffer.create 4 in
+    if code <= 0x7F then add_byte buffer code
+    else if code <= 0x7FF then (
+      add_byte buffer (0xC0 lor (code lsr 6));
+      add_byte buffer (0x80 lor (code land 0x3F)))
+    else if code <= 0xFFFF then (
+      add_byte buffer (0xE0 lor (code lsr 12));
+      add_byte buffer (0x80 lor ((code lsr 6) land 0x3F));
+      add_byte buffer (0x80 lor (code land 0x3F)))
+    else (
+      add_byte buffer (0xF0 lor (code lsr 18));
+      add_byte buffer (0x80 lor ((code lsr 12) land 0x3F));
+      add_byte buffer (0x80 lor ((code lsr 6) land 0x3F));
+      add_byte buffer (0x80 lor (code land 0x3F)));
+    Buffer.contents buffer
+  in
+  let palette_or_empty_prompt () =
+    Tui_shell.palette_open !shell || View.prompt_is_empty !shell.draft
+  in
   let input_of_term_event = function
     | `Key (`Escape, _) -> Some Tui_shell.Escape
     | `Key (`Enter, mods) ->
@@ -150,17 +172,22 @@ let make_tui_reporter ~provider ~model ~api_base ~workspace_root ~session_dir
     | `Key (`Delete, _) -> Some Tui_shell.Delete_key
     | `Key (`Arrow `Left, _) -> Some Tui_shell.Left
     | `Key (`Arrow `Right, _) -> Some Tui_shell.Right
-    | `Key (`Arrow `Up, _) | `Key (`ASCII 'k', _) -> Some Tui_shell.Up
-    | `Key (`Arrow `Down, _) | `Key (`ASCII 'j', _) -> Some Tui_shell.Down
+    | `Key (`Arrow `Up, _) -> Some Tui_shell.Up
+    | `Key (`Arrow `Down, _) -> Some Tui_shell.Down
     | `Key (`Page `Up, _) -> Some Tui_shell.Page_up
     | `Key (`Page `Down, _) -> Some Tui_shell.Page_down
     | `Key (`Home, _) -> Some Tui_shell.Home
-    | `Key (`End, _) | `Key (`ASCII 'G', _) -> Some Tui_shell.End
-    | `Key (`ASCII '/', _) -> Some Tui_shell.Slash
-    | `Key (`ASCII '?', _) -> Some Tui_shell.Question
-    | `Key (`ASCII c, mods)
-      when Tui_shell.palette_open !shell && not (has_key_modifier mods `Ctrl) ->
+    | `Key (`End, _) -> Some Tui_shell.End
+    | `Key (`ASCII '/', mods)
+      when (not (has_key_modifier mods `Ctrl)) && palette_or_empty_prompt () ->
+        Some Tui_shell.Slash
+    | `Key (`ASCII '?', mods)
+      when (not (has_key_modifier mods `Ctrl)) && palette_or_empty_prompt () ->
+        Some Tui_shell.Question
+    | `Key (`ASCII c, mods) when not (has_key_modifier mods `Ctrl) ->
         Some (Tui_shell.Text (String.make 1 c))
+    | `Key (`Uchar uchar, mods) when not (has_key_modifier mods `Ctrl) ->
+        Some (Tui_shell.Text (text_of_uchar uchar))
     | `Mouse (`Press (`Scroll `Up), _, _) -> Some Tui_shell.Mouse_scroll_up
     | `Mouse (`Press (`Scroll `Down), _, _) -> Some Tui_shell.Mouse_scroll_down
     | `Resize _ | `End | `Paste _ | `Key _ | `Mouse _ -> None
@@ -230,6 +257,10 @@ let make_tui_reporter ~provider ~model ~api_base ~workspace_root ~session_dir
              (Tui_shell.visible_command_entries shell_state))
       else None
     in
+    let prompt_lines =
+      if View.prompt_is_empty shell_state.draft then []
+      else "" :: View.prompt_editor_lines shell_state.draft
+    in
     let phase_text = phase_label !(fst phase) in
     let status : View.status =
       {
@@ -258,7 +289,8 @@ let make_tui_reporter ~provider ~model ~api_base ~workspace_root ~session_dir
       | None ->
           let shown =
             View.viewport ~rows:body_rows ~cols:w
-              (Option.value palette_lines ~default:(visible_lines ()))
+              (Option.value palette_lines
+                 ~default:(visible_lines () @ prompt_lines))
           in
           I.vcat
             (List.init body_rows ~f:(fun idx ->
@@ -271,17 +303,20 @@ let make_tui_reporter ~provider ~model ~api_base ~workspace_root ~session_dir
           let inspector =
             (match palette_lines with
               | Some lines -> lines
-              | None -> (
-                  match selected_event with
-                  | None ->
-                      View.inspector_lines status
-                        ~focus_label:("Selected event: " ^ selection_label)
-                        ~last_event:"waiting for first event"
-                  | Some event ->
-                      View.inspector_lines status
-                        ~focus_label:("Selected event: " ^ selection_label)
-                        ~last_event:(View.event_summary event)
-                      @ ("" :: View.event_inspector_lines event)))
+              | None ->
+                  let event_lines =
+                    match selected_event with
+                    | None ->
+                        View.inspector_lines status
+                          ~focus_label:("Selected event: " ^ selection_label)
+                          ~last_event:"waiting for first event"
+                    | Some event ->
+                        View.inspector_lines status
+                          ~focus_label:("Selected event: " ^ selection_label)
+                          ~last_event:(View.event_summary event)
+                        @ ("" :: View.event_inspector_lines event)
+                  in
+                  prompt_lines @ event_lines)
             |> View.viewport ~rows:body_rows ~cols:panes.inspector_cols
           in
           I.vcat

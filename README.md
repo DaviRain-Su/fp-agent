@@ -129,8 +129,8 @@ copy. Two consequences:
   TUI: event kind, summary, tool args, policy/result details, and a JSON
   preview. With no index it inspects the latest event.
 - **TUI event navigation** (`--tui`) lets the inspector follow the latest event
-  by default, or pin a historical event with Up/Down, `j`/`k`, PageUp/PageDown,
-  Home, and End.
+  by default, or pin a historical event with Up/Down, PageUp/PageDown, Home,
+  and End.
 - **TUI command palette** (`/` or `?` in `--tui`) shows the core REPL commands
   for models, providers, plugins, tools, sessions, event logs, forks, diffs,
   and undo. The palette and REPL parser share the same command metadata, and
@@ -140,9 +140,10 @@ copy. Two consequences:
   echoed into the TUI timeline. Read-only commands such as `/tools`, `/plugins`,
   `/models`, `/model`, `/diff`, `/log`, and `/inspect` render their results
   directly inside the fullscreen view.
-- **TUI prompt editor groundwork** keeps multiline draft editing pure and
-  testable: insert text, newline, delete/backspace, cursor movement, and
-  rendering with a visible cursor.
+- **TUI prompt editor** keeps multiline draft editing pure and testable:
+  inserted text, seeded palette drafts, newline, delete/backspace, cursor
+  movement, and rendering with a visible cursor all show inside the fullscreen
+  view.
 - **TUI shell controller groundwork** centralizes prompt submission, command
   palette movement, and event inspection selection in a pure state machine.
   It also owns the abstract keyboard/mouse input mapping, including palette

@@ -57,6 +57,10 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   palette priority, multiline prompt composition, Ctrl+Enter submission, and
   event browsing. The Notty renderer translates terminal events into those
   inputs instead of carrying shell behavior itself.
+- The Notty renderer now feeds ordinary ASCII and Unicode keypresses into the
+  prompt draft when the palette is closed, so seeded commands like `/tool ` can
+  be completed in the fullscreen view. The live draft renders with the same
+  prompt editor lines used by unit tests.
 - The command palette controller now distinguishes close from accept: Enter
   returns the highlighted command entry, giving the future fullscreen shell a
   tested command-dispatch point while preserving the current overlay behavior.
