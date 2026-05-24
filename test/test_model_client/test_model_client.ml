@@ -25,6 +25,22 @@ let test_parse_edit_wire_names () =
       Alcotest.(check string) "new" "y" new_text
   | _ -> Alcotest.fail "expected edit_file"
 
+let test_parse_flat_tool () =
+  (* action holds the tool name directly, args at top level *)
+  match
+    parse {|{"action":"write_file","path":"a.ml","content":"let x = 1"}|}
+  with
+  | Ok (Model_action.Tool_call (Tool_call.Write_file { path; content })) ->
+      Alcotest.(check string) "path" "a.ml" path;
+      Alcotest.(check string) "content" "let x = 1" content
+  | _ -> Alcotest.fail "expected flat write_file"
+
+let test_parse_bare_tool_field () =
+  match parse {|{"tool":"list_files","args":{"path":"lib"}}|} with
+  | Ok (Model_action.Tool_call (Tool_call.List_files { path })) ->
+      Alcotest.(check string) "path" "lib" path
+  | _ -> Alcotest.fail "expected list_files from bare tool field"
+
 let test_parse_final_answer () =
   match
     parse {|{"action":"final_answer","summary":"done","details":"more"}|}
@@ -106,6 +122,8 @@ let () =
         [
           Alcotest.test_case "tool_call" `Quick test_parse_tool_call;
           Alcotest.test_case "edit_wire_names" `Quick test_parse_edit_wire_names;
+          Alcotest.test_case "flat_tool" `Quick test_parse_flat_tool;
+          Alcotest.test_case "bare_tool_field" `Quick test_parse_bare_tool_field;
           Alcotest.test_case "final_answer" `Quick test_parse_final_answer;
           Alcotest.test_case "fences" `Quick test_parse_with_fences;
           Alcotest.test_case "invalid_json" `Quick test_parse_invalid_json;
