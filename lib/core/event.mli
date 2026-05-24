@@ -4,6 +4,7 @@ type t =
   | Policy_decision of { tool_call : Tool_call.t; permission : Permission.t }
   | Tool_call of Tool_call.t
   | Tool_result of Tool_result.t
+  | Graph_event of Graph_event.t
   | State_transition of { from_state : Agent_state.t; to_state : Agent_state.t }
 
 val yojson_of_t : t -> Yojson.Safe.t

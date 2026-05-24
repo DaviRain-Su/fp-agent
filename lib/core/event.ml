@@ -7,6 +7,7 @@ type t =
   | Policy_decision of { tool_call : Tool_call.t; permission : Permission.t }
   | Tool_call of Tool_call.t
   | Tool_result of Tool_result.t
+  | Graph_event of Graph_event.t
   | State_transition of { from_state : Agent_state.t; to_state : Agent_state.t }
 [@@deriving yojson_of, of_yojson]
 
@@ -39,6 +40,7 @@ let to_display (t : t) =
   | Tool_call tc -> Some ("→ " ^ describe_tool tc)
   | Tool_result (Success { output }) -> Some ("  ✓ " ^ first_line output)
   | Tool_result (Error { message }) -> Some ("  ✗ " ^ first_line message)
+  | Graph_event event -> Some ("graph: " ^ Graph_event.describe event)
   | Policy_decision { permission = Permission.Deny reason; _ } ->
       Some ("  ✗ policy denied: " ^ reason)
   | Policy_decision { permission = Permission.Ask_user reason; _ } ->

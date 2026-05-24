@@ -29,7 +29,7 @@ let reduce (st : t) (event : Event.t) =
           st.messages @ [ Message.user (Tool_result.to_observation result) ];
       }
   | State_transition { to_state; _ } -> { st with agent_state = to_state }
-  | Tool_call _ | Policy_decision _ -> st
+  | Tool_call _ | Policy_decision _ | Graph_event _ -> st
 
 let replay events = List.fold events ~init:empty ~f:reduce
 let messages t = t.messages

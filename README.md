@@ -208,7 +208,7 @@ file modification.
 | Module | Responsibility |
 | --- | --- |
 | `tool_call` / `tool_result` | Typed tool calls and results (+ JSON) |
-| `model_action` / `event` | Model actions and event-log entries |
+| `model_action` / `event` / `graph_event` | Model actions, event-log entries, and graph lifecycle events |
 | `agent_state` | State machine and legal transitions |
 | `permission` / `message` | Policy decisions and chat messages |
 
@@ -230,6 +230,7 @@ file modification.
 | `policy` / `tool_runner` | Deny-list/approval and tool execution |
 | `session_state` / `transcript` | Event-sourced state (fold over the log) |
 | `agent_loop` | The model↔tool loop |
+| `graph_runtime` | P4 graph runtime skeleton: Agent/Tool/Parallel/Sequence/Router nodes |
 
 **`lib/ui/`** — `view` (pure TUI helpers: windowing, line classification).
 

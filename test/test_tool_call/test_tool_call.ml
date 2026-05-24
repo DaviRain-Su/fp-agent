@@ -36,6 +36,22 @@ let test_tool_result_roundtrips () =
   List.iter cases ~f:(fun (name, tr) ->
       yojson_roundtrip name Tool_result.of_yojson Tool_result.to_yojson tr)
 
+let test_graph_event_roundtrips () =
+  let cases =
+    [
+      ( "Node_started",
+        Graph_event.Node_started { node_id = "n"; kind = Graph_event.Tool } );
+      ( "Node_completed",
+        Graph_event.Node_completed
+          { node_id = "n"; kind = Graph_event.Agent; output = Some "done" } );
+      ( "Edge_selected",
+        Graph_event.Edge_selected
+          { node_id = "r"; label = "yes"; target_node_id = "child" } );
+    ]
+  in
+  List.iter cases ~f:(fun (name, event) ->
+      yojson_roundtrip name Graph_event.of_yojson Graph_event.to_yojson event)
+
 let test_model_action_roundtrips () =
   let cases =
     [
@@ -59,6 +75,10 @@ let test_event_roundtrips () =
           { action = Model_action.Final_answer { answer = "Done" } } );
       ("Tool_call", Event.Tool_call (Tool_call.read_file "lib/foo.ml"));
       ("Tool_result", Event.Tool_result (Tool_result.Success { output = "42" }));
+      ( "Graph_event",
+        Event.Graph_event
+          (Graph_event.Node_started
+             { node_id = "graph"; kind = Graph_event.Sequence }) );
       ( "State_transition",
         Event.State_transition
           {
@@ -94,6 +114,7 @@ let () =
         [
           Alcotest.test_case "tool_call" `Quick test_tool_call_roundtrips;
           Alcotest.test_case "tool_result" `Quick test_tool_result_roundtrips;
+          Alcotest.test_case "graph_event" `Quick test_graph_event_roundtrips;
           Alcotest.test_case "model_action" `Quick test_model_action_roundtrips;
           Alcotest.test_case "event" `Quick test_event_roundtrips;
         ] );

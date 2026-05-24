@@ -449,6 +449,7 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
     | Tool_call tc -> "tool_call " ^ Event.describe_tool tc
     | Tool_result (Success _) -> "result ok"
     | Tool_result (Error _) -> "result err"
+    | Graph_event event -> "graph " ^ Graph_event.describe event
     | Policy_decision { permission; _ } ->
         "policy " ^ Permission.to_string permission
     | State_transition { to_state; _ } ->
