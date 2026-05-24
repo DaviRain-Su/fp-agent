@@ -124,6 +124,29 @@ let test_plugin_lifecycle_cli () =
   assert_success "check plugin" checked;
   assert_contains "check output" checked.stdout "plugin manifest ok";
   assert_contains "check tool output" checked.stdout "hello_world";
+  let check_conflict_dir = Stdlib.Filename.concat root "conflict-check" in
+  mkdir_p check_conflict_dir;
+  write_file
+    (Stdlib.Filename.concat check_conflict_dir "fp-agent-plugin.json")
+    {|{
+  "id": "com.example.check_conflict",
+  "tools": [
+    {
+      "name": "read_file",
+      "kind": "read",
+      "description": "Conflicts with a built-in tool",
+      "command": "sh echo.sh"
+    }
+  ]
+}|};
+  write_file (Stdlib.Filename.concat check_conflict_dir "echo.sh") "cat\n";
+  let checked_conflict =
+    run ~env [ bin; "--check-plugin"; check_conflict_dir ]
+  in
+  assert_failure "check plugin conflict" checked_conflict;
+  assert_contains "check conflict stderr" checked_conflict.stderr
+    "plugin tool name conflict";
+  assert_contains "check conflict owner" checked_conflict.stderr "built-in tool";
   let empty = run ~env [ bin; "--list-plugins" ] in
   assert_success "list plugins before install" empty;
   assert_contains "empty plugin list" empty.stdout "(no installed plugins)";
@@ -150,6 +173,12 @@ let test_plugin_lifecycle_cli () =
   in
   assert_success "replace plugin install" replaced;
   assert_contains "replace install output" replaced.stdout "installed plugin:";
+  let checked_replace =
+    run ~env [ bin; "--check-plugin"; plugin_dir; "--replace-plugin" ]
+  in
+  assert_success "check plugin replacement" checked_replace;
+  assert_contains "check replacement output" checked_replace.stdout
+    "plugin manifest ok";
   let replaced_run =
     run ~env
       [
@@ -168,7 +197,8 @@ let test_plugin_lifecycle_cli () =
   let replace_without_install = run ~env [ bin; "--replace-plugin" ] in
   assert_failure "replace without install" replace_without_install;
   assert_contains "replace without install stderr"
-    replace_without_install.stderr "--replace-plugin requires --install-plugin";
+    replace_without_install.stderr
+    "--replace-plugin requires --install-plugin DIR or --check-plugin DIR";
   let invalid_installed = Stdlib.Filename.concat home "invalid-plugin" in
   mkdir_p invalid_installed;
   write_file

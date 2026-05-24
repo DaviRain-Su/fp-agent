@@ -67,8 +67,11 @@ val remove : string -> (string, string) result
 (** Remove an installed plugin by id from the plugin home and return the removed
     directory path. *)
 
-val check : string -> (manifest, string) result
-(** Validate a plugin directory and return its parsed manifest. *)
+val check : ?replace:bool -> string -> (manifest, string) result
+(** Validate a plugin directory and return its parsed manifest. This also
+    rejects tool names that would be shadowed by built-in tools or existing
+    discovered plugins. When [replace] is [true], an existing installed plugin
+    with the same id is ignored for conflict checks. *)
 
 val scaffold : ?id:string -> string -> (string, string) result
 (** Create a starter plugin directory and return its path. *)

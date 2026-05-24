@@ -1331,7 +1331,7 @@ let dispatch new_plugin check_plugin install_plugin replace_plugin list_plugins
           Stdlib.prerr_endline ("plugin scaffold error: " ^ e);
           1)
   | None, Some path, _, _, _, _ -> (
-      match Plugin.check path with
+      match Plugin.check ~replace:replace_plugin path with
       | Ok manifest ->
           Stdlib.print_endline "plugin manifest ok:";
           print_plugin_summary manifest;
@@ -1362,7 +1362,8 @@ let dispatch new_plugin check_plugin install_plugin replace_plugin list_plugins
       run_plugin_tool_cli dir plugin_tool plugin_args workspace
   | None, None, None, false, None, None when replace_plugin ->
       Stdlib.prerr_endline
-        "plugin install error: --replace-plugin requires --install-plugin DIR";
+        "plugin error: --replace-plugin requires --install-plugin DIR or \
+         --check-plugin DIR";
       1
   | None, None, None, false, None, None ->
       with_setup provider api_base model workspace max_steps
@@ -1402,8 +1403,10 @@ let () =
           [ "replace-plugin"; "force-plugin-install" ]
           ~doc:
             "Allow --install-plugin to replace an existing installed plugin \
-             with the same id. The new plugin is validated and staged before \
-             the old installation is removed.")
+             with the same id. With --check-plugin, validate replacement \
+             compatibility by ignoring the installed plugin with the same id. \
+             The new plugin is validated and staged before the old \
+             installation is removed.")
   in
   let list_plugins =
     Arg.(

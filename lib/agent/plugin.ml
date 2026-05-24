@@ -335,8 +335,6 @@ let load_manifest dir =
       | _, _, _, Error e, _ -> Error e
       | _, _, _, _, _ -> Error "plugin manifest requires a tools array")
 
-let check = load_manifest
-
 let install_home () =
   match getenv_nonempty "FP_AGENT_PLUGIN_HOME" with
   | Some path -> Some path
@@ -437,6 +435,43 @@ let installed_manifests () = (installed_discovery ()).manifests
 
 let installed_tool_conflicts () =
   tool_conflicts_of_manifests (installed_manifests ())
+
+let absolute_dir dir =
+  if Stdlib.Filename.is_relative dir then
+    Stdlib.Filename.concat (Unix.getcwd ()) dir
+  else dir
+
+let same_dir a b = String.equal (absolute_dir a) (absolute_dir b)
+
+let candidate_conflicts ?(replace = false) (candidate : manifest) =
+  let existing =
+    manifests ()
+    |> List.filter ~f:(fun (manifest : manifest) ->
+        (not (same_dir manifest.dir candidate.dir))
+        && not (replace && String.equal manifest.id candidate.id))
+  in
+  tool_conflicts_of_manifests (existing @ [ candidate ])
+  |> List.filter ~f:(fun (conflict : tool_conflict) ->
+      same_dir conflict.dir candidate.dir
+      && String.equal conflict.plugin_id candidate.id)
+
+let conflict_message (conflict : tool_conflict) =
+  Printf.sprintf "tool '%s' conflicts with %s" conflict.tool_name
+    conflict.existing_owner
+
+let validate_candidate_conflicts ?(replace = false) manifest =
+  match candidate_conflicts ~replace manifest with
+  | [] -> Ok manifest
+  | conflicts ->
+      Error
+        ("plugin tool name conflict: "
+        ^ (conflicts |> List.map ~f:conflict_message |> String.concat ~sep:"; ")
+        )
+
+let check ?(replace = false) dir =
+  match load_manifest dir with
+  | Error _ as e -> e
+  | Ok manifest -> validate_candidate_conflicts ~replace manifest
 
 let output_of_result result =
   let stdout = String.strip result.Shell.stdout in
@@ -580,21 +615,24 @@ let install ?(replace = false) src_dir =
   match (load_manifest src_dir, install_home ()) with
   | Error e, _ -> Error e
   | _, None -> Error "cannot determine plugin install home"
-  | Ok manifest, Some home ->
+  | Ok manifest, Some home -> (
       let dst = Stdlib.Filename.concat home manifest.id in
       if (not replace) && Stdlib.Sys.file_exists dst then
         Error ("plugin already installed: " ^ dst)
-      else (
-        mkdir_p home;
-        let staged = temp_install_dir home manifest.id in
-        try
-          copy_tree src_dir staged;
-          if Stdlib.Sys.file_exists dst then remove_tree dst;
-          Unix.rename staged dst;
-          Ok dst
-        with exn ->
-          cleanup_staged_dir staged;
-          Error ("plugin install failed: " ^ Exn.to_string exn))
+      else
+        match validate_candidate_conflicts ~replace manifest with
+        | Error _ as e -> e
+        | Ok _ -> (
+            mkdir_p home;
+            let staged = temp_install_dir home manifest.id in
+            try
+              copy_tree src_dir staged;
+              if Stdlib.Sys.file_exists dst then remove_tree dst;
+              Unix.rename staged dst;
+              Ok dst
+            with exn ->
+              cleanup_staged_dir staged;
+              Error ("plugin install failed: " ^ Exn.to_string exn)))
 
 let remove id =
   match (validate_plugin_id id, install_home ()) with

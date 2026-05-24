@@ -324,6 +324,68 @@ let test_tool_conflicts_report_collisions () =
         (String.is_substring joined
            ~substring:"com.example.second|shared_echo|plugin com.example.first"))
 
+let test_check_rejects_candidate_tool_conflicts () =
+  with_temp_dir "fp_agent_plugin_check_conflicts" (fun root ->
+      let existing = Stdlib.Filename.concat root "existing" in
+      let builtin_conflict = Stdlib.Filename.concat root "builtin-conflict" in
+      let plugin_conflict = Stdlib.Filename.concat root "plugin-conflict" in
+      let replacement_installed =
+        Stdlib.Filename.concat root
+          (Stdlib.Filename.concat "home" "com.example.replace_check")
+      in
+      let replacement_candidate =
+        Stdlib.Filename.concat root "replacement-candidate"
+      in
+      mkdir_p existing;
+      mkdir_p builtin_conflict;
+      mkdir_p plugin_conflict;
+      mkdir_p replacement_installed;
+      mkdir_p replacement_candidate;
+      Unix.putenv "FP_AGENT_PLUGIN_PATH" existing;
+      Unix.putenv "FP_AGENT_PLUGIN_HOME" (Stdlib.Filename.concat root "home");
+      write_plugin existing ~id:"com.example.existing"
+        ~tool_name:"existing_echo" ~kind:"read";
+      write_plugin builtin_conflict ~id:"com.example.builtin_check"
+        ~tool_name:"read_file" ~kind:"read";
+      write_plugin plugin_conflict ~id:"com.example.plugin_check"
+        ~tool_name:"existing_echo" ~kind:"read";
+      write_plugin replacement_installed ~id:"com.example.replace_check"
+        ~tool_name:"replace_echo" ~kind:"read";
+      write_plugin replacement_candidate ~id:"com.example.replace_check"
+        ~tool_name:"replace_echo" ~kind:"read";
+      let assert_conflict label result substring =
+        match result with
+        | Ok _ -> Alcotest.failf "%s unexpectedly succeeded" label
+        | Error e ->
+            Alcotest.(check bool)
+              (label ^ " conflict") true
+              (String.is_substring e ~substring:"plugin tool name conflict");
+            Alcotest.(check bool)
+              (label ^ " detail") true
+              (String.is_substring e ~substring)
+      in
+      assert_conflict "builtin check"
+        (Plugin.check builtin_conflict)
+        "built-in tool";
+      assert_conflict "plugin check"
+        (Plugin.check plugin_conflict)
+        "plugin com.example.existing";
+      assert_conflict "builtin install"
+        (Plugin.install builtin_conflict)
+        "built-in tool";
+      (match Plugin.check replacement_candidate with
+      | Ok _ ->
+          Alcotest.fail "replacement check should conflict without replace"
+      | Error e ->
+          Alcotest.(check bool)
+            "replacement conflict" true
+            (String.is_substring e ~substring:"plugin com.example.replace_check"));
+      match Plugin.check ~replace:true replacement_candidate with
+      | Error e -> Alcotest.failf "replace check failed: %s" e
+      | Ok manifest ->
+          Alcotest.(check string)
+            "replace check id" "com.example.replace_check" manifest.id)
+
 let test_run_tool_for_plugin_development () =
   with_temp_dir "fp_agent_plugin_run_tool" (fun root ->
       let plugin_dir = Stdlib.Filename.concat root "plugin" in
@@ -580,6 +642,8 @@ let () =
             test_discover_reports_invalid_manifests;
           Alcotest.test_case "tool_conflicts" `Quick
             test_tool_conflicts_report_collisions;
+          Alcotest.test_case "check_tool_conflicts" `Quick
+            test_check_rejects_candidate_tool_conflicts;
           Alcotest.test_case "run_tool" `Quick
             test_run_tool_for_plugin_development;
           Alcotest.test_case "run_tool_schema_validation" `Quick

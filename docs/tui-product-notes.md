@@ -93,6 +93,10 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - Plugin tool-name conflicts are now reported in CLI/TUI tool and plugin
   surfaces. Built-ins and earlier discovered plugins keep precedence, while the
   skipped plugin/tool pair is shown to the developer.
+- `--check-plugin` and `--install-plugin` now reject plugin tool names that
+  would be shadowed after install. `--check-plugin --replace-plugin` validates
+  update compatibility while ignoring the currently installed plugin with the
+  same id.
 - The command palette controller now distinguishes close from accept: Enter
   returns the highlighted command entry, giving the future fullscreen shell a
   tested command-dispatch point while preserving the current overlay behavior.

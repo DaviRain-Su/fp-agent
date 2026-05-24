@@ -115,6 +115,14 @@ Validate it before installing:
 dune exec -- fp-agent --check-plugin my-plugin
 ```
 
+Validation rejects tool names that would be hidden by built-in tools or by
+already discovered plugins. When validating an update to an installed plugin,
+use the same replacement flag as install:
+
+```sh
+dune exec -- fp-agent --check-plugin my-plugin --replace-plugin
+```
+
 Run one tool locally while developing, without calling a model:
 
 ```sh
@@ -135,7 +143,8 @@ dune exec -- fp-agent --install-plugin examples/plugins/echo
 ```
 
 The installer validates the manifest and copies the plugin into the plugin
-home. It does not overwrite an existing plugin with the same id.
+home. It does not overwrite an existing plugin with the same id, and it rejects
+tool-name conflicts before copying.
 
 During plugin development, reinstall a changed plugin with:
 

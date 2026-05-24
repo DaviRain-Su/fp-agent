@@ -110,6 +110,7 @@ Create, test, and install a plugin into the user plugin home:
 ```sh
 dune exec -- fp-agent --new-plugin my-plugin
 dune exec -- fp-agent --check-plugin my-plugin
+dune exec -- fp-agent --check-plugin my-plugin --replace-plugin
 dune exec -- fp-agent --run-plugin-tool my-plugin \
   --plugin-tool hello_world \
   --plugin-args '{"message":"hi"}'
@@ -188,6 +189,8 @@ Options:
   fullscreen shell when no task is supplied (needs a real terminal)
 - `--new-plugin DIR` — create a starter plugin directory, then exit
 - `--check-plugin DIR` — validate a plugin directory, then exit
+- `--replace-plugin` with `--check-plugin` — validate replacement
+  compatibility against the currently installed plugin with the same id
 - `--run-plugin-tool DIR --plugin-tool NAME --plugin-args JSON` — run a plugin
   tool locally for development, then exit
 - `--install-plugin DIR` — validate and install a plugin directory, then exit
