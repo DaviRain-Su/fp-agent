@@ -68,18 +68,33 @@ let test_mock_client () =
       Alcotest.(check string) "mock answer" "mocked" answer
   | _ -> Alcotest.fail "mock did not return final answer"
 
-let test_config_requires_key () =
-  Unix.putenv "OPENAI_API_KEY" "";
+let test_config_providers () =
+  Unix.putenv "KIMI_API_KEY" "kimi-secret";
+  Unix.putenv "DEEPSEEK_API_KEY" "ds-secret";
+  (match Config.load () with
+  | Ok cfg ->
+      Alcotest.(check string)
+        "default model is kimi" "kimi-for-coding" cfg.model;
+      Alcotest.(check bool)
+        "kimi base" true
+        (String.is_substring cfg.api_base ~substring:"api.kimi.com");
+      Alcotest.(check string) "kimi key" "kimi-secret" cfg.api_key
+  | Error e -> Alcotest.failf "kimi load: %s" e);
+  (match Config.load ~provider:"deepseek" () with
+  | Ok cfg ->
+      Alcotest.(check string) "deepseek model" "deepseek-v4-flash" cfg.model;
+      Alcotest.(check string) "deepseek key" "ds-secret" cfg.api_key
+  | Error e -> Alcotest.failf "deepseek load: %s" e);
+  (match Config.load ~model:"custom-model" () with
+  | Ok cfg -> Alcotest.(check string) "model override" "custom-model" cfg.model
+  | Error e -> Alcotest.failf "override load: %s" e);
+  Alcotest.(check bool)
+    "unknown provider errors" true
+    (Result.is_error (Config.load ~provider:"nope" ()));
+  Unix.putenv "KIMI_API_KEY" "";
   Alcotest.(check bool)
     "missing key errors" true
-    (Result.is_error (Config.load ()));
-  Unix.putenv "OPENAI_API_KEY" "sk-test";
-  Unix.putenv "MODEL_NAME" "my-model";
-  match Config.load () with
-  | Ok cfg ->
-      Alcotest.(check string) "model from env" "my-model" cfg.model;
-      Alcotest.(check string) "api key" "sk-test" cfg.api_key
-  | Error e -> Alcotest.failf "expected ok config: %s" e
+    (Result.is_error (Config.load ()))
 
 let () =
   Alcotest.run "model_client"
@@ -94,6 +109,5 @@ let () =
           Alcotest.test_case "unknown_action" `Quick test_parse_unknown_action;
         ] );
       ("client", [ Alcotest.test_case "mock" `Quick test_mock_client ]);
-      ( "config",
-        [ Alcotest.test_case "requires_key" `Quick test_config_requires_key ] );
+      ("config", [ Alcotest.test_case "providers" `Quick test_config_providers ]);
     ]

@@ -6,7 +6,15 @@ type t = {
   workspace_root : string;
 }
 
-val load : unit -> (t, string) result
-(** Load configuration from environment variables. Fails fast if
-    [OPENAI_API_KEY] is missing. Other settings fall back to defaults:
-    [OPENAI_API_BASE], [MODEL_NAME], [MAX_STEPS], [WORKSPACE_ROOT]. *)
+val load :
+  ?provider:string ->
+  ?api_base:string ->
+  ?model:string ->
+  unit ->
+  (t, string) result
+(** Load configuration for the selected provider (default {!Provider.default},
+    or the [PROVIDER] env var, or the [?provider] override). Reads the
+    provider's API key env var and fails fast if it is missing. [api_base] and
+    [model] fall back to the [API_BASE] / [MODEL_NAME] env vars and then the
+    provider defaults. [MAX_STEPS] and [WORKSPACE_ROOT] are read from the
+    environment. *)

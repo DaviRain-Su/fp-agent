@@ -24,8 +24,12 @@ let print_changes root =
         Stdlib.print_string stdout
     | _ -> ()
 
-let run_agent task workspace_opt max_steps_opt =
-  match Config.load () with
+let run_agent task provider_opt api_base_opt model_opt workspace_opt
+    max_steps_opt =
+  match
+    Config.load ?provider:provider_opt ?api_base:api_base_opt ?model:model_opt
+      ()
+  with
   | Error e ->
       Stdlib.prerr_endline ("config error: " ^ e);
       1
@@ -44,7 +48,8 @@ let run_agent task workspace_opt max_steps_opt =
       | Ok workspace -> (
           let root = Workspace.root workspace in
           let session_dir = Session.create ~base_dir:root in
-          Stdlib.Printf.eprintf "session: %s\n%!" session_dir;
+          Stdlib.Printf.eprintf "model: %s @ %s\nsession: %s\n%!" config.model
+            config.api_base session_dir;
           let event_log = Event_log.create ~session_dir in
           let model_client = Model_client.create ~config in
           let outcome =
@@ -64,6 +69,28 @@ let () =
       & pos 0 (some string) None
       & info [] ~docv:"TASK" ~doc:"The coding task for the agent to perform.")
   in
+  let provider =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "p"; "provider" ] ~docv:"NAME"
+          ~doc:
+            "Model provider: kimi (default), zhipu, or deepseek. Also reads \
+             the PROVIDER env var.")
+  in
+  let api_base =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "api-base" ] ~docv:"URL" ~doc:"Override the provider's base URL.")
+  in
+  let model =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "m"; "model" ] ~docv:"ID"
+          ~doc:"Override the model id (defaults to the provider's model).")
+  in
   let workspace =
     Arg.(
       value
@@ -79,6 +106,10 @@ let () =
           ~doc:"Maximum agent steps (defaults to the MAX_STEPS env var or 30).")
   in
   let doc = "A type-safe local CLI code agent harness." in
-  let term = Term.(const run_agent $ task $ workspace $ max_steps) in
+  let term =
+    Term.(
+      const run_agent $ task $ provider $ api_base $ model $ workspace
+      $ max_steps)
+  in
   let info = Cmd.info "fp-agent" ~version:"0.1.0" ~doc in
   Stdlib.exit (Cmd.eval' (Cmd.v info term))
