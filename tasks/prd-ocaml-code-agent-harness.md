@@ -412,3 +412,23 @@ TOOL_RESULT tool=read_file ok=true
 - **`Edit_file`**：仅支持 exact old/new text replacement;无匹配报错,多匹配替换第一处。不支持 unified diff patch。
 - **resume session**：MVP 不支持,留待后续。
 - **event log 可 replay 格式**：MVP 不实现 replay 引擎,但 `events.jsonl` 每条带 `schema_version`,格式向前兼容,为未来 replay 预留。
+
+---
+
+## 14. Post-MVP Implementation Status
+
+> 本节记录 MVP 之后实际落地、**超出或修正了上面 §6 Non-Goals / §13 决策**的内容。上面的章节保留为原始规划,本节为当前事实来源。
+
+已实现(超出原 MVP 范围):
+
+- **多 provider**:`kimi`(默认,Kimi for coding,**Anthropic Messages 协议**)、`deepseek`(`deepseek-v4-flash`/`-pro`,OpenAI 协议)、`zhipu`(GLM,OpenAI 协议)。原计划仅"OpenAI-compatible";现按 provider 选择 key 环境变量、base URL、默认模型与**协议**(`lib/provider.ml`)。
+- **交互式 REPL**:无任务参数即进入,跨轮保留上下文;meta 命令 `/help`、`/tools`、`/sessions`、`/resume`、`/diff`、`/undo`、`/exit`。
+- **会话恢复(原 §13 标注"不支持")**:`--resume <session_dir>` 及 REPL `/resume`,经 `lib/transcript.ml` 从 event log 重建对话历史。
+- **TUI(原 §6 Non-Goal)**:`--tui` 全屏实时视图(notty),含动态 spinner 等待状态;纯逻辑抽到 `lib/view.ml` 并有单测。
+- **新增工具**:`search`(工作区文本搜索)、`make_dir`、`apply_patch`(git apply 应用 unified diff——修正 §13 "不支持 patch")、`multi_edit`(多处编辑原子应用)。`edit_file` 仍为 exact replacement。
+- **人工审批**:`--confirm` 对写操作/命令逐项 stdin 征询(对应 `Permission.Ask_user` 落地)。
+- **YOLO 模式**:`--yolo` 绕过危险命令 deny-list(仍保留 workspace 边界)。
+- **policy 决策审计**:`Event.Policy_decision` 写入 event log(US-009 验收点)。
+- **实时进度**:`on_event` 回调 + 并发 spinner,等模型/跑工具时显示动态状态。
+
+仍为 Non-Goal(未实现):多 agent 调度、浏览器自动化、Web search、长期记忆/向量数据库、自动 git commit、远程 sandbox、OxCaml 特性、event log replay 引擎。

@@ -2,12 +2,12 @@
 
 A minimal, type-safe **Code Agent Harness** written in OCaml.
 
-`fp-agent` takes a coding task on the command line, talks to an
-OpenAI-compatible model, and lets the model read, edit, and run code inside a
-bounded workspace — looping until it produces a final answer. The goal of this
-MVP is not the smartest agent but a clean, auditable, extensible harness: typed
-tool calls, an explicit state machine, a policy layer, and a full JSONL event
-log of every step.
+`fp-agent` takes a coding task (one-shot or in an interactive REPL), talks to a
+model — Kimi, DeepSeek, or Zhipu — and lets it read, edit, search, and run code
+inside a bounded workspace, looping until it produces a final answer. The
+emphasis is a clean, auditable, extensible harness: typed tool calls, an
+explicit state machine, a policy layer with optional approval, and a full JSONL
+event log of every step.
 
 ## Requirements
 
@@ -69,6 +69,7 @@ Options:
 - `-w`, `--workspace DIR` — workspace root (default: `WORKSPACE_ROOT` or cwd)
 - `--max-steps N` — max agent steps (default: `MAX_STEPS` or 30)
 - `--confirm` — ask for approval before each shell command or file write
+- `--yolo` — bypass the dangerous-command deny-list (workspace bounds still apply)
 - `--resume SESSION_DIR` — replay a previous session's event log as context and continue
 - `--tui` — full-screen live view of the run (autonomous; needs a real terminal)
 
@@ -144,8 +145,11 @@ file modification.
 | `policy` / `permission` | Allow/deny decisions, dangerous-command deny-list |
 | `tool_runner` | Executes tools behind the policy |
 | `session` / `event_log` | Session dirs and JSONL audit log |
-| `config` / `message` / `model_client` | Env config, chat messages, HTTP client |
+| `transcript` | Rebuilds conversation history from an event log (resume) |
+| `config` / `provider` | Env config and per-provider key/base/model/protocol |
+| `message` / `model_client` | Chat messages and the OpenAI/Anthropic HTTP client |
 | `agent_loop` | The model↔tool loop |
+| `view` | Pure TUI helpers (windowing, line classification) |
 
 ### Safety
 
@@ -156,10 +160,11 @@ file modification.
 - API keys never reach the event log.
 
 Shell commands run via `/bin/sh -c` and inherit the current environment
-(including `OPENAI_API_KEY`); this MVP does not sandbox that.
+(including the provider API key); this harness does not sandbox that.
 
-## Out of scope (MVP)
+## Out of scope
 
-Multi-agent, TUI, browser automation, web search, vector memory, automatic git
-commits, remote sandboxes, and session resume/replay. The event log carries a
-`schema_version` so a replay engine can be added later.
+Multi-agent orchestration, browser automation, web search, vector memory,
+automatic git commits, and remote sandboxes. The event log carries a
+`schema_version` so a full replay engine can be added later (today `--resume`
+reconstructs context from it).
