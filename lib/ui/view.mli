@@ -66,7 +66,10 @@ val select_event : event_count:int -> index:int -> event_selection
 (** Select a concrete event index, clamped to the valid event range. Selecting
     the newest event resumes [Follow_latest]. *)
 
-type command_entry = { command : string; description : string }
+type command_entry = Shell_command.entry = {
+  command : string;
+  description : string;
+}
 
 val command_palette_entries : command_entry list
 (** Built-in command palette entries shown in the TUI. *)

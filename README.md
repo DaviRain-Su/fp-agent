@@ -130,7 +130,8 @@ copy. Two consequences:
   by default, or pin a historical event with Up/Down, `j`/`k`, PageUp/PageDown,
   Home, and End.
 - **TUI command palette** (`/` or `?` in `--tui`) shows the core REPL commands
-  for models, providers, plugins, tools, sessions, forks, diffs, and undo.
+  for models, providers, plugins, tools, sessions, event logs, forks, diffs,
+  and undo. The palette and REPL parser share the same command metadata.
 - **TUI prompt editor groundwork** keeps multiline draft editing pure and
   testable: insert text, newline, delete/backspace, cursor movement, and
   rendering with a visible cursor.

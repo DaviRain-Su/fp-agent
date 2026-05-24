@@ -60,6 +60,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - The command palette controller now distinguishes close from accept: Enter
   returns the highlighted command entry, giving the future fullscreen shell a
   tested command-dispatch point while preserving the current overlay behavior.
+- REPL slash commands and the TUI command palette are now backed by shared
+  command metadata and parser tests. This keeps `/model` vs `/models`, aliases
+  like `/quit`, and future command-palette dispatch behavior from drifting.
 - The REPL exposes the same inspector through `/inspect [index]`, so event-log
   review works even outside a full-screen TUI and can target historical events.
 - The REPL exposes plugin inspection through `/plugin <id|tool>`, showing

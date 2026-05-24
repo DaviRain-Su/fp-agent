@@ -10,6 +10,10 @@ let accepted_command = function
   | None -> None
   | Some (command : View.command_entry) -> Some command.command
 
+let palette_command_at index =
+  Option.map (List.nth View.command_palette_entries index)
+    ~f:(fun (command : View.command_entry) -> command.command)
+
 let test_prompt_submit () =
   let state =
     Tui_shell.create ()
@@ -91,7 +95,7 @@ let test_palette_input_mapping () =
     "enter closes palette" false
     (Tui_shell.palette_open result.state);
   Alcotest.(check (option string))
-    "enter accepts selected command" (Some "/plugin <id|tool>")
+    "enter accepts selected command" (palette_command_at 4)
     (accepted_command result.accepted_command)
 
 let test_event_selection_state () =

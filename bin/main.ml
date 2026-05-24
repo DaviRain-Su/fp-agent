@@ -428,29 +428,7 @@ let tool_kind_label = function
   | Tool.Write -> "write"
   | Tool.Exec -> "exec"
 
-let print_help () =
-  Stdlib.print_endline
-    "Commands:\n\
-    \  /help              show this help\n\
-    \  /tools             list available tools\n\
-    \  /tool <name>       show tool details/schema\n\
-    \  /plugins           list discovered plugins\n\
-    \  /plugin <id|tool>  show plugin manifest/tool details\n\
-    \  /sessions          list sessions in this workspace\n\
-    \  /tree              show the session fork tree\n\
-    \  /resume <dir>      switch to a session (name under sessions/ or a path)\n\
-    \  /model [id]        show or switch the current model\n\
-    \  /models            list configured provider models\n\
-    \  /provider <name> [model] [api-base]\n\
-    \                     switch provider (e.g. local qwen2.5-coder:7b)\n\
-    \  /log               list this session's events with indices\n\
-    \  /inspect [index]   show inspector details for an event (default: last)\n\
-    \  /fork [<index>]    fork the session (at an event index, or the end)\n\
-    \  /diff              show uncommitted changes (git)\n\
-    \  /undo              revert the last turn's changes (git)\n\
-    \  /exit, /quit       leave the REPL\n\
-     Anything else is sent to the agent as a task (context carries across \
-     turns)."
+let print_help () = Stdlib.print_endline (Shell_command.help_text ())
 
 let print_tools () =
   Tool_loader.register_all ();
@@ -783,87 +761,79 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
     Stdlib.Out_channel.flush Stdlib.stdout;
     match Stdlib.In_channel.input_line Stdlib.stdin with
     | None -> ()
-    | Some raw ->
-        let line = String.strip raw in
-        if String.is_empty line then loop ()
-        else if String.equal line "/exit" || String.equal line "/quit" then ()
-        else if String.equal line "/help" then (
-          print_help ();
-          loop ())
-        else if String.equal line "/tools" then (
-          print_tools ();
-          loop ())
-        else if String.equal line "/tool" then (
-          print_tool_detail "";
-          loop ())
-        else if String.is_prefix line ~prefix:"/tool " then (
-          print_tool_detail (String.drop_prefix line 6);
-          loop ())
-        else if String.equal line "/plugins" then (
-          print_plugins ();
-          loop ())
-        else if String.equal line "/plugin" then (
-          print_plugin_detail "";
-          loop ())
-        else if String.is_prefix line ~prefix:"/plugin " then (
-          print_plugin_detail (String.drop_prefix line 8);
-          loop ())
-        else if String.equal line "/sessions" then (
-          print_sessions sessions_root !session;
-          loop ())
-        else if String.equal line "/model" then (
-          show_current_model ();
-          loop ())
-        else if String.is_prefix line ~prefix:"/model " then (
-          switch_model (String.strip (String.drop_prefix line 7));
-          loop ())
-        else if String.equal line "/models" then (
-          print_models ();
-          loop ())
-        else if String.is_prefix line ~prefix:"/provider " then (
-          switch_provider (String.strip (String.drop_prefix line 10));
-          loop ())
-        else if String.equal line "/diff" then (
-          show_diff ();
-          loop ())
-        else if String.equal line "/undo" then (
-          undo ();
-          loop ())
-        else if String.equal line "/log" then (
-          print_log ();
-          loop ())
-        else if String.equal line "/inspect" then (
-          print_inspect "";
-          loop ())
-        else if String.is_prefix line ~prefix:"/inspect " then (
-          print_inspect (String.strip (String.drop_prefix line 9));
-          loop ())
-        else if String.equal line "/tree" then (
-          print_tree ();
-          loop ())
-        else if String.equal line "/fork" then (
-          do_fork "";
-          loop ())
-        else if String.is_prefix line ~prefix:"/fork " then (
-          do_fork (String.strip (String.drop_prefix line 6));
-          loop ())
-        else if String.is_prefix line ~prefix:"/resume " then (
-          let arg = String.strip (String.drop_prefix line 8) in
-          let dir =
-            if Stdlib.Filename.is_relative arg then
-              Stdlib.Filename.concat sessions_root arg
-            else arg
-          in
-          if Stdlib.Sys.file_exists (Stdlib.Filename.concat dir "events.jsonl")
-          then switch dir
-          else Stdlib.print_endline ("no such session: " ^ dir);
-          loop ())
-        else if String.is_prefix line ~prefix:"/" then (
-          Stdlib.print_endline ("unknown command: " ^ line ^ " (try /help)");
-          loop ())
-        else (
-          run_task line;
-          loop ())
+    | Some raw -> (
+        let open Shell_command in
+        match parse raw with
+        | Empty -> loop ()
+        | Task task ->
+            run_task task;
+            loop ()
+        | Unknown command ->
+            Stdlib.print_endline ("unknown command: " ^ command ^ " (try /help)");
+            loop ()
+        | Command (Exit, _) -> ()
+        | Command (Help, _) ->
+            print_help ();
+            loop ()
+        | Command (Tools, _) ->
+            print_tools ();
+            loop ()
+        | Command (Tool, arg) ->
+            print_tool_detail arg;
+            loop ()
+        | Command (Plugins, _) ->
+            print_plugins ();
+            loop ()
+        | Command (Plugin, arg) ->
+            print_plugin_detail arg;
+            loop ()
+        | Command (Sessions, _) ->
+            print_sessions sessions_root !session;
+            loop ()
+        | Command (Model, "") ->
+            show_current_model ();
+            loop ()
+        | Command (Model, model) ->
+            switch_model model;
+            loop ()
+        | Command (Models, _) ->
+            print_models ();
+            loop ()
+        | Command (Provider, args) ->
+            switch_provider args;
+            loop ()
+        | Command (Diff, _) ->
+            show_diff ();
+            loop ()
+        | Command (Undo, _) ->
+            undo ();
+            loop ()
+        | Command (Log, _) ->
+            print_log ();
+            loop ()
+        | Command (Inspect, arg) ->
+            print_inspect arg;
+            loop ()
+        | Command (Tree, _) ->
+            print_tree ();
+            loop ()
+        | Command (Fork, arg) ->
+            do_fork arg;
+            loop ()
+        | Command (Resume, "") ->
+            Stdlib.print_endline "usage: /resume <dir>";
+            loop ()
+        | Command (Resume, arg) ->
+            let dir =
+              if Stdlib.Filename.is_relative arg then
+                Stdlib.Filename.concat sessions_root arg
+              else arg
+            in
+            if
+              Stdlib.Sys.file_exists (Stdlib.Filename.concat dir "events.jsonl")
+            then switch dir
+            else Stdlib.print_endline ("no such session: " ^ dir);
+            loop ())
   in
   loop ();
   Event_log.close !log;

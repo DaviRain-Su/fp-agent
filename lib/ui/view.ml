@@ -116,25 +116,12 @@ let move_selection ~event_count ~delta selection =
   | None -> Follow_latest
   | Some index -> select_event ~event_count ~index:(index + delta)
 
-type command_entry = { command : string; description : string }
+type command_entry = Shell_command.entry = {
+  command : string;
+  description : string;
+}
 
-let command_palette_entries =
-  [
-    { command = "/model [id]"; description = "show or switch model" };
-    {
-      command = "/provider <name> [model]";
-      description = "switch provider catalog entry";
-    };
-    { command = "/models"; description = "list configured models" };
-    { command = "/plugins"; description = "list discovered plugins" };
-    { command = "/plugin <id|tool>"; description = "inspect plugin manifest" };
-    { command = "/tool <name>"; description = "inspect tool schema" };
-    { command = "/inspect [index]"; description = "inspect an event" };
-    { command = "/resume <session>"; description = "switch session" };
-    { command = "/fork [index]"; description = "fork from event" };
-    { command = "/diff"; description = "show uncommitted changes" };
-    { command = "/undo"; description = "revert last turn changes" };
-  ]
+let command_palette_entries = Shell_command.palette_entries
 
 type palette_state = Palette_closed | Palette_open of int
 
@@ -169,7 +156,7 @@ let move_palette ~command_count ~delta state =
       normalize_palette ~command_count (Palette_open (index + delta))
 
 let command_palette_lines ~selected entries =
-  [ "Command Palette"; "press Enter/Esc to close"; "" ]
+  [ "Command Palette"; "Enter accept, Esc close"; "" ]
   @ List.mapi entries ~f:(fun index entry ->
       let marker = if index = selected then "> " else "  " in
       Printf.sprintf "%s%-24s %s" marker entry.command entry.description)

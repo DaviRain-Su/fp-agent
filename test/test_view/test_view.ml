@@ -159,16 +159,23 @@ let test_command_palette () =
   Alcotest.(check (option int))
     "toggle closes open palette" None
     (View.palette_index ~command_count:count closed);
+  let selected = 1 in
   let lines =
-    View.command_palette_lines ~selected:1 View.command_palette_entries
+    View.command_palette_lines ~selected View.command_palette_entries
   in
   let joined = String.concat lines ~sep:"\n" in
+  let selected_command =
+    Option.value_exn (List.nth View.command_palette_entries selected)
+  in
   Alcotest.(check bool)
     "renders title" true
     (String.is_substring joined ~substring:"Command Palette");
   Alcotest.(check bool)
+    "renders accept hint" true
+    (String.is_substring joined ~substring:"Enter accept");
+  Alcotest.(check bool)
     "renders selected marker" true
-    (String.is_substring joined ~substring:"> /provider");
+    (String.is_substring joined ~substring:("> " ^ selected_command.command));
   Alcotest.(check bool)
     "renders plugin command" true
     (String.is_substring joined ~substring:"/plugins")
