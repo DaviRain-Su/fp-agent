@@ -422,7 +422,7 @@ TOOL_RESULT tool=read_file ok=true
 已实现(超出原 MVP 范围):
 
 - **多 provider**:`kimi`(默认,Kimi for coding,**Anthropic Messages 协议**)、`deepseek`(`deepseek-v4-flash`/`-pro`,OpenAI 协议)、`zhipu`(GLM,OpenAI 协议)。原计划仅"OpenAI-compatible";现按 provider 选择 key 环境变量、base URL、默认模型与**协议**(`lib/provider.ml`)。
-- **自定义 provider 配置**:支持 `FP_AGENT_CONFIG` / `.fp-agent/providers.json` / `.fp-agent.json` / `~/.config/fp-agent/providers.json`,可按 pi 风格声明 provider 的 `baseUrl`、`api`、`apiKey`、`models`；REPL 支持 `/provider`、`/model`、`/models` 切换当前模型。
+- **自定义 provider 配置**:支持 `FP_AGENT_CONFIG` / `.fp-agent/providers.json` / `.fp-agent.json` / `~/.config/fp-agent/providers.json`,可按 pi 风格声明 provider 的 `baseUrl`、`api`、`apiKey`、`models`；REPL 支持 `/provider`、`/model`、`/models`,其中 `/models` 会列出内置 provider 与自定义 provider 的模型目录。
 - **交互式 REPL**:无任务参数即进入,跨轮保留上下文;meta 命令 `/help`、`/tools`、`/sessions`、`/resume`、`/diff`、`/undo`、`/exit`。
 - **会话恢复(原 §13 标注"不支持")**:`--resume <session_dir>` 及 REPL `/resume`,经 `lib/transcript.ml` 从 event log 重建对话历史。
 - **TUI(原 §6 Non-Goal)**:`--tui` 全屏实时视图(notty),含动态 spinner 等待状态;纯逻辑抽到 `lib/view.ml` 并有单测。

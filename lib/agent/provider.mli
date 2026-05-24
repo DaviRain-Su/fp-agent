@@ -1,5 +1,5 @@
-(** Supported model providers. All expose an OpenAI-compatible chat completion
-    endpoint, so only the key, base URL, and default model differ. *)
+(** Supported model providers. Each provider has a key, base URL, default model,
+    and wire protocol. *)
 
 type t = Kimi | Zhipu | Deepseek | Local
 
@@ -29,3 +29,6 @@ val default_api_base : t -> string
 
 val default_model : t -> string
 (** Default model id for this provider. *)
+
+val models : t -> string list
+(** Built-in model ids known for this provider. *)

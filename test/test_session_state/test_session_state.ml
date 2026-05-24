@@ -10,13 +10,10 @@ let events =
         to_state = Agent_state.Waiting_for_model;
       };
     Event.Model_response
-      { action = Model_action.Tool_call (Tool_call.Read_file { path = "f" }) };
-    Event.Tool_call (Tool_call.Read_file { path = "f" });
+      { action = Model_action.Tool_call (Tool_call.read_file "f") };
+    Event.Tool_call (Tool_call.read_file "f");
     Event.Policy_decision
-      {
-        tool_call = Tool_call.Read_file { path = "f" };
-        permission = Permission.Allow;
-      };
+      { tool_call = Tool_call.read_file "f"; permission = Permission.Allow };
     Event.Tool_result (Tool_result.Success { output = "contents" });
     Event.State_transition
       {

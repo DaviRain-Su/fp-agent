@@ -12,21 +12,15 @@ let yojson_roundtrip name of_yojson to_yojson value =
 let test_tool_call_roundtrips () =
   let cases =
     [
-      ("Read_file", Tool_call.Read_file { path = "lib/foo.ml" });
+      ("Read_file", Tool_call.read_file "lib/foo.ml");
       ( "Write_file",
-        Tool_call.Write_file { path = "lib/foo.ml"; content = "let x = 42" } );
+        Tool_call.write_file ~path:"lib/foo.ml" ~content:"let x = 42" );
       ( "Edit_file",
-        Tool_call.Edit_file
-          {
-            path = "lib/foo.ml";
-            old_text = "let x = 42";
-            new_text = "let x = 43";
-          } );
-      ( "Run_command",
-        Tool_call.Run_command { command = "dune build"; cwd = None } );
-      ( "Run_command_with_cwd",
-        Tool_call.Run_command { command = "make test"; cwd = Some "/tmp" } );
-      ("List_files", Tool_call.List_files { path = "lib" });
+        Tool_call.edit_file ~path:"lib/foo.ml" ~old_text:"let x = 42"
+          ~new_text:"let x = 43" );
+      ("Run_command", Tool_call.run_command "dune build");
+      ("Run_command_with_cwd", Tool_call.run_command ~cwd:"/tmp" "make test");
+      ("List_files", Tool_call.list_files "lib");
     ]
   in
   List.iter cases ~f:(fun (name, tc) ->
@@ -45,8 +39,7 @@ let test_tool_result_roundtrips () =
 let test_model_action_roundtrips () =
   let cases =
     [
-      ( "Tool_call",
-        Model_action.Tool_call (Tool_call.Read_file { path = "lib/foo.ml" }) );
+      ("Tool_call", Model_action.Tool_call (Tool_call.read_file "lib/foo.ml"));
       ( "Final_answer",
         Model_action.Final_answer { answer = "The fix is complete." } );
     ]
@@ -61,8 +54,7 @@ let test_event_roundtrips () =
       ( "Model_response",
         Event.Model_response
           { action = Model_action.Final_answer { answer = "Done" } } );
-      ( "Tool_call",
-        Event.Tool_call (Tool_call.Read_file { path = "lib/foo.ml" }) );
+      ("Tool_call", Event.Tool_call (Tool_call.read_file "lib/foo.ml"));
       ("Tool_result", Event.Tool_result (Tool_result.Success { output = "42" }));
       ( "State_transition",
         Event.State_transition
@@ -78,10 +70,10 @@ let test_event_roundtrips () =
 let test_invalid_json () =
   let invalid_cases =
     [
-      ("Tool_call: missing tag", `Assoc [ ("path", `String "foo.ml") ]);
-      ("Tool_call: unknown tag", `Assoc [ ("tag", `String "Delete_file") ]);
+      ("Tool_call: missing name", `Assoc [ ("path", `String "foo.ml") ]);
+      ("Tool_call: wrong name shape", `Assoc [ ("name", `Int 42) ]);
       ( "Tool_call: wrong shape",
-        `Assoc [ ("tag", `String "Read_file"); ("path", `Int 42) ] );
+        `List [ `Assoc [ ("name", `String "read_file") ] ] );
       ("Tool_result: empty", `Assoc []);
       ("Model_action: empty", `Assoc []);
       ("Event: empty", `Assoc []);

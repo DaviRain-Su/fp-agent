@@ -11,6 +11,13 @@ type t = {
   workspace_root : string;
 }
 
+type provider_catalog_entry = {
+  provider_name : string;
+  provider_api_base : string;
+  provider_models : string list;
+  provider_protocol : Provider.protocol;
+}
+
 let default_max_steps = 30
 let getenv name = Stdlib.Sys.getenv_opt name
 
@@ -20,6 +27,18 @@ let getenv_nonempty name =
   match getenv name with Some "" | None -> None | Some s -> Some s
 
 let getenv_default name ~default = Option.value (getenv name) ~default
+
+let dedupe_nonempty strings =
+  List.fold strings ~init:[] ~f:(fun acc s ->
+      let s = String.strip s in
+      if String.is_empty s || List.mem acc s ~equal:String.equal then acc
+      else s :: acc)
+  |> List.rev
+
+let env_models name =
+  match getenv_nonempty name with
+  | None -> []
+  | Some s -> String.split s ~on:',' |> dedupe_nonempty
 
 type provider_choice = Builtin of Provider.t | Custom of string
 
@@ -117,6 +136,49 @@ let load_custom_provider name =
   in
   List.find_map (candidate_config_paths ()) ~f:parse
 
+let custom_provider_names () =
+  let names_from_file path =
+    match Yojson.Safe.from_file path with
+    | exception _ -> []
+    | json -> provider_fields json |> List.map ~f:fst
+  in
+  candidate_config_paths ()
+  |> List.concat_map ~f:names_from_file
+  |> dedupe_nonempty
+
+let custom_models custom =
+  match custom.models with
+  | [] -> Option.to_list custom.default_model
+  | models -> models
+
+let builtin_models = function
+  | Provider.Local -> Provider.models Provider.Local @ env_models "LOCAL_MODELS"
+  | provider -> Provider.models provider
+
+let available_providers () =
+  let builtin_entries =
+    List.map Provider.all ~f:(fun provider ->
+        {
+          provider_name = Provider.to_string provider;
+          provider_api_base = Provider.default_api_base provider;
+          provider_models = dedupe_nonempty (builtin_models provider);
+          provider_protocol = Provider.protocol provider;
+        })
+  in
+  let custom_entries =
+    custom_provider_names ()
+    |> List.filter ~f:(fun name -> Option.is_none (Provider.of_string name))
+    |> List.filter_map ~f:(fun name ->
+        Option.map (load_custom_provider name) ~f:(fun custom ->
+            {
+              provider_name = custom.name;
+              provider_api_base = custom.api_base;
+              provider_models = dedupe_nonempty (custom_models custom);
+              provider_protocol = custom.protocol;
+            }))
+  in
+  builtin_entries @ custom_entries
+
 let resolve_provider provider =
   match Option.first_some provider (getenv_nonempty "PROVIDER") with
   | None -> Ok (Builtin Provider.default)
@@ -166,7 +228,7 @@ let load ?provider ?api_base ?model () =
               api_key;
               api_base;
               model;
-              models = [ Provider.default_model prov ];
+              models = dedupe_nonempty (builtin_models prov);
               protocol;
               max_steps;
               workspace_root;

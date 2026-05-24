@@ -266,7 +266,7 @@ let print_help () =
     \  /tree              show the session fork tree\n\
     \  /resume <dir>      switch to a session (name under sessions/ or a path)\n\
     \  /model [id]        show or switch the current model\n\
-    \  /models            list LOCAL_MODELS entries, if configured\n\
+    \  /models            list configured provider models\n\
     \  /provider <name> [model] [api-base]\n\
     \                     switch provider (e.g. local qwen2.5-coder:7b)\n\
     \  /log               list this session's events with indices\n\
@@ -376,29 +376,34 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
     model_client := Model_client.create ~config:!config_ref;
     show_current_model ()
   in
-  let local_models () =
-    match Stdlib.Sys.getenv_opt "LOCAL_MODELS" with
-    | None | Some "" -> []
-    | Some s ->
-        String.split s ~on:',' |> List.map ~f:String.strip
-        |> List.filter ~f:(fun s -> not (String.is_empty s))
-  in
   let print_models () =
-    let models =
-      !config_ref.models @ local_models ()
-      |> List.dedup_and_sort ~compare:String.compare
-    in
-    match models with
+    match Config.available_providers () with
     | [] ->
         Stdlib.print_endline
-          "(no configured models; add models to FP_AGENT_CONFIG or set \
-           LOCAL_MODELS=model-a,model-b)"
-    | models ->
-        List.iter models ~f:(fun model ->
-            let mark =
-              if String.equal model !config_ref.model then "*" else " "
+          "(no configured providers; add providers to FP_AGENT_CONFIG)"
+    | providers ->
+        List.iter providers ~f:(fun (entry : Config.provider_catalog_entry) ->
+            let provider_mark =
+              if String.equal entry.provider_name !config_ref.provider then "*"
+              else " "
             in
-            Stdlib.Printf.printf "  %s %s\n" mark model)
+            Stdlib.Printf.printf "%s %s @ %s\n" provider_mark
+              entry.provider_name entry.provider_api_base;
+            match entry.provider_models with
+            | [] -> Stdlib.print_endline "    (no models configured)"
+            | models ->
+                List.iter models ~f:(fun model ->
+                    let model_mark =
+                      if
+                        String.equal entry.provider_name !config_ref.provider
+                        && String.equal model !config_ref.model
+                      then "*"
+                      else " "
+                    in
+                    Stdlib.Printf.printf "    %s %s\n" model_mark model));
+        Stdlib.print_endline
+          "Use /provider <name> [model] to switch provider, or /model <id> \
+           within the current provider."
   in
   let switch_provider args =
     let parts =

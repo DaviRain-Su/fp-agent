@@ -3,12 +3,21 @@ open Fp_agent
 
 let parse = Model_client.parse_action
 
+let check_tool tc ~name =
+  Alcotest.(check string) "tool name" name tc.Tool_call.name
+
+let check_arg tc key expected =
+  Alcotest.(check (option string))
+    key (Some expected)
+    (Tool_call.arg_string tc key)
+
 let test_parse_tool_call () =
   match
     parse {|{"action":"tool_call","tool":"read_file","args":{"path":"a.ml"}}|}
   with
-  | Ok (Model_action.Tool_call (Tool_call.Read_file { path })) ->
-      Alcotest.(check string) "path" "a.ml" path
+  | Ok (Model_action.Tool_call tc) ->
+      check_tool tc ~name:"read_file";
+      check_arg tc "path" "a.ml"
   | Ok _ -> Alcotest.fail "wrong action variant"
   | Error e -> Alcotest.failf "unexpected error: %s" e
 
@@ -17,12 +26,11 @@ let test_parse_edit_wire_names () =
     parse
       {|{"action":"tool_call","tool":"edit_file","args":{"path":"a.ml","old":"x","new":"y"}}|}
   with
-  | Ok
-      (Model_action.Tool_call (Tool_call.Edit_file { path; old_text; new_text }))
-    ->
-      Alcotest.(check string) "path" "a.ml" path;
-      Alcotest.(check string) "old" "x" old_text;
-      Alcotest.(check string) "new" "y" new_text
+  | Ok (Model_action.Tool_call tc) ->
+      check_tool tc ~name:"edit_file";
+      check_arg tc "path" "a.ml";
+      check_arg tc "old" "x";
+      check_arg tc "new" "y"
   | _ -> Alcotest.fail "expected edit_file"
 
 let test_parse_flat_tool () =
@@ -30,21 +38,24 @@ let test_parse_flat_tool () =
   match
     parse {|{"action":"write_file","path":"a.ml","content":"let x = 1"}|}
   with
-  | Ok (Model_action.Tool_call (Tool_call.Write_file { path; content })) ->
-      Alcotest.(check string) "path" "a.ml" path;
-      Alcotest.(check string) "content" "let x = 1" content
+  | Ok (Model_action.Tool_call tc) ->
+      check_tool tc ~name:"write_file";
+      check_arg tc "path" "a.ml";
+      check_arg tc "content" "let x = 1"
   | _ -> Alcotest.fail "expected flat write_file"
 
 let test_parse_bare_tool_field () =
   match parse {|{"tool":"list_files","args":{"path":"lib"}}|} with
-  | Ok (Model_action.Tool_call (Tool_call.List_files { path })) ->
-      Alcotest.(check string) "path" "lib" path
+  | Ok (Model_action.Tool_call tc) ->
+      check_tool tc ~name:"list_files";
+      check_arg tc "path" "lib"
   | _ -> Alcotest.fail "expected list_files from bare tool field"
 
 let test_parse_array_wrapped () =
   match parse {|[{"action":"read_file","path":"a.ml"}]|} with
-  | Ok (Model_action.Tool_call (Tool_call.Read_file { path })) ->
-      Alcotest.(check string) "path" "a.ml" path
+  | Ok (Model_action.Tool_call tc) ->
+      check_tool tc ~name:"read_file";
+      check_arg tc "path" "a.ml"
   | _ -> Alcotest.fail "expected read_file from array-wrapped action"
 
 let test_parse_non_object_errors () =
@@ -57,23 +68,40 @@ let test_parse_search () =
   match
     parse {|{"action":"tool_call","tool":"search","args":{"query":"needle"}}|}
   with
-  | Ok (Model_action.Tool_call (Tool_call.Search { query; path = None })) ->
-      Alcotest.(check string) "query" "needle" query
+  | Ok (Model_action.Tool_call tc) ->
+      check_tool tc ~name:"search";
+      check_arg tc "query" "needle";
+      Alcotest.(check (option string))
+        "path" None
+        (Tool_call.arg_string tc "path")
   | _ -> Alcotest.fail "expected search tool call"
 
 let test_parse_flat_new_tools () =
   (match parse {|{"action":"make_dir","path":"tmp/new"}|} with
-  | Ok (Model_action.Tool_call (Tool_call.Make_dir { path })) ->
-      Alcotest.(check string) "make_dir path" "tmp/new" path
+  | Ok (Model_action.Tool_call tc) ->
+      check_tool tc ~name:"make_dir";
+      check_arg tc "path" "tmp/new"
   | _ -> Alcotest.fail "expected flat make_dir");
   match
     parse
       {|{"action":"multi_edit","edits":[{"path":"a.ml","old":"x","new":"y"}]}|}
   with
-  | Ok (Model_action.Tool_call (Tool_call.Multi_edit { edits = [ edit ] })) ->
-      Alcotest.(check string) "multi_edit path" "a.ml" edit.path;
-      Alcotest.(check string) "multi_edit old" "x" edit.old_text;
-      Alcotest.(check string) "multi_edit new" "y" edit.new_text
+  | Ok (Model_action.Tool_call tc) -> (
+      check_tool tc ~name:"multi_edit";
+      match Tool_call.arg tc "edits" with
+      | `List [ edit ] ->
+          let edit_arg key =
+            match Yojson.Safe.Util.member key edit with
+            | `String s -> Some s
+            | _ -> None
+          in
+          Alcotest.(check (option string))
+            "multi_edit path" (Some "a.ml") (edit_arg "path");
+          Alcotest.(check (option string))
+            "multi_edit old" (Some "x") (edit_arg "old");
+          Alcotest.(check (option string))
+            "multi_edit new" (Some "y") (edit_arg "new")
+      | _ -> Alcotest.fail "expected one multi_edit item")
   | _ -> Alcotest.fail "expected flat multi_edit"
 
 let test_parse_final_answer () =
@@ -123,6 +151,7 @@ let test_config_providers () =
   Unix.putenv "KIMI_API_KEY" "kimi-secret";
   Unix.putenv "DEEPSEEK_API_KEY" "ds-secret";
   Unix.putenv "LOCAL_API_KEY" "";
+  Unix.putenv "LOCAL_MODELS" "";
   Unix.putenv "FP_AGENT_CONFIG" "";
   (match Config.load () with
   | Ok cfg ->
@@ -151,6 +180,7 @@ let test_config_providers () =
         "local uses openai protocol" true
         (match cfg.protocol with Provider.Openai -> true | _ -> false)
   | Error e -> Alcotest.failf "local load: %s" e);
+  Unix.putenv "LOCAL_MODELS" "qwen-local,llama3";
   let dir = Stdlib.Filename.temp_dir "fp_agent_provider" "" in
   let config_path = Stdlib.Filename.concat dir "providers.json" in
   Stdlib.Out_channel.with_open_bin config_path (fun oc ->
@@ -185,6 +215,34 @@ let test_config_providers () =
         [ "qwen36-rtx"; "qwen-coder" ]
         cfg.models
   | Error e -> Alcotest.failf "custom provider load: %s" e);
+  let catalog = Config.available_providers () in
+  let find_provider name =
+    List.find catalog ~f:(fun (entry : Config.provider_catalog_entry) ->
+        String.equal entry.provider_name name)
+  in
+  (match find_provider "deepseek" with
+  | Some entry ->
+      Alcotest.(check bool)
+        "deepseek catalog has pro" true
+        (List.mem entry.provider_models "deepseek-v4-pro" ~equal:String.equal)
+  | None -> Alcotest.fail "deepseek missing from catalog");
+  (match find_provider "local" with
+  | Some entry ->
+      Alcotest.(check (list string))
+        "local catalog includes LOCAL_MODELS"
+        [ "local-model"; "qwen-local"; "llama3" ]
+        entry.provider_models
+  | None -> Alcotest.fail "local missing from catalog");
+  (match find_provider "local-llm" with
+  | Some entry ->
+      Alcotest.(check string)
+        "custom catalog base" "http://101.132.142.56:18080/v1"
+        entry.provider_api_base;
+      Alcotest.(check (list string))
+        "custom catalog models"
+        [ "qwen36-rtx"; "qwen-coder" ]
+        entry.provider_models
+  | None -> Alcotest.fail "custom provider missing from catalog");
   (match
      Config.load ~provider:"local-llm" ~model:"qwen-coder"
        ~api_base:"http://127.0.0.1:18080/v1" ()
@@ -197,6 +255,7 @@ let test_config_providers () =
   (try Unix.unlink config_path with Unix.Unix_error _ -> ());
   (try Unix.rmdir dir with Unix.Unix_error _ -> ());
   Unix.putenv "FP_AGENT_CONFIG" "";
+  Unix.putenv "LOCAL_MODELS" "";
   (match Config.load ~model:"custom-model" () with
   | Ok cfg -> Alcotest.(check string) "model override" "custom-model" cfg.model
   | Error e -> Alcotest.failf "override load: %s" e);

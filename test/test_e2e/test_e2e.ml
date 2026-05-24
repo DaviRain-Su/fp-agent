@@ -42,12 +42,9 @@ let test_edit_readme_e2e () =
         ref
           [
             Model_action.Tool_call
-              (Tool_call.Edit_file
-                 {
-                   path = "README.md";
-                   old_text = "TODO: write docs";
-                   new_text = "This project is documented.";
-                 });
+              (Tool_call.edit_file ~path:"README.md"
+                 ~old_text:"TODO: write docs"
+                 ~new_text:"This project is documented.");
             Model_action.Final_answer { answer = "Updated the README." };
           ]
       in

@@ -49,7 +49,7 @@ let write_then_final () =
   scripted
     [
       Model_action.Tool_call
-        (Tool_call.Write_file { path = "out.txt"; content = "hi" });
+        (Tool_call.write_file ~path:"out.txt" ~content:"hi");
       Model_action.Final_answer { answer = "done" };
     ]
 
@@ -91,7 +91,7 @@ let test_tool_then_final () =
         scripted
           [
             Model_action.Tool_call
-              (Tool_call.Write_file { path = "out.txt"; content = "hi there" });
+              (Tool_call.write_file ~path:"out.txt" ~content:"hi there");
             Model_action.Final_answer { answer = "done" };
           ]
       in
@@ -120,8 +120,7 @@ let test_max_steps () =
       let config = { config with Config.max_steps = 3 } in
       let client =
         Model_client.create_mock ~send:(fun _ ->
-            Lwt.return
-              (Ok (Model_action.Tool_call (Tool_call.List_files { path = "." }))))
+            Lwt.return (Ok (Model_action.Tool_call (Tool_call.list_files "."))))
       in
       let outcome = run config workspace event_log client "loop forever" in
       Alcotest.(check string)

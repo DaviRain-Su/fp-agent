@@ -9,6 +9,13 @@ type t = {
   workspace_root : string;
 }
 
+type provider_catalog_entry = {
+  provider_name : string;
+  provider_api_base : string;
+  provider_models : string list;
+  provider_protocol : Provider.protocol;
+}
+
 val load :
   ?provider:string ->
   ?api_base:string ->
@@ -23,3 +30,8 @@ val load :
     [api_base] and [model] fall back to the [API_BASE] / [MODEL_NAME] env vars
     and then the provider defaults or configured model list. [MAX_STEPS] and
     [WORKSPACE_ROOT] are read from the environment. *)
+
+val available_providers : unit -> provider_catalog_entry list
+(** Return the built-in provider/model catalog plus custom providers found in
+    [FP_AGENT_CONFIG] or the default provider config files. API keys are not
+    required for catalog listing. *)

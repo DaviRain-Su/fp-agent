@@ -6,7 +6,7 @@ type t = Kimi | Zhipu | Deepseek | Local
    contract in the message body; only the HTTP request/response shape differs. *)
 type protocol = Openai | Anthropic
 
-let all = [ Kimi; Zhipu; Deepseek; Local ]
+let all = [ Kimi; Deepseek; Zhipu; Local ]
 
 let to_string = function
   | Kimi -> "kimi"
@@ -51,3 +51,9 @@ let default_model = function
   | Zhipu -> "glm-4"
   | Deepseek -> "deepseek-v4-flash"
   | Local -> "local-model"
+
+let models = function
+  | Kimi -> [ default_model Kimi ]
+  | Deepseek -> [ default_model Deepseek; "deepseek-v4-pro" ]
+  | Zhipu -> [ default_model Zhipu; "glm-5.1" ]
+  | Local -> [ default_model Local ]

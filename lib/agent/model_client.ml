@@ -53,69 +53,25 @@ let get_string obj name =
 let get_string_opt obj name =
   match Yojson.Safe.Util.member name obj with `String s -> Some s | _ -> None
 
+let strip_control_fields = function
+  | `Assoc fields ->
+      `Assoc
+        (List.filter fields ~f:(fun (name, _) ->
+             not
+               (List.mem
+                  [ "action"; "tool"; "args"; "arguments" ]
+                  name ~equal:String.equal)))
+  | json -> json
+
 let build_tool tool args : (Tool_call.t, string) Result.t =
-  match tool with
-  | "read_file" ->
-      Result.map (get_string args "path") ~f:(fun path ->
-          Tool_call.Read_file { path })
-  | "list_files" ->
-      Result.map (get_string args "path") ~f:(fun path ->
-          Tool_call.List_files { path })
-  | "write_file" -> (
-      match (get_string args "path", get_string args "content") with
-      | Ok path, Ok content -> Ok (Tool_call.Write_file { path; content })
-      | Error e, _ | _, Error e -> Error e)
-  | "edit_file" -> (
-      match
-        (get_string args "path", get_string args "old", get_string args "new")
-      with
-      | Ok path, Ok old_text, Ok new_text ->
-          Ok (Tool_call.Edit_file { path; old_text; new_text })
-      | Error e, _, _ | _, Error e, _ | _, _, Error e -> Error e)
-  | "run_command" ->
-      Result.map (get_string args "command") ~f:(fun command ->
-          Tool_call.Run_command { command; cwd = get_string_opt args "cwd" })
-  | "search" ->
-      Result.map (get_string args "query") ~f:(fun query ->
-          Tool_call.Search { query; path = get_string_opt args "path" })
-  | "make_dir" ->
-      Result.map (get_string args "path") ~f:(fun path ->
-          Tool_call.Make_dir { path })
-  | "apply_patch" ->
-      Result.map (get_string args "patch") ~f:(fun patch ->
-          Tool_call.Apply_patch { patch })
-  | "multi_edit" -> (
-      let parse_edit j =
-        match (get_string j "path", get_string j "old", get_string j "new") with
-        | Ok path, Ok old_text, Ok new_text ->
-            Ok { Tool_call.path; old_text; new_text }
-        | Error e, _, _ | _, Error e, _ | _, _, Error e -> Error e
-      in
-      match Yojson.Safe.Util.member "edits" args with
-      | `List items ->
-          List.fold items ~init:(Ok []) ~f:(fun acc j ->
-              match acc with
-              | Error _ as e -> e
-              | Ok xs -> Result.map (parse_edit j) ~f:(fun x -> x :: xs))
-          |> Result.map ~f:(fun xs ->
-              Tool_call.Multi_edit { edits = List.rev xs })
-      | _ -> Error "multi_edit requires an 'edits' array")
-  | other -> Error ("unknown tool: " ^ other)
+  Builtin_tools.register_all ();
+  match Tool.find tool with
+  | Some _ -> Ok (Tool_call.make ~name:tool ~args:(strip_control_fields args))
+  | None -> Error ("unknown tool: " ^ tool)
 
-let tool_names =
-  [
-    "read_file";
-    "write_file";
-    "edit_file";
-    "run_command";
-    "list_files";
-    "search";
-    "make_dir";
-    "apply_patch";
-    "multi_edit";
-  ]
-
-let is_tool_name n = List.mem tool_names n ~equal:String.equal
+let is_tool_name n =
+  Builtin_tools.register_all ();
+  Option.is_some (Tool.find n)
 
 (* Models vary in how strictly they follow the contract. Accept both the
    nested form ({"action":"tool_call","tool":..,"args":{..}}) and the common

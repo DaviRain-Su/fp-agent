@@ -18,17 +18,13 @@ let of_yojson json =
   | exception exn -> Error (Exn.to_string exn)
 
 let describe_tool (tc : Tool_call.t) =
-  match tc with
-  | Read_file { path } -> "read_file " ^ path
-  | Write_file { path; _ } -> "write_file " ^ path
-  | Edit_file { path; _ } -> "edit_file " ^ path
-  | Run_command { command; _ } -> "run_command " ^ command
-  | List_files { path } -> "list_files " ^ path
-  | Search { query; _ } -> "search " ^ query
-  | Make_dir { path } -> "make_dir " ^ path
-  | Apply_patch _ -> "apply_patch"
-  | Multi_edit { edits } ->
-      Printf.sprintf "multi_edit (%d edits)" (List.length edits)
+  let detail =
+    List.find_map [ "path"; "command"; "query" ] ~f:(fun key ->
+        Tool_call.arg_string tc key)
+  in
+  match detail with
+  | Some d -> tc.Tool_call.name ^ " " ^ d
+  | None -> tc.Tool_call.name
 
 let first_line s =
   let line =

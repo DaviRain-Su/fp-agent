@@ -14,13 +14,9 @@ let test_reconstruct () =
       Event_log.append log (Event.User_message { content = "do the thing" });
       Event_log.append log
         (Event.Model_response
-           {
-             action =
-               Model_action.Tool_call (Tool_call.Read_file { path = "f" });
-           });
+           { action = Model_action.Tool_call (Tool_call.read_file "f") });
       (* Tool_call and Policy_decision are not part of the model transcript *)
-      Event_log.append log
-        (Event.Tool_call (Tool_call.Read_file { path = "f" }));
+      Event_log.append log (Event.Tool_call (Tool_call.read_file "f"));
       Event_log.append log
         (Event.Tool_result (Tool_result.Success { output = "contents" }));
       Event_log.close log;

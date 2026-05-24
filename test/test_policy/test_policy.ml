@@ -24,33 +24,30 @@ let test_safe_reads () =
   with_workspace (fun ws ->
       Alcotest.(check bool)
         "read inside allowed" true
-        (is_allow (check ws (Tool_call.Read_file { path = "foo.ml" })));
+        (is_allow (check ws (Tool_call.read_file "foo.ml")));
       Alcotest.(check bool)
         "list inside allowed" true
-        (is_allow (check ws (Tool_call.List_files { path = "." }))))
+        (is_allow (check ws (Tool_call.list_files "."))))
 
 let test_deny_git_write () =
   with_workspace (fun ws ->
       Alcotest.(check bool)
         ".git write denied" true
         (is_deny
-           (check ws
-              (Tool_call.Write_file { path = ".git/config"; content = "x" }))))
+           (check ws (Tool_call.write_file ~path:".git/config" ~content:"x"))))
 
 let test_deny_escape_write () =
   with_workspace (fun ws ->
       Alcotest.(check bool)
         "escape write denied" true
         (is_deny
-           (check ws
-              (Tool_call.Write_file { path = "../evil.txt"; content = "x" }))))
+           (check ws (Tool_call.write_file ~path:"../evil.txt" ~content:"x"))))
 
 let test_safe_command_allowed () =
   with_workspace (fun ws ->
       Alcotest.(check bool)
         "ls allowed" true
-        (is_allow
-           (check ws (Tool_call.Run_command { command = "ls -la"; cwd = None }))))
+        (is_allow (check ws (Tool_call.run_command "ls -la"))))
 
 let test_dangerous_commands_denied () =
   with_workspace (fun ws ->
@@ -68,13 +65,11 @@ let test_dangerous_commands_denied () =
       List.iter dangerous ~f:(fun command ->
           Alcotest.(check bool)
             ("denied: " ^ command) true
-            (is_deny (check ws (Tool_call.Run_command { command; cwd = None })))))
+            (is_deny (check ws (Tool_call.run_command command)))))
 
 let test_deny_includes_reason () =
   with_workspace (fun ws ->
-      match
-        check ws (Tool_call.Run_command { command = "rm -rf /"; cwd = None })
-      with
+      match check ws (Tool_call.run_command "rm -rf /") with
       | Permission.Deny reason ->
           Alcotest.(check bool)
             "reason non-empty" true
@@ -83,7 +78,7 @@ let test_deny_includes_reason () =
 
 let test_yolo_bypasses_denylist () =
   with_workspace (fun ws ->
-      let tc = Tool_call.Run_command { command = "rm -rf /"; cwd = None } in
+      let tc = Tool_call.run_command "rm -rf /" in
       Alcotest.(check bool)
         "denied normally" true
         (is_deny (Policy.check ~workspace:ws ~tool_call:tc ()));
@@ -95,8 +90,7 @@ let test_yolo_bypasses_denylist () =
         "git write still denied under yolo" true
         (is_deny
            (Policy.check ~yolo:true ~workspace:ws
-              ~tool_call:
-                (Tool_call.Write_file { path = ".git/x"; content = "y" })
+              ~tool_call:(Tool_call.write_file ~path:".git/x" ~content:"y")
               ())))
 
 let test_apply_patch_paths () =
@@ -106,18 +100,16 @@ let test_apply_patch_paths () =
       in
       Alcotest.(check bool)
         "safe patch allowed" true
-        (is_allow (check ws (Tool_call.Apply_patch { patch = patch "ok.txt" })));
+        (is_allow (check ws (Tool_call.apply_patch (patch "ok.txt"))));
       Alcotest.(check bool)
         ".git patch denied" true
-        (is_deny
-           (check ws (Tool_call.Apply_patch { patch = patch ".git/config" })));
+        (is_deny (check ws (Tool_call.apply_patch (patch ".git/config"))));
       Alcotest.(check bool)
         "escape patch denied" true
-        (is_deny
-           (check ws (Tool_call.Apply_patch { patch = patch "../evil.txt" })));
+        (is_deny (check ws (Tool_call.apply_patch (patch "../evil.txt"))));
       Alcotest.(check bool)
         "malformed patch denied" true
-        (is_deny (check ws (Tool_call.Apply_patch { patch = "@@ no paths\n" }))))
+        (is_deny (check ws (Tool_call.apply_patch "@@ no paths\n"))))
 
 let () =
   Alcotest.run "policy"

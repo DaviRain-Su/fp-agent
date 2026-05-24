@@ -60,7 +60,7 @@ dune exec -- fp-agent
 > /tree              # show the session fork tree
 > /sessions          # list sessions in this workspace
 > /resume <name>     # switch to a past session
-> /models            # list configured model ids
+> /models            # list all configured provider/model ids
 > /model qwen36-rtx  # switch model inside the REPL
 > /provider local-llm qwen36-rtx
 > /tools             # preview available tools
@@ -151,7 +151,9 @@ top-level provider map or `{ "providers": { ... } }`. A pi-style subset works:
 ```
 
 The current implementation uses `baseUrl`, `api`, `apiKey`, and `models[].id`
-or `models[].name`; unsupported `compat` fields are accepted but ignored.
+or `models[].name`; unsupported `compat` fields are accepted but ignored. In
+the REPL, `/models` lists built-in providers plus custom providers from these
+files, and `/provider <name> <model>` switches to one of them.
 
 ### Environment variables
 
@@ -162,7 +164,7 @@ or `models[].name`; unsupported `compat` fields are accepted but ignored.
 | `FP_AGENT_CONFIG` | Custom provider config file | optional |
 | `API_BASE` | Override the provider's base URL | provider default |
 | `MODEL_NAME` | Override the model id | provider default |
-| `LOCAL_MODELS` | Comma-separated extra model ids for REPL `/models` | optional |
+| `LOCAL_MODELS` | Comma-separated extra model ids for the built-in `local` provider | optional |
 | `MAX_STEPS` | Max agent loop steps | `30` |
 | `WORKSPACE_ROOT` | Workspace root directory | current directory |
 
