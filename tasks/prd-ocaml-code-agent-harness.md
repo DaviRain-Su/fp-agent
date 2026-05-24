@@ -427,6 +427,7 @@ TOOL_RESULT tool=read_file ok=true
 - **会话恢复(原 §13 标注"不支持")**:`--resume <session_dir>` 及 REPL `/resume`,经 `lib/transcript.ml` 从 event log 重建对话历史。
 - **TUI(原 §6 Non-Goal)**:`--tui` 全屏实时视图(notty),含动态 spinner 等待状态;纯逻辑抽到 `lib/view.ml` 并有单测。
 - **新增工具**:`search`(工作区文本搜索)、`make_dir`、`apply_patch`(git apply 应用 unified diff——修正 §13 "不支持 patch")、`multi_edit`(多处编辑原子应用)。`edit_file` 仍为 exact replacement。
+- **第三方插件 v1**:新增 `fp-agent-plugin.json` manifest、`FP_AGENT_PLUGIN_PATH`/`FP_AGENT_PLUGIN_HOME` 发现路径、`--new-plugin` 脚手架、`--check-plugin` 校验、`--install-plugin` 安装命令、`/plugins` 列表命令；插件工具通过 stdin/stdout JSON 协议接入同一 Tool registry 与 policy 层。
 - **turn 内批量工具(P3)**:模型可返回 `tool_calls` 或多元素 JSON 数组；agent loop 会在同一模型 step 内记录多条 `Tool_call`/`Policy_decision`,并通过 Lwt detach 并发执行,最后按请求顺序写回 `Tool_result`,保持 event log/replay 顺序稳定。
 - **编排图 L2 骨架(P4 部分)**:新增 `Graph_runtime` 与 `Graph_event`,支持 `Agent`/`Tool`/`Parallel`/`Sequence`/`Router` 五类节点、Lwt 图执行器、图级 start/complete/fail/route 事件写入主 event log；当前是独立 runtime,尚未替换主 `Agent_loop`,也未实现 Planner 节点。
 - **人工审批**:`--confirm` 对写操作/命令逐项 stdin 征询(对应 `Permission.Ask_user` 落地)。

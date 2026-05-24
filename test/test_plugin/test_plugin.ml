@@ -1,0 +1,241 @@
+open! Base
+open Fp_agent
+
+let rm_rf path =
+  ignore
+    (Shell.run
+       ~command:(Printf.sprintf "rm -rf %s" (Stdlib.Filename.quote path))
+       ~timeout_sec:10
+      : (Shell.result, string) Result.t)
+
+let mkdir_p path =
+  ignore
+    (Shell.run
+       ~command:(Printf.sprintf "mkdir -p %s" (Stdlib.Filename.quote path))
+       ~timeout_sec:10
+      : (Shell.result, string) Result.t)
+
+let write path content =
+  mkdir_p (Stdlib.Filename.dirname path);
+  Stdlib.Out_channel.with_open_bin path (fun oc ->
+      Stdlib.Out_channel.output_string oc content)
+
+let with_temp_dir prefix f =
+  let root = Stdlib.Filename.temp_dir prefix "" in
+  Exn.protect ~f:(fun () -> f root) ~finally:(fun () -> rm_rf root)
+
+let write_plugin dir ~id ~tool_name ~kind =
+  write
+    (Stdlib.Filename.concat dir Plugin.manifest_file)
+    (Printf.sprintf
+       {|
+{
+  "id": "%s",
+  "name": "Test Plugin",
+  "version": "0.1.0",
+  "tools": [
+    {
+      "name": "%s",
+      "kind": "%s",
+      "description": "Echoes its JSON input",
+      "command": "sh echo.sh",
+      "input_schema": {
+        "type": "object",
+        "properties": { "message": { "type": "string" } },
+        "required": ["message"]
+      }
+    }
+  ]
+}
+|}
+       id tool_name kind);
+  write
+    (Stdlib.Filename.concat dir "echo.sh")
+    "printf 'tool=%s workspace=%s input=' \"$FP_AGENT_TOOL_NAME\" \
+     \"$FP_AGENT_WORKSPACE\"\n\
+     cat\n"
+
+let workspace root =
+  match Workspace.create ~root with
+  | Ok ws -> ws
+  | Error e -> Alcotest.failf "workspace: %s" e
+
+let test_config root =
+  {
+    Config.provider = "test";
+    api_key = "k";
+    api_base = "http://localhost";
+    model = "m";
+    models = [];
+    protocol = Provider.Openai;
+    compat = Config.default_compat;
+    max_tokens = None;
+    max_steps = 10;
+    workspace_root = root;
+  }
+
+let test_manifest_plugin_executes () =
+  with_temp_dir "fp_agent_plugin_exec" (fun root ->
+      let plugin_dir = Stdlib.Filename.concat root "plugin" in
+      mkdir_p plugin_dir;
+      write_plugin plugin_dir ~id:"com.example.exec" ~tool_name:"plugin_echo"
+        ~kind:"read";
+      Unix.putenv "FP_AGENT_PLUGIN_PATH" plugin_dir;
+      Unix.putenv "FP_AGENT_PLUGIN_HOME" (Stdlib.Filename.concat root "home");
+      Tool_loader.register_all ();
+      match Tool.find "plugin_echo" with
+      | None -> Alcotest.fail "plugin tool was not registered"
+      | Some tool -> (
+          Alcotest.(check string)
+            "kind" "read"
+            (match tool.kind with
+            | Read -> "read"
+            | Write -> "write"
+            | Exec -> "exec");
+          Alcotest.(check bool)
+            "schema registered" true
+            (Option.is_some tool.input_schema);
+          let result =
+            Tool_runner.run ~workspace:(workspace root)
+              ~tool_call:
+                (Tool_call.make ~name:"plugin_echo"
+                   ~args:(`Assoc [ ("message", `String "hello") ]))
+              ()
+          in
+          match result with
+          | Tool_result.Success { output } ->
+              Alcotest.(check bool)
+                "output includes tool name" true
+                (String.is_substring output ~substring:"tool=plugin_echo");
+              Alcotest.(check bool)
+                "output includes JSON input" true
+                (String.is_substring output ~substring:{|"message":"hello"|})
+          | Tool_result.Error { message } ->
+              Alcotest.failf "plugin failed: %s" message))
+
+let test_plugin_write_policy_uses_path_bounds () =
+  with_temp_dir "fp_agent_plugin_policy" (fun root ->
+      let plugin_dir = Stdlib.Filename.concat root "plugin" in
+      mkdir_p plugin_dir;
+      mkdir_p (Stdlib.Filename.concat root ".git");
+      write_plugin plugin_dir ~id:"com.example.policy"
+        ~tool_name:"plugin_write_guard" ~kind:"write";
+      Unix.putenv "FP_AGENT_PLUGIN_PATH" plugin_dir;
+      Unix.putenv "FP_AGENT_PLUGIN_HOME" (Stdlib.Filename.concat root "home");
+      Tool_loader.register_all ();
+      let denied =
+        Policy.check ~workspace:(workspace root)
+          ~tool_call:
+            (Tool_call.make ~name:"plugin_write_guard"
+               ~args:
+                 (`Assoc
+                    [
+                      ("path", `String ".git/config"); ("message", `String "x");
+                    ]))
+          ()
+      in
+      Alcotest.(check bool)
+        "plugin write to .git denied" true
+        (match denied with Permission.Deny _ -> true | _ -> false))
+
+let test_install_plugin_copies_to_home () =
+  with_temp_dir "fp_agent_plugin_install" (fun root ->
+      let src = Stdlib.Filename.concat root "src" in
+      let home = Stdlib.Filename.concat root "home" in
+      mkdir_p src;
+      write_plugin src ~id:"com.example.install"
+        ~tool_name:"plugin_installed_echo" ~kind:"read";
+      Unix.putenv "FP_AGENT_PLUGIN_PATH" "";
+      Unix.putenv "FP_AGENT_PLUGIN_HOME" home;
+      match Plugin.install src with
+      | Error e -> Alcotest.failf "install failed: %s" e
+      | Ok dst ->
+          Alcotest.(check string)
+            "installed path"
+            (Stdlib.Filename.concat home "com.example.install")
+            dst;
+          Alcotest.(check bool)
+            "manifest copied" true
+            (Stdlib.Sys.file_exists
+               (Stdlib.Filename.concat dst Plugin.manifest_file));
+          let manifests = Plugin.manifests () in
+          Alcotest.(check bool)
+            "installed manifest discovered" true
+            (List.exists manifests ~f:(fun (m : Plugin.manifest) ->
+                 String.equal m.id "com.example.install")))
+
+let test_scaffold_creates_valid_plugin () =
+  with_temp_dir "fp_agent_plugin_scaffold" (fun root ->
+      let dir = Stdlib.Filename.concat root "starter" in
+      match Plugin.scaffold ~id:"com.example.scaffold" dir with
+      | Error e -> Alcotest.failf "scaffold failed: %s" e
+      | Ok created -> (
+          Alcotest.(check string) "created dir" dir created;
+          Alcotest.(check bool)
+            "manifest exists" true
+            (Stdlib.Sys.file_exists
+               (Stdlib.Filename.concat dir Plugin.manifest_file));
+          match Plugin.check dir with
+          | Error e -> Alcotest.failf "scaffold check failed: %s" e
+          | Ok manifest ->
+              Alcotest.(check string)
+                "scaffold id" "com.example.scaffold" manifest.id;
+              Alcotest.(check int) "one tool" 1 (List.length manifest.tools)))
+
+let test_check_rejects_invalid_manifest () =
+  with_temp_dir "fp_agent_plugin_bad" (fun root ->
+      write
+        (Stdlib.Filename.concat root Plugin.manifest_file)
+        {|{"id":"bad id","tools":[]}|};
+      Alcotest.(check bool)
+        "invalid manifest rejected" true
+        (Result.is_error (Plugin.check root)))
+
+let test_plugin_schema_reaches_native_tool_request () =
+  with_temp_dir "fp_agent_plugin_schema" (fun root ->
+      let plugin_dir = Stdlib.Filename.concat root "plugin" in
+      mkdir_p plugin_dir;
+      write_plugin plugin_dir ~id:"com.example.schema"
+        ~tool_name:"plugin_schema_echo" ~kind:"read";
+      Unix.putenv "FP_AGENT_PLUGIN_PATH" plugin_dir;
+      Unix.putenv "FP_AGENT_PLUGIN_HOME" (Stdlib.Filename.concat root "home");
+      let body =
+        Model_client.request_body_with_options_for_test ~tools_enabled:true
+          ~config:(test_config root) ~system:"sys" ~turns:[]
+      in
+      let open Yojson.Safe.Util in
+      let tools = body |> member "tools" |> to_list in
+      let plugin_tool =
+        List.find tools ~f:(fun tool ->
+            String.equal
+              (tool |> member "function" |> member "name" |> to_string)
+              "plugin_schema_echo")
+      in
+      match plugin_tool with
+      | None -> Alcotest.fail "plugin tool missing from native request"
+      | Some tool ->
+          Alcotest.(check string)
+            "schema property" "string"
+            (tool |> member "function" |> member "parameters"
+           |> member "properties" |> member "message" |> member "type"
+           |> to_string))
+
+let () =
+  Alcotest.run "plugin"
+    [
+      ( "plugins",
+        [
+          Alcotest.test_case "manifest_plugin_executes" `Quick
+            test_manifest_plugin_executes;
+          Alcotest.test_case "plugin_write_policy" `Quick
+            test_plugin_write_policy_uses_path_bounds;
+          Alcotest.test_case "install_plugin" `Quick
+            test_install_plugin_copies_to_home;
+          Alcotest.test_case "scaffold_plugin" `Quick
+            test_scaffold_creates_valid_plugin;
+          Alcotest.test_case "check_invalid_plugin" `Quick
+            test_check_rejects_invalid_manifest;
+          Alcotest.test_case "plugin_schema_request" `Quick
+            test_plugin_schema_reaches_native_tool_request;
+        ] );
+    ]

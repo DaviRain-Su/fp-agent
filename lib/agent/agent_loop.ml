@@ -13,16 +13,28 @@ let final_answer_nudge =
    answer now based only on the context and tool observations already \
    available. If you use the fallback JSON format, return final_answer."
 
-let compact_system_prompt =
-  "You are a summarizer for a coding agent. Produce a concise but complete \
-   summary of the conversation so far, preserving key decisions, file contents \
-   or paths learned, important errors, and open tasks. Output only the \
-   summary."
-
 let status_to_string = function
   | Completed -> "completed"
   | Failed -> "failed"
   | Max_steps_reached -> "max_steps_reached"
+
+let max_content_chars = 12_000
+
+let clamp_string s =
+  if String.length s <= max_content_chars then s
+  else
+    String.prefix s max_content_chars
+    ^ Printf.sprintf "\n…[truncated %d chars]"
+        (String.length s - max_content_chars)
+
+let clamp_turn (turn : Llm.turn) =
+  let clamp_content = function
+    | Llm.Text s -> Llm.Text (clamp_string s)
+    | Llm.Tool_result { id; content } ->
+        Llm.Tool_result { id; content = clamp_string content }
+    | other -> other
+  in
+  { turn with content = List.map turn.content ~f:clamp_content }
 
 let turn_cost (turn : Llm.turn) =
   let content_cost = function
@@ -89,16 +101,37 @@ let split_recent_chunks chunks =
     let older, recent = List.split_n chunks older_count in
     Some (List.concat older, List.concat recent)
 
+let compact_summary_chars = 24_000
+let compact_block_chars = 1_200
+
+let compact_excerpt s =
+  let s = String.strip s in
+  if String.length s <= compact_block_chars then s
+  else
+    String.prefix s compact_block_chars
+    ^ Printf.sprintf " …[omitted %d chars]"
+        (String.length s - compact_block_chars)
+
+let compact_summary_bound s =
+  if String.length s <= compact_summary_chars then s
+  else
+    let head = String.prefix s 8_000 in
+    let tail_len = compact_summary_chars - String.length head - 80 in
+    let tail = String.suffix s tail_len in
+    head ^ "\n\n…[middle of compacted context omitted]\n\n" ^ tail
+
 let compact_text_of_turn (turn : Llm.turn) =
   let role =
     match turn.role with Llm.User -> "User" | Llm.Assistant -> "Assistant"
   in
   let block = function
-    | Llm.Text s -> s
+    | Llm.Text s -> compact_excerpt s
     | Llm.Thinking _ -> ""
-    | Llm.Tool_use { name; input; _ } ->
-        Printf.sprintf "[tool %s %s]" name (Yojson.Safe.to_string input)
-    | Llm.Tool_result { content; _ } -> "[result] " ^ content
+    | Llm.Tool_use { id; name; input } ->
+        Printf.sprintf "[tool_call id=%s name=%s args=%s]" id name
+          (Yojson.Safe.to_string input)
+    | Llm.Tool_result { id; content } ->
+        Printf.sprintf "[tool_result id=%s] %s" id (compact_excerpt content)
   in
   role ^ ": "
   ^ (List.filter_map turn.content ~f:(fun c ->
@@ -106,9 +139,10 @@ let compact_text_of_turn (turn : Llm.turn) =
          if String.is_empty s then None else Some s)
     |> String.concat ~sep:"\n")
 
-let summary_text content =
-  List.filter_map content ~f:(function Llm.Text s -> Some s | _ -> None)
-  |> String.concat ~sep:"\n" |> String.strip
+let compact_summary older =
+  older
+  |> List.map ~f:compact_text_of_turn
+  |> String.concat ~sep:"\n\n" |> compact_summary_bound
 
 (* Keep the most recent turns that fit the budget, so long sessions do not blow
    the context window. Tool exchanges must be kept or dropped as a unit;
@@ -118,9 +152,12 @@ let truncate_history turns =
     | [] -> List.concat acc
     | chunk :: tl ->
         let cost = List.sum (module Int) chunk ~f:turn_cost in
+        let clamped_chunk = List.map chunk ~f:clamp_turn in
         if budget - cost < 0 then
-          if List.is_empty acc then List.concat [ chunk ] else List.concat acc
-        else take (chunk :: acc) (budget - cost) tl
+          if List.is_empty acc then
+            if List.length chunk = 1 then List.concat [ clamped_chunk ] else []
+          else List.concat acc
+        else take (clamped_chunk :: acc) (budget - cost) tl
   in
   take [] max_history_chars (List.rev (history_chunks turns))
 
@@ -162,27 +199,11 @@ let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
       match current |> history_chunks |> split_recent_chunks with
       | None -> Lwt.return_unit
       | Some (older, recent) ->
-          let transcript =
-            older
-            |> List.map ~f:compact_text_of_turn
-            |> String.concat ~sep:"\n\n"
-          in
-          let prompt =
-            "Summarize this earlier conversation for future context:\n\n"
-            ^ transcript
-          in
-          Lwt.bind
-            (Model_client.send model_client ~tools_enabled:false
-               ~system:compact_system_prompt
-               ~turns:[ Llm.user prompt ])
-            (function
-              | Error _ -> Lwt.return_unit
-              | Ok (content, _) ->
-                  let summary = summary_text content in
-                  if String.is_empty summary then Lwt.return_unit
-                  else (
-                    emit (Event.Context_compacted { summary; recent });
-                    Lwt.return_unit))
+          let summary = compact_summary older in
+          if String.is_empty summary then Lwt.return_unit
+          else (
+            emit (Event.Context_compacted { summary; recent });
+            Lwt.return_unit)
   in
   emit (Event.User_message { content = task });
   goto Agent_state.Waiting_for_model;

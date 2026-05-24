@@ -72,19 +72,22 @@ let make_plain_reporter () =
   let phase = make_phase () in
   let i = ref 0 in
   let streaming = ref false in
+  let current_delta = ref "" in
   let clear () = Stdlib.Printf.eprintf "\r\027[K" in
   let finish_stream_if_needed () =
     if !streaming then (
       Stdlib.Printf.eprintf "\n%!";
-      streaming := false)
+      streaming := false;
+      current_delta := "")
   in
   let on_event e =
     update_phase phase e;
     match e with
     | Model_delta { content } ->
+        current_delta := !current_delta ^ content;
         clear ();
         streaming := true;
-        Stdlib.Printf.eprintf "%s%!" content
+        Stdlib.Printf.eprintf "%s%!" !current_delta
     | _ -> (
         match Event.to_display e with
         | Some line ->
@@ -284,24 +287,17 @@ let run_oneshot config workspace ~confirm ~resume_opt ~tui ~yolo ~task =
   print_changes root;
   match outcome.status with Agent_loop.Completed -> 0 | _ -> 1
 
-let tool_catalog =
-  [
-    ("read_file", "{path}");
-    ("write_file", "{path, content}");
-    ("edit_file", "{path, old, new}");
-    ("list_files", "{path}");
-    ("search", "{query, path?}");
-    ("make_dir", "{path}");
-    ("run_command", "{command, cwd?}");
-    ("apply_patch", "{patch}");
-    ("multi_edit", "{edits}");
-  ]
+let tool_kind_label = function
+  | Tool.Read -> "read"
+  | Tool.Write -> "write"
+  | Tool.Exec -> "exec"
 
 let print_help () =
   Stdlib.print_endline
     "Commands:\n\
     \  /help              show this help\n\
     \  /tools             list available tools\n\
+    \  /plugins           list discovered plugins\n\
     \  /sessions          list sessions in this workspace\n\
     \  /tree              show the session fork tree\n\
     \  /resume <dir>      switch to a session (name under sessions/ or a path)\n\
@@ -318,9 +314,24 @@ let print_help () =
      turns)."
 
 let print_tools () =
+  Tool_loader.register_all ();
   Stdlib.print_endline "Available tools:";
-  List.iter tool_catalog ~f:(fun (n, a) ->
-      Stdlib.Printf.printf "  %-12s %s\n" n a)
+  List.iter (Tool.all ()) ~f:(fun (tool : Tool.t) ->
+      Stdlib.Printf.printf "  %-18s %-5s %s\n" tool.name
+        (tool_kind_label tool.kind)
+        tool.description)
+
+let print_plugins () =
+  match Plugin.manifests () with
+  | [] -> Stdlib.print_endline "(no plugins discovered)"
+  | manifests ->
+      List.iter manifests ~f:(fun (plugin : Plugin.manifest) ->
+          Stdlib.Printf.printf "%s %s (%s)\n  %s\n" plugin.id plugin.name
+            plugin.version plugin.dir;
+          List.iter plugin.tools ~f:(fun tool ->
+              Stdlib.Printf.printf "  - %-18s %-5s %s\n" tool.tool_name
+                (tool_kind_label tool.tool_kind)
+                tool.tool_description))
 
 let print_sessions sessions_root current =
   match Stdlib.Sys.readdir sessions_root with
@@ -591,6 +602,9 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
         else if String.equal line "/tools" then (
           print_tools ();
           loop ())
+        else if String.equal line "/plugins" then (
+          print_plugins ();
+          loop ())
         else if String.equal line "/sessions" then (
           print_sessions sessions_root !session;
           loop ())
@@ -646,22 +660,58 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
   Event_log.close !log;
   0
 
-let dispatch task provider api_base model workspace max_steps confirm resume tui
-    yolo =
-  match task with
-  | Some _ when confirm && tui ->
-      Stdlib.prerr_endline
-        "--confirm cannot be combined with --tui; run without --tui when \
-         approval prompts are required.";
-      1
-  | _ ->
-      with_setup provider api_base model workspace max_steps
-        (fun config workspace ->
-          match task with
-          | Some task ->
-              run_oneshot config workspace ~confirm ~resume_opt:resume ~tui
-                ~yolo ~task
-          | None -> run_repl config workspace ~confirm ~resume_opt:resume ~yolo)
+let print_plugin_summary (plugin : Plugin.manifest) =
+  Stdlib.Printf.printf "%s %s (%s)\n  %s\n" plugin.id plugin.name plugin.version
+    plugin.dir;
+  List.iter plugin.tools ~f:(fun tool ->
+      Stdlib.Printf.printf "  - %-18s %-5s %s\n" tool.tool_name
+        (tool_kind_label tool.tool_kind)
+        tool.tool_description)
+
+let dispatch new_plugin check_plugin install_plugin task provider api_base model
+    workspace max_steps confirm resume tui yolo =
+  match (new_plugin, check_plugin, install_plugin) with
+  | Some path, _, _ -> (
+      match Plugin.scaffold path with
+      | Ok dst ->
+          Stdlib.Printf.printf "created plugin scaffold: %s\n" dst;
+          0
+      | Error e ->
+          Stdlib.prerr_endline ("plugin scaffold error: " ^ e);
+          1)
+  | None, Some path, _ -> (
+      match Plugin.check path with
+      | Ok manifest ->
+          Stdlib.print_endline "plugin manifest ok:";
+          print_plugin_summary manifest;
+          0
+      | Error e ->
+          Stdlib.prerr_endline ("plugin check error: " ^ e);
+          1)
+  | None, None, Some path -> (
+      match Plugin.install path with
+      | Ok dst ->
+          Stdlib.Printf.printf "installed plugin: %s\n" dst;
+          0
+      | Error e ->
+          Stdlib.prerr_endline ("plugin install error: " ^ e);
+          1)
+  | None, None, None -> (
+      match task with
+      | Some _ when confirm && tui ->
+          Stdlib.prerr_endline
+            "--confirm cannot be combined with --tui; run without --tui when \
+             approval prompts are required.";
+          1
+      | _ ->
+          with_setup provider api_base model workspace max_steps
+            (fun config workspace ->
+              match task with
+              | Some task ->
+                  run_oneshot config workspace ~confirm ~resume_opt:resume ~tui
+                    ~yolo ~task
+              | None ->
+                  run_repl config workspace ~confirm ~resume_opt:resume ~yolo))
 
 let () =
   let open Cmdliner in
@@ -673,6 +723,31 @@ let () =
           ~doc:
             "The coding task for the agent to perform. Omit to start an \
              interactive REPL.")
+  in
+  let install_plugin =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "install-plugin" ] ~docv:"DIR"
+          ~doc:
+            "Install a plugin directory containing fp-agent-plugin.json into \
+             the plugin home, then exit.")
+  in
+  let check_plugin =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "check-plugin" ] ~docv:"DIR"
+          ~doc:
+            "Validate a plugin directory containing fp-agent-plugin.json, then \
+             exit.")
+  in
+  let new_plugin =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "new-plugin" ] ~docv:"DIR"
+          ~doc:"Create a starter plugin directory, then exit.")
   in
   let provider =
     Arg.(
@@ -745,8 +820,9 @@ let () =
   let doc = "A type-safe local CLI code agent harness." in
   let term =
     Term.(
-      const dispatch $ task $ provider $ api_base $ model $ workspace
-      $ max_steps $ confirm $ resume $ tui $ yolo)
+      const dispatch $ new_plugin $ check_plugin $ install_plugin $ task
+      $ provider $ api_base $ model $ workspace $ max_steps $ confirm $ resume
+      $ tui $ yolo)
   in
   let info = Cmd.info "fp-agent" ~version:"0.1.0" ~doc in
   Stdlib.exit (Cmd.eval' (Cmd.v info term))

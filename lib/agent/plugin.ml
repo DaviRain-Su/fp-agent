@@ -1,0 +1,360 @@
+open! Base
+
+type plugin_tool = {
+  tool_name : string;
+  tool_kind : Tool.kind;
+  tool_description : string;
+  tool_command : string;
+  tool_input_schema : Yojson.Safe.t option;
+  tool_timeout_sec : int;
+}
+
+type manifest = {
+  id : string;
+  name : string;
+  version : string;
+  dir : string;
+  tools : plugin_tool list;
+}
+
+let manifest_file = "fp-agent-plugin.json"
+let default_timeout_sec = 60
+let max_output_bytes = 32 * 1024
+
+let getenv_nonempty name =
+  match Stdlib.Sys.getenv_opt name with
+  | Some "" | None -> None
+  | Some s -> Some s
+
+let truncate s =
+  if String.length s <= max_output_bytes then s
+  else String.prefix s max_output_bytes ^ "\n...[truncated]"
+
+let json_member obj names =
+  List.find_map names ~f:(fun name ->
+      match Yojson.Safe.Util.member name obj with `Null -> None | v -> Some v)
+
+let json_string obj names =
+  match json_member obj names with Some (`String s) -> Some s | _ -> None
+
+let json_int obj names =
+  match json_member obj names with Some (`Int i) -> Some i | _ -> None
+
+let req_string obj name =
+  match json_string obj [ name ] with
+  | Some s when not (String.is_empty (String.strip s)) -> Ok s
+  | _ -> Error (Printf.sprintf "missing string field '%s'" name)
+
+let is_tool_name_char = function
+  | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' | '-' -> true
+  | _ -> false
+
+let is_plugin_id_char = function
+  | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' | '-' | '.' -> true
+  | _ -> false
+
+let validate_name ~what ~allow_dot name =
+  let ok_char = if allow_dot then is_plugin_id_char else is_tool_name_char in
+  if String.is_empty name then Error (what ^ " cannot be empty")
+  else if String.for_all name ~f:ok_char then Ok ()
+  else
+    Error
+      (Printf.sprintf
+         "%s '%s' contains unsupported characters; use letters, digits, '_'%s \
+          and '-'"
+         what name
+         (if allow_dot then ", '.'" else ""))
+
+let kind_of_string = function
+  | "read" -> Ok Tool.Read
+  | "write" -> Ok Tool.Write
+  | "exec" | "execute" -> Ok Tool.Exec
+  | other -> Error ("unknown tool kind: " ^ other)
+
+let parse_tool json =
+  match
+    ( req_string json "name",
+      req_string json "kind",
+      req_string json "description",
+      req_string json "command" )
+  with
+  | Ok tool_name, Ok kind, Ok tool_description, Ok tool_command -> (
+      match
+        ( validate_name ~what:"tool name" ~allow_dot:false tool_name,
+          kind_of_string (String.lowercase kind) )
+      with
+      | Ok (), Ok tool_kind ->
+          Ok
+            {
+              tool_name;
+              tool_kind;
+              tool_description;
+              tool_command;
+              tool_input_schema =
+                json_member json [ "input_schema"; "inputSchema"; "parameters" ];
+              tool_timeout_sec =
+                Option.value
+                  (json_int json [ "timeoutSec"; "timeout_sec"; "timeout" ])
+                  ~default:default_timeout_sec;
+            }
+      | Error e, _ | _, Error e -> Error e)
+  | Error e, _, _, _ | _, Error e, _, _ | _, _, Error e, _ | _, _, _, Error e ->
+      Error e
+
+let load_manifest dir =
+  let path = Stdlib.Filename.concat dir manifest_file in
+  match Yojson.Safe.from_file path with
+  | exception exn ->
+      Error (Printf.sprintf "cannot read %s: %s" path (Exn.to_string exn))
+  | json -> (
+      match
+        ( req_string json "id",
+          json_string json [ "name" ],
+          json_string json [ "version" ],
+          json_member json [ "tools" ] )
+      with
+      | Ok id, name, version, Some (`List tool_jsons) -> (
+          match validate_name ~what:"plugin id" ~allow_dot:true id with
+          | Error e -> Error e
+          | Ok () -> (
+              let tools =
+                List.fold tool_jsons ~init:(Ok []) ~f:(fun acc tool_json ->
+                    match acc with
+                    | Error _ as e -> e
+                    | Ok tools ->
+                        Result.map (parse_tool tool_json) ~f:(fun tool ->
+                            tool :: tools))
+              in
+              match tools with
+              | Error e -> Error e
+              | Ok tools ->
+                  Ok
+                    {
+                      id;
+                      name = Option.value name ~default:id;
+                      version = Option.value version ~default:"0.0.0";
+                      dir;
+                      tools = List.rev tools;
+                    }))
+      | Error e, _, _, _ -> Error e
+      | _, _, _, _ -> Error "plugin manifest requires a tools array")
+
+let check = load_manifest
+
+let install_home () =
+  match getenv_nonempty "FP_AGENT_PLUGIN_HOME" with
+  | Some path -> Some path
+  | None ->
+      Option.map (getenv_nonempty "HOME") ~f:(fun home ->
+          Stdlib.Filename.concat home
+            (Stdlib.Filename.concat ".local"
+               (Stdlib.Filename.concat "share"
+                  (Stdlib.Filename.concat "fp-agent" "plugins"))))
+
+let split_path_list value =
+  String.split value ~on:':' |> List.map ~f:String.strip
+  |> List.filter ~f:(fun s -> not (String.is_empty s))
+
+let default_search_roots () =
+  let explicit =
+    match getenv_nonempty "FP_AGENT_PLUGIN_PATH" with
+    | Some paths -> split_path_list paths
+    | None -> []
+  in
+  let local = [ ".fp-agent/plugins" ] in
+  let home = Option.to_list (install_home ()) in
+  explicit @ local @ home
+
+let has_manifest dir =
+  Stdlib.Sys.file_exists (Stdlib.Filename.concat dir manifest_file)
+
+let dirs_in_root root =
+  if has_manifest root then [ root ]
+  else
+    match Stdlib.Sys.readdir root with
+    | exception _ -> []
+    | entries ->
+        Array.to_list entries
+        |> List.filter_map ~f:(fun name ->
+            let dir = Stdlib.Filename.concat root name in
+            if
+              Stdlib.Sys.file_exists dir
+              && Stdlib.Sys.is_directory dir
+              && has_manifest dir
+            then Some dir
+            else None)
+
+let manifests () =
+  default_search_roots ()
+  |> List.concat_map ~f:dirs_in_root
+  |> List.filter_map ~f:(fun dir ->
+      match load_manifest dir with
+      | Ok manifest -> Some manifest
+      | Error _ -> None)
+
+let output_of_result result =
+  let stdout = String.strip result.Shell.stdout in
+  let stderr = String.strip result.stderr in
+  if not (String.is_empty stdout) then truncate stdout
+  else if not (String.is_empty stderr) then truncate stderr
+  else "(plugin produced no output)"
+
+let run_plugin_tool manifest tool workspace args =
+  let tmp = Stdlib.Filename.temp_file "fp_agent_plugin_args" ".json" in
+  let cleanup () = try Unix.unlink tmp with Unix.Unix_error _ -> () in
+  Exn.protect
+    ~f:(fun () ->
+      Stdlib.Out_channel.with_open_bin tmp (fun oc ->
+          Stdlib.Out_channel.output_string oc (Yojson.Safe.to_string args));
+      let command =
+        Printf.sprintf
+          "cd %s && FP_AGENT_WORKSPACE=%s FP_AGENT_PLUGIN_DIR=%s \
+           FP_AGENT_TOOL_NAME=%s %s < %s"
+          (Stdlib.Filename.quote manifest.dir)
+          (Stdlib.Filename.quote (Workspace.root workspace))
+          (Stdlib.Filename.quote manifest.dir)
+          (Stdlib.Filename.quote tool.tool_name)
+          tool.tool_command
+          (Stdlib.Filename.quote tmp)
+      in
+      match Shell.run ~command ~timeout_sec:tool.tool_timeout_sec with
+      | Error e -> Tool_result.Error { message = e }
+      | Ok ({ exit_code = 0; _ } as result) ->
+          Tool_result.Success { output = output_of_result result }
+      | Ok result ->
+          Tool_result.Error
+            {
+              message =
+                Printf.sprintf "plugin %s failed (exit %d): %s" tool.tool_name
+                  result.exit_code (output_of_result result);
+            })
+    ~finally:cleanup
+
+let plugin_check kind workspace args =
+  let path =
+    match Yojson.Safe.Util.member "path" args with
+    | `String path -> Some path
+    | _ -> None
+  in
+  match (kind, path) with
+  | Tool.Read, Some path -> (
+      match Workspace.resolve_path workspace path with
+      | Ok _ -> Permission.Allow
+      | Error reason -> Permission.Deny reason)
+  | Tool.Write, Some path -> (
+      match Workspace.validate_write_path workspace path with
+      | Ok _ -> Permission.Allow
+      | Error reason -> Permission.Deny reason)
+  | _ -> Permission.Allow
+
+let register_manifest manifest =
+  List.iter manifest.tools ~f:(fun plugin_tool ->
+      if Option.is_none (Tool.find plugin_tool.tool_name) then
+        Tool.register
+          {
+            name = plugin_tool.tool_name;
+            kind = plugin_tool.tool_kind;
+            description =
+              Printf.sprintf "%s (plugin %s)" plugin_tool.tool_description
+                manifest.id;
+            input_schema = plugin_tool.tool_input_schema;
+            check = plugin_check plugin_tool.tool_kind;
+            run = run_plugin_tool manifest plugin_tool;
+          })
+
+let register_all () = List.iter (manifests ()) ~f:register_manifest
+
+let rec mkdir_p dir =
+  if (not (String.is_empty dir)) && not (Stdlib.Sys.file_exists dir) then (
+    mkdir_p (Stdlib.Filename.dirname dir);
+    try Unix.mkdir dir 0o755 with Unix.Unix_error (Unix.EEXIST, _, _) -> ())
+
+let copy_file src dst =
+  Stdlib.In_channel.with_open_bin src (fun input ->
+      Stdlib.Out_channel.with_open_bin dst (fun output ->
+          Stdlib.Out_channel.output_string output
+            (Stdlib.In_channel.input_all input)))
+
+let rec copy_tree src dst =
+  if Stdlib.Sys.is_directory src then (
+    mkdir_p dst;
+    Stdlib.Sys.readdir src
+    |> Array.iter ~f:(fun name ->
+        if String.equal name ".git" || String.equal name "_build" then ()
+        else
+          copy_tree
+            (Stdlib.Filename.concat src name)
+            (Stdlib.Filename.concat dst name)))
+  else copy_file src dst
+
+let install src_dir =
+  match (load_manifest src_dir, install_home ()) with
+  | Error e, _ -> Error e
+  | _, None -> Error "cannot determine plugin install home"
+  | Ok manifest, Some home ->
+      let dst = Stdlib.Filename.concat home manifest.id in
+      if Stdlib.Sys.file_exists dst then
+        Error ("plugin already installed: " ^ dst)
+      else (
+        mkdir_p home;
+        try
+          copy_tree src_dir dst;
+          Ok dst
+        with exn -> Error ("plugin install failed: " ^ Exn.to_string exn))
+
+let sanitize_id_part s =
+  let chars =
+    String.to_list s
+    |> List.map ~f:(fun c -> if is_plugin_id_char c then c else '-')
+  in
+  let id =
+    String.of_char_list chars |> String.strip ~drop:(fun c -> Char.equal c '-')
+  in
+  if String.is_empty id then "plugin" else id
+
+let scaffold ?id dir =
+  let id =
+    Option.value id
+      ~default:
+        ("local."
+        ^ sanitize_id_part (Stdlib.Filename.basename (String.rstrip dir)))
+  in
+  match validate_name ~what:"plugin id" ~allow_dot:true id with
+  | Error e -> Error e
+  | Ok () -> (
+      let manifest_path = Stdlib.Filename.concat dir manifest_file in
+      let script_path = Stdlib.Filename.concat dir "hello.sh" in
+      if Stdlib.Sys.file_exists manifest_path then
+        Error ("plugin manifest already exists: " ^ manifest_path)
+      else
+        try
+          mkdir_p dir;
+          Stdlib.Out_channel.with_open_bin manifest_path (fun oc ->
+              Stdlib.Out_channel.output_string oc
+                (Printf.sprintf
+                   {|{
+  "id": "%s",
+  "name": "%s",
+  "version": "0.1.0",
+  "tools": [
+    {
+      "name": "hello_world",
+      "kind": "read",
+      "description": "Returns a greeting and echoes the input JSON",
+      "command": "sh hello.sh",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "message": { "type": "string" }
+        }
+      }
+    }
+  ]
+}
+|}
+                   id id));
+          Stdlib.Out_channel.with_open_bin script_path (fun oc ->
+              Stdlib.Out_channel.output_string oc
+                "#!/bin/sh\nprintf 'hello from fp-agent plugin: '\ncat\n");
+          Ok dir
+        with exn -> Error ("plugin scaffold failed: " ^ Exn.to_string exn))

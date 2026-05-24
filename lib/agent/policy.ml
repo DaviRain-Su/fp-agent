@@ -1,7 +1,7 @@
 open! Base
 
 let check ?(yolo = false) ~workspace ~tool_call () =
-  Builtin_tools.register_all ();
+  Tool_loader.register_all ();
   match Tool.find tool_call.Tool_call.name with
   | None -> Permission.Deny ("unknown tool: " ^ tool_call.Tool_call.name)
   | Some tool -> (
@@ -15,7 +15,7 @@ type t = { approve_commands : bool; approve_writes : bool }
 let default = { approve_commands = false; approve_writes = false }
 
 let approval_reason t (tool_call : Tool_call.t) =
-  Builtin_tools.register_all ();
+  Tool_loader.register_all ();
   match Tool.find tool_call.Tool_call.name with
   | Some tool when t.approve_commands && Poly.equal tool.Tool.kind Tool.Exec ->
       Some "shell command requires approval"

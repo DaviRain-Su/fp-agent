@@ -15,6 +15,63 @@ let truncate s =
 let is_binary s = String.mem s '\000'
 let err message = Tool_result.Error { message }
 
+let props names =
+  `Assoc
+    (List.map names ~f:(fun name ->
+         (name, `Assoc [ ("type", `String "string") ])))
+
+let object_schema ?(required = []) properties =
+  `Assoc
+    [
+      ("type", `String "object");
+      ("properties", properties);
+      ("required", `List (List.map required ~f:(fun s -> `String s)));
+      ("additionalProperties", `Bool true);
+    ]
+
+let schema_for = function
+  | "read_file" | "list_files" | "make_dir" ->
+      object_schema ~required:[ "path" ] (props [ "path" ])
+  | "write_file" ->
+      object_schema ~required:[ "path"; "content" ]
+        (props [ "path"; "content" ])
+  | "edit_file" ->
+      object_schema ~required:[ "path"; "old"; "new" ]
+        (props [ "path"; "old"; "new" ])
+  | "run_command" ->
+      object_schema ~required:[ "command" ] (props [ "command"; "cwd" ])
+  | "search" -> object_schema ~required:[ "query" ] (props [ "query"; "path" ])
+  | "apply_patch" -> object_schema ~required:[ "patch" ] (props [ "patch" ])
+  | "multi_edit" ->
+      `Assoc
+        [
+          ("type", `String "object");
+          ( "properties",
+            `Assoc
+              [
+                ( "edits",
+                  `Assoc
+                    [
+                      ("type", `String "array");
+                      ( "items",
+                        object_schema ~required:[ "path"; "old"; "new" ]
+                          (props [ "path"; "old"; "new" ]) );
+                    ] );
+              ] );
+          ("required", `List [ `String "edits" ]);
+        ]
+  | _ -> object_schema (`Assoc [])
+
+let tool ~name ~kind ~description ~check ~run =
+  {
+    Tool.name;
+    kind;
+    description;
+    input_schema = Some (schema_for name);
+    check;
+    run;
+  }
+
 (* arg helpers *)
 let str obj key =
   match Yojson.Safe.Util.member key obj with `String s -> Some s | _ -> None
@@ -392,93 +449,54 @@ let multi_edit_run ws args =
 (* --- descriptors --- *)
 let tools : Tool.t list =
   [
-    {
-      name = "read_file";
-      kind = Read;
-      description = {|{"path": string}|};
-      check = resolve_check;
-      run = read_file_run;
-    };
-    {
-      name = "list_files";
-      kind = Read;
-      description = {|{"path": string}|};
-      check = resolve_check;
-      run = list_files_run;
-    };
-    {
-      name = "search";
-      kind = Read;
-      description =
-        {|{"query": string, "path": string (optional)} (substring search)|};
-      check = resolve_check;
-      run = search_run;
-    };
-    {
-      name = "write_file";
-      kind = Write;
-      description = {|{"path": string, "content": string}|};
-      check = write_check;
-      run = write_file_run;
-    };
-    {
-      name = "edit_file";
-      kind = Write;
-      description =
-        {|{"path": string, "old": string, "new": string} (replaces first exact occurrence)|};
-      check = write_check;
-      run = edit_file_run;
-    };
-    {
-      name = "make_dir";
-      kind = Write;
-      description = {|{"path": string}|};
-      check = write_check;
-      run = make_dir_run;
-    };
-    {
-      name = "apply_patch";
-      kind = Write;
-      description = {|{"patch": string} (unified diff via git apply)|};
-      check =
-        (fun ws args ->
-          validate_patch_paths ws (Option.value (str args "patch") ~default:""));
-      run = apply_patch_run;
-    };
-    {
-      name = "multi_edit";
-      kind = Write;
-      description =
-        {|{"edits": [{"path","old","new"}, ...]} (applied atomically)|};
-      check =
-        (fun ws args ->
-          match parse_edits args with
-          | Error reason -> Permission.Deny reason
-          | Ok edits -> (
-              match
-                List.find_map edits ~f:(fun (path, _, _) ->
-                    match Workspace.validate_write_path ws path with
-                    | Ok _ -> None
-                    | Error reason -> Some reason)
-              with
-              | Some reason -> Permission.Deny reason
-              | None -> Permission.Allow));
-      run = multi_edit_run;
-    };
-    {
-      name = "run_command";
-      kind = Exec;
-      description = {|{"command": string, "cwd": string (optional)}|};
-      check =
-        (fun _ws args ->
-          match str args "command" with
-          | None -> Permission.Allow
-          | Some command -> (
-              match dangerous_command_reason command with
-              | Some reason -> Permission.Deny reason
-              | None -> Permission.Allow));
-      run = run_command_run;
-    };
+    tool ~name:"read_file" ~kind:Read ~description:{|{"path": string}|}
+      ~check:resolve_check ~run:read_file_run;
+    tool ~name:"list_files" ~kind:Read ~description:{|{"path": string}|}
+      ~check:resolve_check ~run:list_files_run;
+    tool ~name:"search" ~kind:Read
+      ~description:
+        {|{"query": string, "path": string (optional)} (substring search)|}
+      ~check:resolve_check ~run:search_run;
+    tool ~name:"write_file" ~kind:Write
+      ~description:{|{"path": string, "content": string}|} ~check:write_check
+      ~run:write_file_run;
+    tool ~name:"edit_file" ~kind:Write
+      ~description:
+        {|{"path": string, "old": string, "new": string} (replaces first exact occurrence)|}
+      ~check:write_check ~run:edit_file_run;
+    tool ~name:"make_dir" ~kind:Write ~description:{|{"path": string}|}
+      ~check:write_check ~run:make_dir_run;
+    tool ~name:"apply_patch" ~kind:Write
+      ~description:{|{"patch": string} (unified diff via git apply)|}
+      ~check:(fun ws args ->
+        validate_patch_paths ws (Option.value (str args "patch") ~default:""))
+      ~run:apply_patch_run;
+    tool ~name:"multi_edit" ~kind:Write
+      ~description:
+        {|{"edits": [{"path","old","new"}, ...]} (applied atomically)|}
+      ~check:(fun ws args ->
+        match parse_edits args with
+        | Error reason -> Permission.Deny reason
+        | Ok edits -> (
+            match
+              List.find_map edits ~f:(fun (path, _, _) ->
+                  match Workspace.validate_write_path ws path with
+                  | Ok _ -> None
+                  | Error reason -> Some reason)
+            with
+            | Some reason -> Permission.Deny reason
+            | None -> Permission.Allow))
+      ~run:multi_edit_run;
+    tool ~name:"run_command" ~kind:Exec
+      ~description:{|{"command": string, "cwd": string (optional)}|}
+      ~check:(fun _ws args ->
+        match str args "command" with
+        | None -> Permission.Allow
+        | Some command -> (
+            match dangerous_command_reason command with
+            | Some reason -> Permission.Deny reason
+            | None -> Permission.Allow))
+      ~run:run_command_run;
   ]
 
 let register_all () = List.iter tools ~f:Tool.register

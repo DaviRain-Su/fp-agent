@@ -71,6 +71,31 @@ dune exec -- fp-agent
 Each turn replays the session's event log as context, so the agent remembers
 earlier turns. Meta-commands start with `/`; anything else is a task.
 
+### Plugins
+
+Third-party tools can be added as plugin directories with a
+`fp-agent-plugin.json` manifest. A plugin tool receives JSON args on stdin and
+returns its result on stdout.
+
+```sh
+export FP_AGENT_PLUGIN_PATH=$PWD/examples/plugins/echo
+dune exec -- fp-agent
+> /plugins
+> /tools
+```
+
+Install a plugin into the user plugin home:
+
+```sh
+dune exec -- fp-agent --new-plugin my-plugin
+dune exec -- fp-agent --check-plugin my-plugin
+dune exec -- fp-agent --install-plugin examples/plugins/echo
+```
+
+Plugins are discovered from `FP_AGENT_PLUGIN_PATH`, `.fp-agent/plugins`, and
+`FP_AGENT_PLUGIN_HOME` / `~/.local/share/fp-agent/plugins`. See
+`docs/plugins.md` for the SDK contract.
+
 ### Event-sourced sessions and forking
 
 The event log is the source of truth: the agent's conversation state is a pure
@@ -97,6 +122,9 @@ Options:
 - `--yolo` — bypass the dangerous-command deny-list (workspace bounds still apply)
 - `--resume SESSION_DIR` — replay a previous session's event log as context and continue
 - `--tui` — full-screen live view of the run (autonomous; needs a real terminal)
+- `--new-plugin DIR` — create a starter plugin directory, then exit
+- `--check-plugin DIR` — validate a plugin directory, then exit
+- `--install-plugin DIR` — validate and install a plugin directory, then exit
 
 On completion the agent prints a status summary and, if the workspace is a git
 repo, `git diff --stat`. Every run also writes a full trace to
@@ -168,6 +196,8 @@ one of them.
 | `LOCAL_MODELS` | Comma-separated extra model ids for the built-in `local` provider | optional |
 | `MAX_STEPS` | Max agent loop steps | `30` |
 | `WORKSPACE_ROOT` | Workspace root directory | current directory |
+| `FP_AGENT_PLUGIN_PATH` | Colon-separated plugin dirs or parent dirs | optional |
+| `FP_AGENT_PLUGIN_HOME` | Install/discovery directory for plugins | `~/.local/share/fp-agent/plugins` |
 
 ## How it works
 

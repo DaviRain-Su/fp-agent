@@ -7,6 +7,8 @@ type t = {
   name : string;
   kind : kind;
   description : string;  (** one-line args spec shown to the model *)
+  input_schema : Yojson.Safe.t option;
+      (** Optional JSON Schema for native tool calling. *)
   check : Workspace.t -> Yojson.Safe.t -> Permission.t;
       (** pre-execution policy verdict for the given args *)
   run : Workspace.t -> Yojson.Safe.t -> Tool_result.t;

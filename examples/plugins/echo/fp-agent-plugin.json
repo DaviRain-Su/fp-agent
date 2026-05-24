@@ -1,0 +1,22 @@
+{
+  "id": "com.fp-agent.echo",
+  "name": "Echo Plugin",
+  "version": "0.1.0",
+  "tools": [
+    {
+      "name": "echo_json",
+      "kind": "read",
+      "description": "Echoes the JSON arguments supplied by the model",
+      "command": "sh echo.sh",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["message"]
+      }
+    }
+  ]
+}

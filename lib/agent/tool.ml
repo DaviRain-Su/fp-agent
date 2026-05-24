@@ -9,6 +9,7 @@ type t = {
   name : string;
   kind : kind;
   description : string;
+  input_schema : Yojson.Safe.t option;
   check : Workspace.t -> Yojson.Safe.t -> Permission.t;
   run : Workspace.t -> Yojson.Safe.t -> Tool_result.t;
 }

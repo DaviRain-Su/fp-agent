@@ -45,6 +45,8 @@ Rules:
 - All paths are relative to the workspace root and may not escape it.
 - You cannot modify the .git directory. Dangerous shell commands are rejected.
 - Prefer small, verifiable steps. Inspect files before editing them.
+- Batch independent read-only inspection calls in one turn when possible.
+- For code review tasks, start with git status --short and git diff --stat, then inspect only changed or directly related files/diffs. Prefer git diff <path> over reading whole files. Report findings with file paths and concrete evidence; do not scan the entire repository unless the diff demands it.
 - For codebase tasks, you MUST inspect relevant files with tools before giving a final answer. Do not answer "Hello" or ask how to help after the user has already given a task.
 - If the provider offers native tool calling, use native tool calls; otherwise use the JSON action format above.|}
 
@@ -83,13 +85,13 @@ let strip_control_fields = function
   | json -> json
 
 let build_tool tool args : (Tool_call.t, string) Result.t =
-  Builtin_tools.register_all ();
+  Tool_loader.register_all ();
   match Tool.find tool with
   | Some _ -> Ok (Tool_call.make ~name:tool ~args:(strip_control_fields args))
   | None -> Error ("unknown tool: " ^ tool)
 
 let is_tool_name n =
-  Builtin_tools.register_all ();
+  Tool_loader.register_all ();
   Option.is_some (Tool.find n)
 
 let args_object json =
@@ -301,8 +303,11 @@ let tool_parameters name =
         ]
   | _ -> object_schema (`Assoc [])
 
+let schema_for_tool (tool : Tool.t) =
+  Option.value tool.input_schema ~default:(tool_parameters tool.name)
+
 let openai_tools () =
-  Builtin_tools.register_all ();
+  Tool_loader.register_all ();
   Tool.all ()
   |> List.map ~f:(fun (tool : Tool.t) ->
       `Assoc
@@ -313,19 +318,19 @@ let openai_tools () =
               [
                 ("name", `String tool.name);
                 ("description", `String tool.description);
-                ("parameters", tool_parameters tool.name);
+                ("parameters", schema_for_tool tool);
               ] );
         ])
 
 let anthropic_tools () =
-  Builtin_tools.register_all ();
+  Tool_loader.register_all ();
   Tool.all ()
   |> List.map ~f:(fun (tool : Tool.t) ->
       `Assoc
         [
           ("name", `String tool.name);
           ("description", `String tool.description);
-          ("input_schema", tool_parameters tool.name);
+          ("input_schema", schema_for_tool tool);
         ])
 
 (* --- Provider serialization for normalized turns --- *)
@@ -859,11 +864,100 @@ let collect_sse_payloads body =
   Lwt.map
     (fun chunks ->
       split_sse_lines chunks ~on_line;
-      List.rev !payloads)
+      (String.concat chunks, List.rev !payloads))
     (Lwt_stream.to_list (Cohttp_lwt.Body.to_stream body))
 
+let openai_non_sse_complete ~on_delta body_str =
+  let open Yojson.Safe.Util in
+  match Yojson.Safe.from_string body_str with
+  | exception exn ->
+      Error ("invalid JSON in model response: " ^ Exn.to_string exn)
+  | json -> (
+      try
+        let message = json |> member "choices" |> index 0 |> member "message" in
+        let blocks =
+          match member "tool_calls" message with
+          | `List calls when not (List.is_empty calls) ->
+              List.filter_map calls ~f:(fun call ->
+                  let fn = member "function" call in
+                  match member "name" fn with
+                  | `String name ->
+                      let input =
+                        match member "arguments" fn with
+                        | `String s -> parse_json_object_or_empty s
+                        | `Assoc _ as obj -> obj
+                        | _ -> `Assoc []
+                      in
+                      Some
+                        (Tool_use
+                           {
+                             id = json_string_or_empty (member "id" call);
+                             name;
+                             input;
+                           })
+                  | _ -> None)
+          | _ -> (
+              match member "content" message with
+              | `String s when not (String.is_empty s) -> [ Text s ]
+              | _ -> [])
+        in
+        let usage =
+          match member "usage" json with
+          | `Assoc _ as usage -> Llm.usage_of_json usage
+          | _ -> Llm.zero_usage
+        in
+        (match blocks with
+        | [ Text s ] -> flush_delta (create_delta_filter on_delta) s
+        | _ -> ());
+        Result.map (action_of_content_blocks blocks) ~f:(fun content ->
+            (content, usage))
+      with exn -> Error ("unexpected completion shape: " ^ Exn.to_string exn))
+
+let anthropic_non_sse_complete ~on_delta body_str =
+  let open Yojson.Safe.Util in
+  match Yojson.Safe.from_string body_str with
+  | exception exn ->
+      Error ("invalid JSON in model response: " ^ Exn.to_string exn)
+  | json -> (
+      try
+        let blocks = json |> member "content" |> to_list in
+        let content =
+          List.filter_map blocks ~f:(fun block ->
+              match member "type" block with
+              | `String "text" ->
+                  Some (Text (json_string_or_empty (member "text" block)))
+              | `String "tool_use" ->
+                  Some
+                    (Tool_use
+                       {
+                         id = json_string_or_empty (member "id" block);
+                         name = json_string_or_empty (member "name" block);
+                         input = member "input" block;
+                       })
+              | `String "thinking" ->
+                  Some
+                    (Thinking
+                       {
+                         text = json_string_or_empty (member "thinking" block);
+                         signature =
+                           json_string_or_empty (member "signature" block);
+                       })
+              | _ -> None)
+        in
+        let usage =
+          match json |> member "usage" with
+          | `Assoc _ as usage -> Llm.usage_of_json usage
+          | _ -> Llm.zero_usage
+        in
+        (match content with
+        | [ Text s ] -> flush_delta (create_delta_filter on_delta) s
+        | _ -> ());
+        Result.map (action_of_content_blocks content) ~f:(fun content ->
+            (content, usage))
+      with exn -> Error ("unexpected messages shape: " ^ Exn.to_string exn))
+
 let post_and_complete ?(on_delta = fun _ -> ()) (uri, headers, body_json)
-    ~complete =
+    ~complete ~non_sse_complete =
   let body = Cohttp_lwt.Body.of_string (Yojson.Safe.to_string body_json) in
   Lwt.bind
     (Lwt.catch
@@ -887,7 +981,10 @@ let post_and_complete ?(on_delta = fun _ -> ()) (uri, headers, body_json)
                   (Error (Printf.sprintf "model API HTTP %d: %s" code snippet)))
           else
             Lwt.map
-              (fun payloads -> complete ~on_delta payloads)
+              (fun (body_str, payloads) ->
+                match payloads with
+                | [] -> non_sse_complete ~on_delta body_str
+                | payloads -> complete ~on_delta payloads)
               (collect_sse_payloads rbody))
 
 let real_send (config : Config.t) ~on_delta ~system ~tools_enabled turns =
@@ -895,11 +992,12 @@ let real_send (config : Config.t) ~on_delta ~system ~tools_enabled turns =
   | Provider.Openai ->
       post_and_complete ~on_delta
         (openai_request config ~system ~tools_enabled turns)
-        ~complete:openai_complete
+        ~complete:openai_complete ~non_sse_complete:openai_non_sse_complete
   | Provider.Anthropic ->
       post_and_complete ~on_delta
         (anthropic_request config ~system ~tools_enabled turns)
         ~complete:anthropic_complete
+        ~non_sse_complete:anthropic_non_sse_complete
 
 let create ~config =
   {

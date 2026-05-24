@@ -213,23 +213,19 @@ let test_auto_compaction_preserves_summary () =
       let initial_history =
         List.init 8 ~f:(fun i -> Llm.user (Printf.sprintf "old-%d %s" i chunk))
       in
-      let saw_compaction = ref false in
       let saw_summary = ref false in
       let client =
         Model_client.create_mock_with_options ~send:(fun ~tools_enabled turns ->
-            if not tools_enabled then (
-              saw_compaction := true;
-              Lwt.return
-                (Ok ([ Llm.Text "summary of earlier context" ], Llm.zero_usage)))
-            else (
-              saw_summary :=
-                List.exists turns ~f:(fun (turn : Llm.turn) ->
-                    List.exists turn.content ~f:(function
-                      | Llm.Text text ->
-                          String.is_substring text
-                            ~substring:"[Earlier conversation summary]"
-                      | _ -> false));
-              Lwt.return (Ok ([ Llm.Text "done" ], Llm.zero_usage))))
+            Alcotest.(check bool)
+              "normal model send keeps tools enabled" true tools_enabled;
+            saw_summary :=
+              List.exists turns ~f:(fun (turn : Llm.turn) ->
+                  List.exists turn.content ~f:(function
+                    | Llm.Text text ->
+                        String.is_substring text
+                          ~substring:"[Earlier conversation summary]"
+                    | _ -> false));
+            Lwt.return (Ok ([ Llm.Text "done" ], Llm.zero_usage)))
       in
       let outcome =
         Lwt_main.run
@@ -239,7 +235,6 @@ let test_auto_compaction_preserves_summary () =
       Alcotest.(check string)
         "status completed" "completed"
         (Agent_loop.status_to_string outcome.status);
-      Alcotest.(check bool) "compaction requested" true !saw_compaction;
       Alcotest.(check bool) "summary sent to model" true !saw_summary;
       let log_path = Stdlib.Filename.concat session_dir "events.jsonl" in
       let contents =
