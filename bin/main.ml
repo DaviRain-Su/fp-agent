@@ -689,19 +689,9 @@ let parse_plugin_new_args raw =
   in
   loop None None [] tokens
 
-let plugin_new_lines args =
-  match parse_plugin_new_args args with
-  | Error e -> [ e ]
-  | Ok (id, tool_name, dir) -> (
-      match Plugin.scaffold ?id ?tool_name dir with
-      | Error e -> [ "plugin scaffold error: " ^ e ]
-      | Ok dst ->
-          [
-            "created plugin scaffold: " ^ dst;
-            "next: /plugin-check " ^ dst;
-            "next: /plugin-smoke " ^ dst;
-            "next: /plugin-install --replace " ^ dst;
-          ])
+let plugin_args_file (manifest : Plugin.manifest) tool_name =
+  Stdlib.Filename.concat manifest.dir
+    (Stdlib.Filename.concat "examples" (tool_name ^ ".args.json"))
 
 let plugin_next_lines (manifest : Plugin.manifest) =
   let tools =
@@ -714,6 +704,35 @@ let plugin_next_lines (manifest : Plugin.manifest) =
     "next: /plugin " ^ manifest.id;
   ]
   @ List.map tools ~f:(fun tool -> "next: /tool " ^ tool)
+  @ List.filter_map tools ~f:(fun tool ->
+      let args_file = plugin_args_file manifest tool in
+      if Stdlib.Sys.file_exists args_file then
+        Some
+          (Printf.sprintf "next: /plugin-run %s %s @%s" manifest.dir tool
+             args_file)
+      else None)
+
+let plugin_new_success_lines dst =
+  let next =
+    match Plugin.load_manifest dst with
+    | Ok manifest -> plugin_next_lines manifest
+    | Error e -> [ "plugin detail error after scaffold: " ^ e ]
+  in
+  [
+    "created plugin scaffold: " ^ dst;
+    "next: /plugin-check " ^ dst;
+    "next: /plugin-smoke " ^ dst;
+    "next: /plugin-install --replace " ^ dst;
+  ]
+  @ next
+
+let plugin_new_lines args =
+  match parse_plugin_new_args args with
+  | Error e -> [ e ]
+  | Ok (id, tool_name, dir) -> (
+      match Plugin.scaffold ?id ?tool_name dir with
+      | Error e -> [ "plugin scaffold error: " ^ e ]
+      | Ok dst -> plugin_new_success_lines dst)
 
 let parse_plugin_dir_arg ~usage raw =
   let arg = String.strip raw in
@@ -1926,7 +1945,8 @@ let dispatch new_plugin plugin_id plugin_tool_name check_plugin install_plugin
   | Some path, plugin_id, plugin_tool_name, _, _, _, _, _, _, _, _ -> (
       match Plugin.scaffold ?id:plugin_id ?tool_name:plugin_tool_name path with
       | Ok dst ->
-          Stdlib.Printf.printf "created plugin scaffold: %s\n" dst;
+          List.iter (plugin_new_success_lines dst) ~f:(fun line ->
+              Stdlib.Printf.printf "%s\n%!" line);
           0
       | Error e ->
           Stdlib.prerr_endline ("plugin scaffold error: " ^ e);
@@ -1952,6 +1972,12 @@ let dispatch new_plugin plugin_id plugin_tool_name check_plugin install_plugin
       match Plugin.install ~replace:replace_plugin path with
       | Ok dst ->
           Stdlib.Printf.printf "installed plugin: %s\n" dst;
+          (match Plugin.check dst with
+          | Ok manifest ->
+              List.iter (plugin_next_lines manifest) ~f:(fun line ->
+                  Stdlib.Printf.printf "%s\n%!" line)
+          | Error e ->
+              Stdlib.Printf.printf "plugin detail error after install: %s\n%!" e);
           0
       | Error e ->
           Stdlib.prerr_endline ("plugin install error: " ^ e);

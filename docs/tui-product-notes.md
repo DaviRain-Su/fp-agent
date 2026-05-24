@@ -140,8 +140,8 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   sessions see updated tools.
 - Plugin scaffold/install/remove output now includes actionable next commands:
   scaffold points at validation, smoke, and replace-install; install points at
-  the installed plugin id plus each registered tool; remove points back to
-  `/plugins`.
+  the installed plugin id, each registered tool, and runnable `/plugin-run`
+  examples when args files exist; remove points back to `/plugins`.
 - Plugin installation now supports `--replace-plugin` for iterative SDK
   development. Replacement validates and stages the new plugin before removing
   the old installed copy, so reinstalling a local plugin is one command without

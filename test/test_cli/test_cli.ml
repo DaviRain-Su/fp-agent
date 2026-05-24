@@ -108,6 +108,12 @@ let test_plugin_lifecycle_cli () =
   let created = run ~env [ bin; "--new-plugin"; plugin_dir ] in
   assert_success "new plugin" created;
   assert_contains "new plugin output" created.stdout "created plugin scaffold";
+  let plugin_args_file =
+    Stdlib.Filename.concat plugin_dir
+      (Stdlib.Filename.concat "examples" "hello_world.args.json")
+  in
+  assert_contains "new plugin run hint" created.stdout
+    ("next: /plugin-run " ^ plugin_dir ^ " hello_world @" ^ plugin_args_file);
   Alcotest.(check bool)
     "manifest created" true
     (Stdlib.Sys.file_exists
@@ -182,6 +188,15 @@ let test_plugin_lifecycle_cli () =
   assert_success "install plugin" installed;
   assert_contains "install output" installed.stdout "installed plugin:";
   let installed_dir = Stdlib.Filename.concat home "local.my-plugin" in
+  assert_contains "install plugin id hint" installed.stdout
+    "plugin id: local.my-plugin";
+  let installed_args_file =
+    Stdlib.Filename.concat installed_dir
+      (Stdlib.Filename.concat "examples" "hello_world.args.json")
+  in
+  assert_contains "install run hint" installed.stdout
+    ("next: /plugin-run " ^ installed_dir ^ " hello_world @"
+   ^ installed_args_file);
   Alcotest.(check bool)
     "installed manifest" true
     (Stdlib.Sys.file_exists
@@ -398,6 +413,16 @@ let test_new_plugin_custom_id_cli () =
     "plugin dev smoke ok:";
   assert_contains "dev custom tool hint" installed.stdout
     "next: /tool named_echo";
+  let installed_named_dir =
+    Stdlib.Filename.concat home "com.example.named_plugin"
+  in
+  let installed_named_args =
+    Stdlib.Filename.concat installed_named_dir
+      (Stdlib.Filename.concat "examples" "named_echo.args.json")
+  in
+  assert_contains "dev custom plugin run hint" installed.stdout
+    ("next: /plugin-run " ^ installed_named_dir ^ " named_echo @"
+   ^ installed_named_args);
   Alcotest.(check bool)
     "installed under custom id" true
     (Stdlib.Sys.file_exists

@@ -181,6 +181,8 @@ diagnostics, and tool-name conflicts. `/plugins` and `--list-plugins` also
 surface invalid manifest diagnostics instead of silently hiding broken plugin
 directories, and report tool-name conflicts when a plugin would shadow a
 built-in or earlier discovered plugin tool.
+Scaffold, install, and dev commands print follow-up `/plugin`, `/tool`, and
+`/plugin-run` commands when the manifest includes runnable example args.
 
 ### Event-sourced sessions and forking
 

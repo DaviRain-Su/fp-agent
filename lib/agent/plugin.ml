@@ -981,7 +981,7 @@ The tool receives JSON args on stdin and can use:
 Install it with:
 
 ```sh
-dune exec -- fp-agent --install-plugin --replace .
+dune exec -- fp-agent --install-plugin . --replace-plugin
 ```
 |}
                    id tool_name id tool_name tool_name tool_name));

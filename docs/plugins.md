@@ -218,7 +218,9 @@ dune exec -- fp-agent --run-plugin-tool my-plugin \
 `--dev-plugin DIR` (alias `--plugin-dev DIR`) runs the same one-step development
 loop without opening the REPL: validate, smoke-test, install, refresh, and print
 the next plugin/tool inspection commands. Add `--replace-plugin` when iterating
-on an already installed plugin.
+on an already installed plugin. Scaffold, install, and dev commands also print a
+`/plugin-run` next step when `examples/<tool>.args.json` is present, so the
+generated plugin can be exercised immediately.
 
 The command loads the manifest, validates the JSON args, runs the tool from the
 plugin directory, and prints stdout. It uses `--workspace` or `WORKSPACE_ROOT`
