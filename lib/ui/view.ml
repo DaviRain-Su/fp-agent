@@ -63,6 +63,34 @@ let token_usage_of_events events =
           }
       | _ -> acc)
 
+type plan_progress = { done_items : int; total_items : int }
+
+let plan_progress_zero = { done_items = 0; total_items = 0 }
+
+let plan_progress_of_items (items : Event.plan_item list) =
+  {
+    done_items =
+      List.count items ~f:(fun item ->
+          match item.status with
+          | Event.Done -> true
+          | Event.Todo | Event.Doing -> false);
+    total_items = List.length items;
+  }
+
+let plan_progress_of_events events =
+  match
+    List.find_map (List.rev events) ~f:(function
+      | Event.Plan_updated { items } -> Some items
+      | _ -> None)
+  with
+  | None -> plan_progress_zero
+  | Some items -> plan_progress_of_items items
+
+let plan_progress_line progress =
+  if progress.total_items <= 0 then "plan: none"
+  else
+    Printf.sprintf "plan: %d/%d done" progress.done_items progress.total_items
+
 type status = {
   provider : string;
   model : string;
@@ -70,15 +98,20 @@ type status = {
   phase : string option;
   events : int;
   usage : token_usage;
+  plan : plan_progress;
   plugins : int;
   tools : int;
 }
 
 let status_line s =
   let phase = Option.value s.phase ~default:"idle" in
+  let plan =
+    if s.plan.total_items <= 0 then ""
+    else Printf.sprintf " | plan %d/%d" s.plan.done_items s.plan.total_items
+  in
   Printf.sprintf
-    "%s/%s | %s | %s | events %d | tokens %d/%d | plugins %d | tools %d"
-    s.provider s.model s.session phase s.events s.usage.input_tokens
+    "%s/%s | %s | %s | events %d%s | tokens %d/%d | plugins %d | tools %d"
+    s.provider s.model s.session phase s.events plan s.usage.input_tokens
     s.usage.output_tokens s.plugins s.tools
 
 let inspector_lines ?(focus_label = "Last event") s ~last_event =
@@ -89,6 +122,7 @@ let inspector_lines ?(focus_label = "Last event") s ~last_event =
     "session: " ^ s.session;
     "phase: " ^ Option.value s.phase ~default:"idle";
     Printf.sprintf "events: %d" s.events;
+    plan_progress_line s.plan;
     Printf.sprintf "tokens: input %d output %d total %d" s.usage.input_tokens
       s.usage.output_tokens
       (token_usage_total s.usage);

@@ -224,12 +224,13 @@ copy. Two consequences:
   TUI: event kind, summary, tool args, policy/result details, and a JSON
   preview. With no index it inspects the latest event.
 - **Status** (`/status`) summarizes workspace, session, provider/model,
-  event count, token usage, plugin diagnostics, and registered tool count.
+  event count, token usage, plan progress, plugin diagnostics, and registered
+  tool count.
 - **Project instructions** (`/instructions`) shows the workspace instruction
   files that will be appended to the model system prompt.
 - **Session plan** (`/plan`, `/plan-set`) stores a visible todo/doing/done plan
   as an event-log entry, so long tasks can carry an auditable working plan
-  across REPL/TUI resume, fork, inspect, and log views.
+  across REPL/TUI resume, fork, status, inspect, and log views.
 - **Compaction** (`/compact`) appends a `Context_compacted` event that replaces
   older model-visible turns with a bounded summary while preserving the recent
   turns needed to continue safely. The raw event log remains intact.

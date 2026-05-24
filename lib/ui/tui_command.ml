@@ -358,6 +358,7 @@ let status_lines ctx =
   Tool_loader.register_all ();
   let discovery = Plugin.discover () in
   let usage = View.token_usage_of_events ctx.events in
+  let plan = View.plan_progress_of_events ctx.events in
   let conflicts = Plugin.tool_conflicts () in
   let project_instructions =
     match Workspace.create ~root:ctx.workspace_root with
@@ -378,6 +379,7 @@ let status_lines ctx =
     Printf.sprintf "tokens: input %d output %d total %d" usage.input_tokens
       usage.output_tokens
       (View.token_usage_total usage);
+    View.plan_progress_line plan;
     Printf.sprintf "plugins: %d valid / %d invalid / %d conflicts"
       (List.length discovery.manifests)
       (List.length discovery.errors)

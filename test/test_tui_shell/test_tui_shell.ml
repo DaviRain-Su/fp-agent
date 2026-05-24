@@ -431,6 +431,10 @@ let test_tui_command_model_log_and_inspect () =
       Alcotest.(check bool)
         "plan command shows item" true
         (String.is_substring plan ~substring:"2. [doing] implement plan");
+      let plan_status = output "/status" plan_context in
+      Alcotest.(check bool)
+        "status shows plan progress" true
+        (String.is_substring plan_status ~substring:"plan: 1/3 done");
       let status = output "/status" context in
       Alcotest.(check bool)
         "status command header" true
@@ -448,6 +452,9 @@ let test_tui_command_model_log_and_inspect () =
         "status shows tokens" true
         (String.is_substring status
            ~substring:"tokens: input 21 output 7 total 28");
+      Alcotest.(check bool)
+        "status shows no plan" true
+        (String.is_substring status ~substring:"plan: none");
       Alcotest.(check bool)
         "status shows tool count" true
         (String.is_substring status ~substring:"tools:");

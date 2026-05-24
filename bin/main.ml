@@ -408,6 +408,7 @@ let make_tui_view ~initial_events ~provider ~model ~api_base ~workspace_root
         phase = phase_text;
         events = event_count;
         usage = View.token_usage_of_events !events;
+        plan = View.plan_progress_of_events !events;
         plugins = !plugin_count;
         tools = !tool_count;
       }

@@ -104,8 +104,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   keeping reruns explicit.
 - Fullscreen TUI and REPL `/plan-set` now append a `Plan_updated` event with
   todo/doing/done items, while `/plan`, `/log`, and `/inspect` render the
-  latest plan from the event log. Plan state survives resume/fork because it is
-  data, not transient UI state.
+  latest plan from the event log. `/status`, the fullscreen status strip, and
+  the inspector also surface plan completion progress. Plan state survives
+  resume/fork because it is data, not transient UI state.
 - The command palette now groups commands by workflow area such as Tools,
   Plugins, Sessions, Models, Context, and Run Control. Filtering also matches
   those group labels, so queries like `plugins install` can jump directly to

@@ -70,6 +70,7 @@ let test_status_and_inspector () =
       phase = Some "running read_file…";
       events = 12;
       usage = { input_tokens = 1234; output_tokens = 567 };
+      plan = { done_items = 1; total_items = 3 };
       plugins = 2;
       tools = 11;
     }
@@ -84,6 +85,9 @@ let test_status_and_inspector () =
   Alcotest.(check bool)
     "status has token usage" true
     (String.is_substring line ~substring:"tokens 1234/567");
+  Alcotest.(check bool)
+    "status has plan progress" true
+    (String.is_substring line ~substring:"plan 1/3");
   Alcotest.(check (list string))
     "inspector lines"
     [
@@ -93,6 +97,7 @@ let test_status_and_inspector () =
       "session: 2026-session";
       "phase: running read_file…";
       "events: 12";
+      "plan: 1/3 done";
       "tokens: input 1234 output 567 total 1801";
       "plugins: 2";
       "tools: 11";
@@ -123,6 +128,36 @@ let test_token_usage () =
   Alcotest.(check int) "input tokens" 22 usage.input_tokens;
   Alcotest.(check int) "output tokens" 12 usage.output_tokens;
   Alcotest.(check int) "total tokens" 34 (View.token_usage_total usage)
+
+let test_plan_progress () =
+  let events =
+    [
+      Event.Plan_updated
+        {
+          items =
+            [
+              { Event.status = Event.Done; text = "inspect code" };
+              { Event.status = Event.Doing; text = "wire status" };
+            ];
+        };
+      Event.User_message { content = "continue" };
+      Event.Plan_updated
+        {
+          items =
+            [
+              { Event.status = Event.Done; text = "inspect code" };
+              { Event.status = Event.Done; text = "wire status" };
+              { Event.status = Event.Todo; text = "run tests" };
+            ];
+        };
+    ]
+  in
+  let progress = View.plan_progress_of_events events in
+  Alcotest.(check int) "done items" 2 progress.done_items;
+  Alcotest.(check int) "total items" 3 progress.total_items;
+  Alcotest.(check string)
+    "progress line" "plan: 2/3 done"
+    (View.plan_progress_line progress)
 
 let test_event_selection () =
   Alcotest.(check (option int))
@@ -498,6 +533,7 @@ let () =
           Alcotest.test_case "status_and_inspector" `Quick
             test_status_and_inspector;
           Alcotest.test_case "token_usage" `Quick test_token_usage;
+          Alcotest.test_case "plan_progress" `Quick test_plan_progress;
           Alcotest.test_case "event_selection" `Quick test_event_selection;
           Alcotest.test_case "command_palette" `Quick test_command_palette;
           Alcotest.test_case "approval_prompt_lines" `Quick

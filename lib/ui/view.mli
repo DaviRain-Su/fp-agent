@@ -37,6 +37,18 @@ val token_usage_total : token_usage -> int
 val token_usage_of_events : Event.t list -> token_usage
 (** Sum input/output token usage recorded in the event log. *)
 
+type plan_progress = { done_items : int; total_items : int }
+(** Completion summary for the latest session plan. *)
+
+val plan_progress_zero : plan_progress
+val plan_progress_of_items : Event.plan_item list -> plan_progress
+
+val plan_progress_of_events : Event.t list -> plan_progress
+(** Return completion progress for the latest plan update event. *)
+
+val plan_progress_line : plan_progress -> string
+(** Render plan progress for status and inspectors. *)
+
 type status = {
   provider : string;
   model : string;
@@ -44,6 +56,7 @@ type status = {
   phase : string option;
   events : int;
   usage : token_usage;
+  plan : plan_progress;
   plugins : int;
   tools : int;
 }
