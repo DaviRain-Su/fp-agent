@@ -5,6 +5,7 @@ type plugin_tool = {
   tool_kind : Tool.kind;
   tool_description : string;
   tool_command : string;
+  tool_permissions : Yojson.Safe.t option;
   tool_input_schema : Yojson.Safe.t option;
   tool_timeout_sec : int;
 }
@@ -298,6 +299,90 @@ let string_of_kind = function
   | Tool.Write -> "write"
   | Tool.Exec -> "exec"
 
+let permission_value_ok ~tool_name ~path = function
+  | `String s when not (String.is_empty (String.strip s)) -> Ok ()
+  | `String _ ->
+      Error (Printf.sprintf "tool '%s' %s cannot be empty" tool_name path)
+  | `Bool _ -> Ok ()
+  | `List values ->
+      List.fold values ~init:(Ok ()) ~f:(fun acc value ->
+          match acc with
+          | Error _ as e -> e
+          | Ok () -> (
+              match value with
+              | `String s when not (String.is_empty (String.strip s)) -> Ok ()
+              | `String _ ->
+                  Error
+                    (Printf.sprintf "tool '%s' %s cannot contain empty strings"
+                       tool_name path)
+              | _ ->
+                  Error
+                    (Printf.sprintf "tool '%s' %s must contain only strings"
+                       tool_name path)))
+  | _ ->
+      Error
+        (Printf.sprintf
+           "tool '%s' %s must be a string, boolean, or string array" tool_name
+           path)
+
+let validate_permissions tool_name = function
+  | None -> Ok None
+  | Some (`Assoc fields as permissions) ->
+      let result =
+        List.fold fields ~init:(Ok ()) ~f:(fun acc (name, value) ->
+            match acc with
+            | Error _ as e -> e
+            | Ok () ->
+                if String.is_empty (String.strip name) then
+                  Error
+                    (Printf.sprintf "tool '%s' permissions keys cannot be empty"
+                       tool_name)
+                else
+                  permission_value_ok ~tool_name ~path:("permissions." ^ name)
+                    value)
+      in
+      Result.map result ~f:(fun () -> Some permissions)
+  | Some (`List _ as permissions) ->
+      Result.map
+        (permission_value_ok ~tool_name ~path:"permissions" permissions)
+        ~f:(fun () -> Some permissions)
+  | Some (`String _ as permissions) ->
+      Result.map
+        (permission_value_ok ~tool_name ~path:"permissions" permissions)
+        ~f:(fun () -> Some permissions)
+  | Some _ ->
+      Error
+        (Printf.sprintf
+           "tool '%s' permissions must be a string, string array, or object"
+           tool_name)
+
+let json_scalar_label = function
+  | `String s -> s
+  | `Bool b -> Bool.to_string b
+  | value -> Yojson.Safe.to_string value
+
+let permission_object_field_label (name, value) =
+  let value =
+    match value with
+    | `List values ->
+        "["
+        ^ (values |> List.map ~f:json_scalar_label |> String.concat ~sep:",")
+        ^ "]"
+    | _ -> json_scalar_label value
+  in
+  name ^ "=" ^ value
+
+let permissions_label = function
+  | None -> "default"
+  | Some (`String s) -> s
+  | Some (`List values) ->
+      values |> List.map ~f:json_scalar_label |> String.concat ~sep:", "
+  | Some (`Assoc fields) ->
+      fields
+      |> List.map ~f:permission_object_field_label
+      |> String.concat ~sep:", "
+  | Some value -> Yojson.Safe.to_string value
+
 let parse_tool json : (plugin_tool, string) Result.t =
   let timeout_sec =
     Option.value
@@ -313,22 +398,25 @@ let parse_tool json : (plugin_tool, string) Result.t =
   | Ok tool_name, Ok kind, Ok tool_description, Ok tool_command -> (
       match
         ( validate_name ~what:"tool name" ~allow_dot:false tool_name,
-          kind_of_string (String.lowercase kind) )
+          kind_of_string (String.lowercase kind),
+          validate_permissions tool_name
+            (json_member json [ "permissions"; "permission" ]) )
       with
-      | Ok (), Ok _ when timeout_sec <= 0 ->
+      | Ok (), Ok _, _ when timeout_sec <= 0 ->
           Error (Printf.sprintf "tool '%s' timeout must be positive" tool_name)
-      | Ok (), Ok tool_kind ->
+      | Ok (), Ok tool_kind, Ok tool_permissions ->
           Ok
             {
               tool_name;
               tool_kind;
               tool_description;
               tool_command;
+              tool_permissions;
               tool_input_schema =
                 json_member json [ "input_schema"; "inputSchema"; "parameters" ];
               tool_timeout_sec = timeout_sec;
             }
-      | Error e, _ | _, Error e -> Error e)
+      | Error e, _, _ | _, Error e, _ | _, _, Error e -> Error e)
   | Error e, _, _, _ | _, Error e, _, _ | _, _, Error e, _ | _, _, _, Error e ->
       Error e
 
@@ -545,6 +633,10 @@ let run_plugin_tool (manifest : manifest) tool workspace args =
   match validate_args_schema tool.tool_input_schema args with
   | Error e -> Tool_result.Error { message = "schema validation failed: " ^ e }
   | Ok () ->
+      let permissions =
+        Option.value_map tool.tool_permissions ~default:"{}"
+          ~f:Yojson.Safe.to_string
+      in
       let tmp = Stdlib.Filename.temp_file "fp_agent_plugin_args" ".json" in
       let cleanup () = try Unix.unlink tmp with Unix.Unix_error _ -> () in
       Exn.protect
@@ -557,7 +649,7 @@ let run_plugin_tool (manifest : manifest) tool workspace args =
                FP_AGENT_PLUGIN_ID=%s FP_AGENT_PLUGIN_NAME=%s \
                FP_AGENT_PLUGIN_VERSION=%s FP_AGENT_PLUGIN_SDK_VERSION=%s \
                FP_AGENT_TOOL_NAME=%s FP_AGENT_TOOL_KIND=%s \
-               FP_AGENT_ARGS_FILE=%s %s < %s"
+               FP_AGENT_TOOL_PERMISSIONS=%s FP_AGENT_ARGS_FILE=%s %s < %s"
               (Stdlib.Filename.quote manifest.dir)
               (Stdlib.Filename.quote (Workspace.root workspace))
               (Stdlib.Filename.quote manifest.dir)
@@ -567,6 +659,7 @@ let run_plugin_tool (manifest : manifest) tool workspace args =
               (Stdlib.Filename.quote (Int.to_string manifest.sdk_version))
               (Stdlib.Filename.quote tool.tool_name)
               (Stdlib.Filename.quote (string_of_kind tool.tool_kind))
+              (Stdlib.Filename.quote permissions)
               (Stdlib.Filename.quote tmp)
               tool.tool_command
               (Stdlib.Filename.quote tmp)
@@ -753,13 +846,21 @@ let smoke ?(replace = false) ~workspace dir =
 let register_manifest (manifest : manifest) =
   List.iter manifest.tools ~f:(fun plugin_tool ->
       if Option.is_none (Tool.find plugin_tool.tool_name) then
+        let permissions =
+          match plugin_tool.tool_permissions with
+          | None -> ""
+          | Some _ ->
+              "; permissions: " ^ permissions_label plugin_tool.tool_permissions
+        in
+        let description =
+          Printf.sprintf "%s (plugin %s%s)" plugin_tool.tool_description
+            manifest.id permissions
+        in
         Tool.register
           {
             name = plugin_tool.tool_name;
             kind = plugin_tool.tool_kind;
-            description =
-              Printf.sprintf "%s (plugin %s)" plugin_tool.tool_description
-                manifest.id;
+            description;
             input_schema = plugin_tool.tool_input_schema;
             check = plugin_check plugin_tool.tool_kind;
             run = run_plugin_tool manifest plugin_tool;
@@ -871,6 +972,12 @@ let scaffold ?id ?tool_name ?(kind = "read") dir =
   | Error e, _, _ | _, Error e, _ | _, _, Error e -> Error e
   | Ok (), Ok (), Ok tool_kind -> (
       let kind = string_of_kind tool_kind in
+      let permissions =
+        match tool_kind with
+        | Tool.Read -> {|{"workspace":"read"}|}
+        | Tool.Write -> {|{"workspace":"write"}|}
+        | Tool.Exec -> {|{"shell":true}|}
+      in
       let manifest_path = Stdlib.Filename.concat dir manifest_file in
       let script_path = Stdlib.Filename.concat dir "hello.sh" in
       let readme_path = Stdlib.Filename.concat dir "README.md" in
@@ -897,6 +1004,7 @@ let scaffold ?id ?tool_name ?(kind = "read") dir =
       "kind": "%s",
       "description": "Returns a greeting and echoes the input JSON",
       "command": "sh hello.sh",
+      "permissions": %s,
       "input_schema": {
         "type": "object",
         "properties": {
@@ -908,7 +1016,7 @@ let scaffold ?id ?tool_name ?(kind = "read") dir =
   ]
 }
 |}
-                   id id supported_sdk_version tool_name kind));
+                   id id supported_sdk_version tool_name kind permissions));
           Stdlib.Out_channel.with_open_bin script_path (fun oc ->
               Stdlib.Out_channel.output_string oc
                 "#!/bin/sh\nprintf 'hello from fp-agent plugin: '\ncat\n");
@@ -923,6 +1031,7 @@ let scaffold ?id ?tool_name ?(kind = "read") dir =
 Starter fp-agent plugin generated by `--new-plugin`.
 
 Initial tool kind: `%s`.
+Initial permissions: `%s`.
 
 ## Interactive Development Loop
 
@@ -981,6 +1090,7 @@ The tool receives JSON args on stdin and can use:
 - `FP_AGENT_PLUGIN_SDK_VERSION`
 - `FP_AGENT_TOOL_NAME`
 - `FP_AGENT_TOOL_KIND`
+- `FP_AGENT_TOOL_PERMISSIONS`
 - `FP_AGENT_ARGS_FILE`
 
 Install it with:
@@ -989,6 +1099,9 @@ Install it with:
 dune exec -- fp-agent --install-plugin . --replace-plugin
 ```
 |}
-                   id kind tool_name id tool_name tool_name tool_name));
+                   id kind
+                   (permissions_label
+                      (Some (Yojson.Safe.from_string permissions)))
+                   tool_name id tool_name tool_name tool_name));
           Ok dir
         with exn -> Error ("plugin scaffold failed: " ^ Exn.to_string exn))

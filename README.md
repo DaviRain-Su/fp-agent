@@ -124,9 +124,11 @@ object `properties`, and array `items`; object schemas can also set
 `additionalProperties: false` to reject undeclared arguments before plugin code
 runs. Manifests can declare `sdk_version`; unsupported future SDK versions are
 rejected by `--check-plugin`, install, and local tool runs. Plugin commands also
-receive runtime env such as
-`FP_AGENT_WORKSPACE`,
-`FP_AGENT_PLUGIN_ID`, `FP_AGENT_TOOL_KIND`, and `FP_AGENT_ARGS_FILE`.
+receive runtime env such as `FP_AGENT_WORKSPACE`, `FP_AGENT_PLUGIN_ID`,
+`FP_AGENT_TOOL_KIND`, `FP_AGENT_TOOL_PERMISSIONS`, and
+`FP_AGENT_ARGS_FILE`. Tool manifests may include optional `permissions` audit
+metadata such as `{ "workspace": "read", "network": false }`; it is validated,
+shown in `/plugins` and `/plugin`, and passed through to SDK wrappers.
 
 ```sh
 export FP_AGENT_PLUGIN_PATH=$PWD/examples/plugins/echo

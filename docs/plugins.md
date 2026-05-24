@@ -18,6 +18,10 @@ or binaries it needs.
       "kind": "read",
       "description": "Echoes the JSON args it receives",
       "command": "sh echo.sh",
+      "permissions": {
+        "workspace": "read",
+        "network": false
+      },
       "input_schema": {
         "type": "object",
         "properties": {
@@ -35,6 +39,15 @@ Tool names must be unique within a manifest and use letters, digits, `_`, or
 `read`, `write`, or `exec` and drives approval policy in `--confirm` mode.
 Optional `timeout`, `timeoutSec`, or `timeout_sec` values must be positive
 seconds.
+
+`permissions` is optional audit metadata for humans, the TUI, and plugin SDK
+wrappers. It can be a string, a string array, or an object whose values are
+strings, booleans, or string arrays, for example
+`{ "workspace": "read", "network": false, "env": ["GITHUB_TOKEN"] }`.
+`fp-agent` validates the metadata shape, shows it in `/plugins` and `/plugin`,
+adds it to the registered tool description, and passes the raw JSON through
+`FP_AGENT_TOOL_PERMISSIONS`. The current enforcement still comes from `kind`
+and the workspace policy checks described below.
 
 `sdk_version` declares the fp-agent plugin manifest contract version. It
 defaults to `1` for older plugins, and `fp-agent --check-plugin` / install /
@@ -56,6 +69,7 @@ When the model calls a plugin tool, `fp-agent`:
    - `FP_AGENT_PLUGIN_SDK_VERSION`
    - `FP_AGENT_TOOL_NAME`
    - `FP_AGENT_TOOL_KIND`
+   - `FP_AGENT_TOOL_PERMISSIONS`
    - `FP_AGENT_ARGS_FILE`
 4. Treats stdout as the tool result when the command exits `0`.
 5. Treats non-zero exit as a tool error.
@@ -116,7 +130,7 @@ details, and next inspection commands. Use it when a plugin was installed but a
 tool is missing from `/tools`.
 
 `/plugin <plugin-id|tool-name>` prints the manifest details for one plugin:
-directory, version, tool kind, command, timeout, and input schema.
+directory, version, tool kind, permissions, command, timeout, and input schema.
 
 `/tool <tool-name>` prints the registered tool descriptor exactly as the model
 sees it: kind, description, and input schema. This works for both built-in and

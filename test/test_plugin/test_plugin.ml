@@ -24,7 +24,12 @@ let with_temp_dir prefix f =
   let root = Stdlib.Filename.temp_dir prefix "" in
   Exn.protect ~f:(fun () -> f root) ~finally:(fun () -> rm_rf root)
 
-let write_plugin ?(version = "0.1.0") ?script dir ~id ~tool_name ~kind =
+let write_plugin ?(version = "0.1.0") ?permissions ?script dir ~id ~tool_name
+    ~kind =
+  let permissions =
+    Option.value_map permissions ~default:"" ~f:(fun json ->
+        ",\n      \"permissions\": " ^ json)
+  in
   write
     (Stdlib.Filename.concat dir Plugin.manifest_file)
     (Printf.sprintf
@@ -39,7 +44,7 @@ let write_plugin ?(version = "0.1.0") ?script dir ~id ~tool_name ~kind =
       "name": "%s",
       "kind": "%s",
       "description": "Echoes its JSON input",
-      "command": "sh echo.sh",
+      "command": "sh echo.sh"%s,
       "input_schema": {
         "type": "object",
         "properties": { "message": { "type": "string" } },
@@ -49,7 +54,7 @@ let write_plugin ?(version = "0.1.0") ?script dir ~id ~tool_name ~kind =
   ]
 }
 |}
-       id version tool_name kind);
+       id version tool_name kind permissions);
   write
     (Stdlib.Filename.concat dir "echo.sh")
     (Option.value script
@@ -491,12 +496,13 @@ let test_plugin_runtime_environment () =
       mkdir_p plugin_dir;
       write_plugin plugin_dir ~id:"com.example.env" ~tool_name:"plugin_env"
         ~kind:"exec"
+        ~permissions:{|{"workspace":"read","network":false,"env":["FOO"]}|}
         ~script:
-          "printf 'id=%s name=%s version=%s sdk=%s tool=%s kind=%s \
+          "printf 'id=%s name=%s version=%s sdk=%s tool=%s kind=%s perms=%s \
            args_file_exists=' \"$FP_AGENT_PLUGIN_ID\" \
            \"$FP_AGENT_PLUGIN_NAME\" \"$FP_AGENT_PLUGIN_VERSION\" \
            \"$FP_AGENT_PLUGIN_SDK_VERSION\" \"$FP_AGENT_TOOL_NAME\" \
-           \"$FP_AGENT_TOOL_KIND\"\n\
+           \"$FP_AGENT_TOOL_KIND\" \"$FP_AGENT_TOOL_PERMISSIONS\"\n\
            if [ -f \"$FP_AGENT_ARGS_FILE\" ]; then printf yes; else printf no; \
            fi\n\
            printf ' stdin='\n\
@@ -524,6 +530,11 @@ let test_plugin_runtime_environment () =
           Alcotest.(check bool)
             "output includes tool kind" true
             (String.is_substring output ~substring:"kind=exec");
+          Alcotest.(check bool)
+            "output includes tool permissions" true
+            (String.is_substring output
+               ~substring:
+                 {|perms={"workspace":"read","network":false,"env":["FOO"]}|});
           Alcotest.(check bool)
             "args file exists" true
             (String.is_substring output ~substring:"args_file_exists=yes");
@@ -825,8 +836,15 @@ let test_scaffold_creates_valid_plugin () =
             "readme documents args file env" true
             (String.is_substring readme ~substring:"FP_AGENT_ARGS_FILE");
           Alcotest.(check bool)
+            "readme documents permissions env" true
+            (String.is_substring readme ~substring:"FP_AGENT_TOOL_PERMISSIONS");
+          Alcotest.(check bool)
             "readme documents tool kind" true
             (String.is_substring readme ~substring:"Initial tool kind: `write`");
+          Alcotest.(check bool)
+            "readme documents tool permissions" true
+            (String.is_substring readme
+               ~substring:"Initial permissions: `workspace=write`");
           Alcotest.(check bool)
             "readme documents interactive check" true
             (String.is_substring readme ~substring:"/plugin-check .");
@@ -871,6 +889,9 @@ let test_scaffold_creates_valid_plugin () =
               Alcotest.(check bool)
                 "scaffold kind" true
                 (Poly.equal tool.tool_kind Tool.Write);
+              Alcotest.(check string)
+                "scaffold permissions" "workspace=write"
+                (Plugin.permissions_label tool.tool_permissions);
               Alcotest.(check int) "one tool" 1 (List.length manifest.tools)))
 
 let test_check_rejects_invalid_manifest () =
@@ -940,6 +961,20 @@ let test_check_rejects_invalid_manifest () =
   ]
 }|}
         "timeout must be positive";
+      check_error "bad-permissions"
+        {|{
+  "id":"com.example.permissions",
+  "tools":[
+    {
+      "name":"echo",
+      "kind":"read",
+      "description":"Echo",
+      "command":"sh echo.sh",
+      "permissions":["workspace", 1]
+    }
+  ]
+}|}
+        "permissions must contain only strings";
       check_error "empty-command"
         {|{
   "id":"com.example.command",

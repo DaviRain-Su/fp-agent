@@ -1316,8 +1316,10 @@ let print_plugins () =
           Stdlib.Printf.printf "%s %s (%s, sdk %d)\n  %s\n" plugin.id
             plugin.name plugin.version plugin.sdk_version plugin.dir;
           List.iter plugin.tools ~f:(fun tool ->
-              Stdlib.Printf.printf "  - %-18s %-5s %s\n" tool.tool_name
+              Stdlib.Printf.printf "  - %-18s %-5s permissions=%s %s\n"
+                tool.tool_name
                 (tool_kind_label tool.tool_kind)
+                (Plugin.permissions_label tool.tool_permissions)
                 tool.tool_description)));
   print_plugin_errors "Invalid plugins:" discovery.errors;
   print_plugin_conflicts (Plugin.tool_conflicts ())
@@ -1821,8 +1823,9 @@ let print_plugin_summary (plugin : Plugin.manifest) =
   Stdlib.Printf.printf "%s %s (%s, sdk %d)\n  %s\n" plugin.id plugin.name
     plugin.version plugin.sdk_version plugin.dir;
   List.iter plugin.tools ~f:(fun tool ->
-      Stdlib.Printf.printf "  - %-18s %-5s %s\n" tool.tool_name
+      Stdlib.Printf.printf "  - %-18s %-5s permissions=%s %s\n" tool.tool_name
         (tool_kind_label tool.tool_kind)
+        (Plugin.permissions_label tool.tool_permissions)
         tool.tool_description)
 
 let print_installed_plugins () =

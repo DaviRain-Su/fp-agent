@@ -445,6 +445,7 @@ let plugin_tool_lines (tool : Plugin.plugin_tool) =
     "  kind: " ^ tool_kind_label tool.tool_kind;
     "  description: " ^ tool.tool_description;
     "  command: " ^ tool.tool_command;
+    "  permissions: " ^ Plugin.permissions_label tool.tool_permissions;
     Printf.sprintf "  timeout: %ds" tool.tool_timeout_sec;
   ]
   @

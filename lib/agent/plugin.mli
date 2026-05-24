@@ -3,6 +3,7 @@ type plugin_tool = {
   tool_kind : Tool.kind;
   tool_description : string;
   tool_command : string;
+  tool_permissions : Yojson.Safe.t option;
   tool_input_schema : Yojson.Safe.t option;
   tool_timeout_sec : int;
 }
@@ -30,6 +31,9 @@ type smoke_result = { tool_name : string; args_file : string; output : string }
 
 val manifest_file : string
 val supported_sdk_version : int
+
+val permissions_label : Yojson.Safe.t option -> string
+(** Render plugin tool permissions as a compact human-facing label. *)
 
 val load_manifest : string -> (manifest, string) result
 (** Load and validate [fp-agent-plugin.json] from a plugin directory. *)

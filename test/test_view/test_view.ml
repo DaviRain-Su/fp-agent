@@ -354,6 +354,10 @@ let test_plugin_inspector_lines () =
             tool_kind = Tool.Read;
             tool_description = "Echoes JSON";
             tool_command = "sh echo.sh";
+            tool_permissions =
+              Some
+                (`Assoc
+                   [ ("workspace", `String "read"); ("network", `Bool false) ]);
             tool_input_schema =
               Some
                 (`Assoc
@@ -382,6 +386,9 @@ let test_plugin_inspector_lines () =
   Alcotest.(check bool)
     "shows timeout" true
     (String.is_substring joined ~substring:"timeout: 7s");
+  Alcotest.(check bool)
+    "shows permissions" true
+    (String.is_substring joined ~substring:"permissions: workspace=read");
   Alcotest.(check bool)
     "shows schema" true
     (String.is_substring joined ~substring:"input_schema:")

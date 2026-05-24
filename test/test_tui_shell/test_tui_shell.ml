@@ -507,6 +507,7 @@ let test_tui_command_plugins_and_tools () =
       "kind": "read",
       "description": "Echoes TUI input",
       "command": "sh echo.sh",
+      "permissions": { "workspace": "read", "network": false },
       "input_schema": {
         "type": "object",
         "properties": { "message": { "type": "string" } },
@@ -570,6 +571,9 @@ let test_tui_command_plugins_and_tools () =
       Alcotest.(check bool)
         "plugin detail includes command" true
         (String.is_substring plugin ~substring:"command: sh echo.sh");
+      Alcotest.(check bool)
+        "plugin detail includes permissions" true
+        (String.is_substring plugin ~substring:"permissions: workspace=read");
       Alcotest.(check bool)
         "plugin run is stateful" true
         (Option.is_none

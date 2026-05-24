@@ -111,6 +111,10 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - Plugin runtime commands now receive richer SDK environment metadata:
   workspace, plugin id/name/version/sdk version, tool name/kind, and the args
   JSON file path used for stdin.
+- Plugin tools can now declare optional `permissions` audit metadata. The
+  manifest loader validates it, plugin/tool surfaces show it, registered tool
+  descriptions carry it, and runtime commands receive the raw JSON via
+  `FP_AGENT_TOOL_PERMISSIONS`.
 - Plugin `input_schema` validation now supports JSON Schema `enum`, so local
   runs, smoke checks, and model-triggered plugin calls reject invalid option
   values before executing plugin code.

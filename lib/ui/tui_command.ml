@@ -79,8 +79,9 @@ let plugins_lines () =
               plugin.version plugin.sdk_version
             :: ("  " ^ plugin.dir)
             :: List.map plugin.tools ~f:(fun tool ->
-                Printf.sprintf "  - %-18s %-5s %s" tool.tool_name
+                Printf.sprintf "  - %-18s %-5s permissions=%s %s" tool.tool_name
                   (tool_kind_label tool.tool_kind)
+                  (Plugin.permissions_label tool.tool_permissions)
                   tool.tool_description)
             @ [ "" ])
         |> List.drop_last |> Option.value ~default:[]
