@@ -8,6 +8,7 @@ type t = {
   send :
     on_delta:(string -> unit) ->
     system:string ->
+    tools_enabled:bool ->
     Llm.turn list ->
     (Llm.content list * Llm.usage, string) Result.t Lwt.t;
 }
@@ -580,7 +581,7 @@ let assoc_set r key data =
 
 let assoc_find r key = List.Assoc.find !r key ~equal:Int.equal
 
-let anthropic_request (config : Config.t) ~system turns =
+let anthropic_request (config : Config.t) ~system ~tools_enabled turns =
   let uri = Uri.of_string (config.api_base ^ "/v1/messages") in
   let auth =
     if String.is_empty config.api_key then []
@@ -600,17 +601,20 @@ let anthropic_request (config : Config.t) ~system turns =
         ])
   in
   let max_tokens = Option.value config.max_tokens ~default:4096 in
-  let body_json =
-    `Assoc
-      [
-        ("model", `String config.model);
-        ("max_tokens", `Int max_tokens);
-        ("system", `String system);
-        ("stream", `Bool true);
-        ("messages", `List (anthropic_messages turns));
-        ("tools", `List (anthropic_tools ()));
-      ]
+  let fields =
+    [
+      ("model", `String config.model);
+      ("max_tokens", `Int max_tokens);
+      ("system", `String system);
+      ("stream", `Bool true);
+      ("messages", `List (anthropic_messages turns));
+    ]
   in
+  let fields =
+    if tools_enabled then fields @ [ ("tools", `List (anthropic_tools ())) ]
+    else fields
+  in
+  let body_json = `Assoc fields in
   (uri, headers, body_json)
 
 let anthropic_complete ~on_delta payloads =
@@ -713,7 +717,7 @@ let anthropic_complete ~on_delta payloads =
 
 (* --- OpenAI chat completions protocol --- *)
 
-let openai_request (config : Config.t) ~system turns =
+let openai_request (config : Config.t) ~system ~tools_enabled turns =
   let uri = Uri.of_string (config.api_base ^ "/chat/completions") in
   let auth =
     if String.is_empty config.api_key then []
@@ -728,9 +732,13 @@ let openai_request (config : Config.t) ~system turns =
       ("messages", `List (openai_messages ~system turns));
       ("temperature", `Float 0.0);
       ("stream", `Bool true);
-      ("tools", `List (openai_tools ()));
-      ("tool_choice", `String "auto");
     ]
+  in
+  let fields =
+    if tools_enabled then
+      fields
+      @ [ ("tools", `List (openai_tools ())); ("tool_choice", `String "auto") ]
+    else fields
   in
   let fields =
     if config.compat.supports_usage_in_streaming then
@@ -882,42 +890,55 @@ let post_and_complete ?(on_delta = fun _ -> ()) (uri, headers, body_json)
               (fun payloads -> complete ~on_delta payloads)
               (collect_sse_payloads rbody))
 
-let real_send (config : Config.t) ~on_delta ~system turns =
+let real_send (config : Config.t) ~on_delta ~system ~tools_enabled turns =
   match config.protocol with
   | Provider.Openai ->
       post_and_complete ~on_delta
-        (openai_request config ~system turns)
+        (openai_request config ~system ~tools_enabled turns)
         ~complete:openai_complete
   | Provider.Anthropic ->
       post_and_complete ~on_delta
-        (anthropic_request config ~system turns)
+        (anthropic_request config ~system ~tools_enabled turns)
         ~complete:anthropic_complete
 
 let create ~config =
   {
     send =
-      (fun ~on_delta ~system turns -> real_send config ~on_delta ~system turns);
+      (fun ~on_delta ~system ~tools_enabled turns ->
+        real_send config ~on_delta ~system ~tools_enabled turns);
   }
 
 let create_mock ~send =
-  { send = (fun ~on_delta:_ ~system:_ turns -> send turns) }
+  { send = (fun ~on_delta:_ ~system:_ ~tools_enabled:_ turns -> send turns) }
 
-let send ?(on_delta = fun _ -> ()) ~system t ~turns =
-  t.send ~on_delta ~system turns
+let create_mock_with_options ~send =
+  {
+    send =
+      (fun ~on_delta:_ ~system:_ ~tools_enabled turns ->
+        send ~tools_enabled turns);
+  }
 
-let request_body_for_test ~config ~system ~turns =
+let send ?(on_delta = fun _ -> ()) ?(tools_enabled = true) ~system t ~turns =
+  t.send ~on_delta ~system ~tools_enabled turns
+
+let request_body_with_options_for_test ~tools_enabled ~config ~system ~turns =
   let _, _, body =
     match config.Config.protocol with
-    | Provider.Openai -> openai_request config ~system turns
-    | Provider.Anthropic -> anthropic_request config ~system turns
+    | Provider.Openai -> openai_request config ~system ~tools_enabled turns
+    | Provider.Anthropic ->
+        anthropic_request config ~system ~tools_enabled turns
   in
   body
+
+let request_body_for_test ~config ~system ~turns =
+  request_body_with_options_for_test ~tools_enabled:true ~config ~system ~turns
 
 let request_headers_for_test ~config ~system ~turns =
   let _, headers, _ =
     match config.Config.protocol with
-    | Provider.Openai -> openai_request config ~system turns
-    | Provider.Anthropic -> anthropic_request config ~system turns
+    | Provider.Openai -> openai_request config ~system ~tools_enabled:true turns
+    | Provider.Anthropic ->
+        anthropic_request config ~system ~tools_enabled:true turns
   in
   Cohttp.Header.to_list headers
 

@@ -11,8 +11,17 @@ val create_mock :
   t
 (** Mock client driven by a caller-supplied [send] function. *)
 
+val create_mock_with_options :
+  send:
+    (tools_enabled:bool ->
+    Llm.turn list ->
+    (Llm.content list * Llm.usage, string) result Lwt.t) ->
+  t
+(** Mock client that can observe request options. *)
+
 val send :
   ?on_delta:(string -> unit) ->
+  ?tools_enabled:bool ->
   system:string ->
   t ->
   turns:Llm.turn list ->
@@ -32,6 +41,13 @@ val request_body_for_test :
   config:Config.t -> system:string -> turns:Llm.turn list -> Yojson.Safe.t
 (** Build the provider request JSON body without sending it. Exposed for
     request-shape tests. *)
+
+val request_body_with_options_for_test :
+  tools_enabled:bool ->
+  config:Config.t ->
+  system:string ->
+  turns:Llm.turn list ->
+  Yojson.Safe.t
 
 val request_headers_for_test :
   config:Config.t ->

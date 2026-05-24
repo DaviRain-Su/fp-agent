@@ -6,6 +6,11 @@ type outcome = { status : status; summary : string; steps : int }
 let max_parse_retries = 2
 let max_history_chars = 60_000
 
+let final_answer_nudge =
+  "Tool budget exhausted. Do not call any more tools. Provide your best final \
+   answer now based only on the context and tool observations already \
+   available. If you use the fallback JSON format, return final_answer."
+
 let status_to_string = function
   | Completed -> "completed"
   | Failed -> "failed"
@@ -114,11 +119,32 @@ let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
   goto Agent_state.Waiting_for_model;
   let finish status summary steps = Lwt.return { status; summary; steps } in
   let rec step n =
-    if n > config.max_steps then (
-      goto Agent_state.Failed;
-      finish Max_steps_reached
-        "reached the maximum step limit without producing a final answer" (n - 1))
+    if n > config.max_steps then finalize_after_tool_budget ()
     else send_with_retry 0 n
+  and finalize_after_tool_budget () =
+    emit (Event.User_message { content = final_answer_nudge });
+    Lwt.bind
+      (Model_client.send model_client ~on_delta:emit_delta ~tools_enabled:false
+         ~system ~turns:(turns ()))
+      (function
+        | Error e ->
+            goto Agent_state.Failed;
+            finish Max_steps_reached
+              (Printf.sprintf
+                 "reached the maximum step limit and finalization failed: %s" e)
+              (Session_state.steps !st)
+        | Ok (content, usage) -> (
+            emit (Event.Assistant_message { content; usage });
+            match Llm.final_text content with
+            | Some answer ->
+                goto Agent_state.Completed;
+                finish Completed answer (Session_state.steps !st)
+            | None ->
+                goto Agent_state.Failed;
+                finish Max_steps_reached
+                  "reached the maximum step limit without producing a final \
+                   answer"
+                  (Session_state.steps !st)))
   and send_with_retry retries n =
     Lwt.bind
       (Model_client.send model_client ~on_delta:emit_delta ~system

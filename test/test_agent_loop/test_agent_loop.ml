@@ -216,6 +216,30 @@ let test_max_steps () =
         "status max_steps" "max_steps_reached"
         (Agent_loop.status_to_string outcome.status))
 
+let test_max_steps_requests_final_answer_without_tools () =
+  with_env (fun config workspace event_log _ ->
+      let config = { config with Config.max_steps = 1 } in
+      let saw_finalization = ref false in
+      let client =
+        Model_client.create_mock_with_options
+          ~send:(fun ~tools_enabled _turns ->
+            if tools_enabled then
+              Lwt.return
+                (Ok
+                   (response
+                      (Model_action.Tool_call (Tool_call.list_files "."))))
+            else (
+              saw_finalization := true;
+              Lwt.return (Ok ([ Llm.Text "review summary" ], Llm.zero_usage))))
+      in
+      let outcome = run config workspace event_log client "review" in
+      Alcotest.(check string)
+        "status completed" "completed"
+        (Agent_loop.status_to_string outcome.status);
+      Alcotest.(check string) "summary" "review summary" outcome.summary;
+      Alcotest.(check bool)
+        "tools disabled for finalization" true !saw_finalization)
+
 let test_model_error () =
   with_env (fun config workspace event_log _ ->
       let client =
@@ -237,6 +261,8 @@ let () =
           Alcotest.test_case "history_truncation_atomic" `Quick
             test_history_truncation_keeps_tool_exchange_atomic;
           Alcotest.test_case "max_steps" `Quick test_max_steps;
+          Alcotest.test_case "max_steps_finalizes" `Quick
+            test_max_steps_requests_final_answer_without_tools;
           Alcotest.test_case "model_error" `Quick test_model_error;
           Alcotest.test_case "approval_denied" `Quick test_approval_denied;
           Alcotest.test_case "approval_granted" `Quick test_approval_granted;

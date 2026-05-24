@@ -389,6 +389,39 @@ let test_request_preserves_tool_result_ids () =
     "tool result id" "call_keep"
     (tool_msg |> member "tool_call_id" |> to_string)
 
+let test_request_can_disable_tools () =
+  let config protocol =
+    {
+      Config.provider = "test";
+      api_key = "k";
+      api_base = "http://localhost/v1";
+      model = "m";
+      models = [ "m" ];
+      protocol;
+      compat = Config.default_compat;
+      max_tokens = None;
+      max_steps = 1;
+      workspace_root = ".";
+    }
+  in
+  let body protocol =
+    Model_client.request_body_with_options_for_test ~tools_enabled:false
+      ~config:(config protocol) ~system:"sys"
+      ~turns:[ Llm.user "summarize" ]
+  in
+  let open Yojson.Safe.Util in
+  let openai_body = body Provider.Openai in
+  Alcotest.(check bool)
+    "openai tools omitted" true
+    (match member "tools" openai_body with `Null -> true | _ -> false);
+  Alcotest.(check bool)
+    "openai tool_choice omitted" true
+    (match member "tool_choice" openai_body with `Null -> true | _ -> false);
+  let anthropic_body = body Provider.Anthropic in
+  Alcotest.(check bool)
+    "anthropic tools omitted" true
+    (match member "tools" anthropic_body with `Null -> true | _ -> false)
+
 let test_config_providers () =
   Unix.putenv "KIMI_API_KEY" "kimi-secret";
   Unix.putenv "DEEPSEEK_API_KEY" "ds-secret";
@@ -584,6 +617,8 @@ let () =
             test_streaming_preserves_reasoning_blocks;
           Alcotest.test_case "request_preserves_tool_result_ids" `Quick
             test_request_preserves_tool_result_ids;
+          Alcotest.test_case "request_can_disable_tools" `Quick
+            test_request_can_disable_tools;
         ] );
       ("config", [ Alcotest.test_case "providers" `Quick test_config_providers ]);
     ]
