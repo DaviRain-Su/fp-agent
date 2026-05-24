@@ -10,8 +10,14 @@ val create_mock :
   send:(Message.t list -> (Model_action.t, string) result Lwt.t) -> t
 (** Mock client driven by a caller-supplied [send] function. *)
 
-val send : t -> messages:Message.t list -> (Model_action.t, string) result Lwt.t
-(** Send the conversation and parse the next model action. *)
+val send :
+  ?on_delta:(string -> unit) ->
+  t ->
+  messages:Message.t list ->
+  (Model_action.t, string) result Lwt.t
+(** Send the conversation and parse the next model action.
+    [on_delta] is called with streamed assistant text chunks when the provider
+    emits text deltas before the final parsed action is available. *)
 
 val system_prompt : string
 (** The system prompt describing the tools and the JSON output contract. *)

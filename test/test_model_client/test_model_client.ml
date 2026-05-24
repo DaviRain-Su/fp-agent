@@ -153,6 +153,38 @@ let test_parse_anthropic_tool_use_batch () =
   | Ok _ -> Alcotest.fail "expected anthropic tool_use batch"
   | Error e -> Alcotest.failf "unexpected anthropic batch parse error: %s" e
 
+let test_parse_mixed_content_tool_use_batch () =
+  match
+    parse
+      {|[{"type":"text","text":"I'll inspect files."},{"type":"tool_use","name":"read_file","input":{"path":"README.md"}}]|}
+  with
+  | Ok (Model_action.Tool_call tc) ->
+      check_tool tc ~name:"read_file";
+      check_arg tc "path" "README.md"
+  | Ok _ -> Alcotest.fail "expected mixed content to select tool_use"
+  | Error e -> Alcotest.failf "unexpected mixed content parse error: %s" e
+
+let test_parse_text_only_tool_calls_as_final () =
+  match
+    parse
+      {|{"action":"tool_calls","calls":[{"type":"text","text":"Review complete."}]}|}
+  with
+  | Ok (Model_action.Final_answer { answer }) ->
+      Alcotest.(check string) "text final" "Review complete." answer
+  | Ok _ -> Alcotest.fail "expected text-only tool_calls to become final answer"
+  | Error e -> Alcotest.failf "unexpected text-only tool_calls error: %s" e
+
+let test_parse_name_args_tool_calls () =
+  match
+    parse
+      {|{"action":"tool_calls","calls":[{"name":"list_files","args":{"path":"lib/ui"}}]}|}
+  with
+  | Ok (Model_action.Tool_call tc) ->
+      check_tool tc ~name:"list_files";
+      check_arg tc "path" "lib/ui"
+  | Ok _ -> Alcotest.fail "expected name+args tool call"
+  | Error e -> Alcotest.failf "unexpected name+args parse error: %s" e
+
 let test_parse_final_answer () =
   match
     parse {|{"action":"final_answer","summary":"done","details":"more"}|}
@@ -335,6 +367,12 @@ let () =
             test_parse_anthropic_tool_use;
           Alcotest.test_case "anthropic_tool_use_batch" `Quick
             test_parse_anthropic_tool_use_batch;
+          Alcotest.test_case "mixed_content_tool_use_batch" `Quick
+            test_parse_mixed_content_tool_use_batch;
+          Alcotest.test_case "text_only_tool_calls_as_final" `Quick
+            test_parse_text_only_tool_calls_as_final;
+          Alcotest.test_case "name_args_tool_calls" `Quick
+            test_parse_name_args_tool_calls;
           Alcotest.test_case "array_wrapped" `Quick test_parse_array_wrapped;
           Alcotest.test_case "non_object" `Quick test_parse_non_object_errors;
           Alcotest.test_case "final_answer" `Quick test_parse_final_answer;

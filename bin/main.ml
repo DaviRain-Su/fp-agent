@@ -441,6 +441,7 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
   let describe_event (e : Event.t) =
     match e with
     | User_message { content } -> "user: " ^ oneline content
+    | Model_delta { content } -> "model_delta: " ^ oneline content
     | Model_response { action = Tool_call tc } ->
         "model → " ^ Event.describe_tool tc
     | Model_response { action = Tool_calls calls } ->

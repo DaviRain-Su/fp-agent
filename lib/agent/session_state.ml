@@ -11,6 +11,7 @@ let reduce (st : t) (event : Event.t) =
   match event with
   | User_message { content } ->
       { st with messages = st.messages @ [ Message.user content ] }
+  | Model_delta _ -> st
   | Model_response { action } ->
       {
         st with
