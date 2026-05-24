@@ -43,6 +43,10 @@ let test_parse () =
   require_command "usage" Shell_command.Usage "" (Shell_command.parse "/usage");
   require_command "status" Shell_command.Status ""
     (Shell_command.parse "/status");
+  require_command "context" Shell_command.Context ""
+    (Shell_command.parse "/context");
+  require_command "context alias" Shell_command.Context ""
+    (Shell_command.parse "/ctx");
   require_command "handoff" Shell_command.Handoff ""
     (Shell_command.parse "/handoff");
   require_command "instructions" Shell_command.Instructions ""
@@ -172,6 +176,10 @@ let test_metadata () =
     "palette has status" true
     (List.mem palette "/status" ~equal:String.equal);
   Alcotest.(check bool)
+    "palette has context" true
+    (List.mem palette "/context" ~equal:String.equal);
+  Alcotest.(check string) "context group" "Context" (entry "/context").group;
+  Alcotest.(check bool)
     "palette has handoff" true
     (List.mem palette "/handoff" ~equal:String.equal);
   Alcotest.(check string) "handoff group" "Context" (entry "/handoff").group;
@@ -270,6 +278,8 @@ let test_acceptance () =
     (Shell_command.accept (entry "/plan"));
   require_acceptance "status execute" ("execute", "/status")
     (Shell_command.accept (entry "/status"));
+  require_acceptance "context execute" ("execute", "/context")
+    (Shell_command.accept (entry "/context"));
   require_acceptance "handoff execute" ("execute", "/handoff")
     (Shell_command.accept (entry "/handoff"));
   require_acceptance "instructions execute"

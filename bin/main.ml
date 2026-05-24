@@ -2184,6 +2184,11 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
         | Command (Status, _) ->
             print_status ();
             loop ()
+        | Command (Context, _) ->
+            List.iter
+              (Tui_command.context_lines (command_context ()))
+              ~f:Stdlib.print_endline;
+            loop ()
         | Command (Handoff, _) ->
             List.iter
               (Tui_command.handoff_lines (command_context ()))

@@ -19,6 +19,9 @@ val run : context -> string -> string list option
 val status_lines : context -> string list
 (** Render runtime/session/plugin status without a command header. *)
 
+val context_lines : context -> string list
+(** Render the replayed model conversation context without a command header. *)
+
 val providers_lines : context -> string list
 (** Render configured provider profiles without a command header. *)
 

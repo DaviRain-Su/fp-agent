@@ -26,7 +26,8 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - Footer command palette: `/model`, `/provider`, `/provider-add`, `/plugins`,
   `/providers`, `/plugin-sdk`, `/tools`, `/new`, `/resume`, `/fork`, `/retry`,
   `/plan`, `/review`, `/plan-set`, `/plan-add`, `/plan-update`, `/plan-clear`,
-  `/compact`, `/status`, `/handoff`, `/instructions`, `/undo`, `/diff`.
+  `/compact`, `/status`, `/context`, `/handoff`, `/instructions`, `/undo`,
+  `/diff`.
 - Status strip: provider/model, session id, step count, token usage, current
   phase, and active plugin count.
 - Review mode: navigate prior events, fork from an event, and replay compacted
@@ -93,6 +94,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - `/status` now exposes a shared REPL/TUI runtime summary with workspace,
   session, provider/model, event count, token usage, plugin diagnostics, and
   registered tool count.
+- `/context` now previews the event-sourced conversation context that a future
+  model turn inherits: replayed turns, tool-use/result summaries, compaction
+  count, token totals, agent state, and project instruction state.
 - `/handoff` now renders a copyable continuation summary from the event log:
   resume commands, runtime, token usage, current plan, last user task, recent
   events, and workspace diff summary.
@@ -212,8 +216,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   silently dropping them.
 - The Notty TUI now executes safe read-only palette commands directly:
   `/tools`, `/plugins`, `/models`, `/providers`, `/model`, `/sessions`, `/tree`,
-  `/diff`, `/status`, `/handoff`, `/instructions`, `/log`, and `/inspect`
-  render their output into the timeline without leaving fullscreen mode.
+  `/diff`, `/status`, `/context`, `/handoff`, `/instructions`, `/log`, and
+  `/inspect` render their output into the timeline without leaving fullscreen
+  mode.
 - The REPL exposes the same inspector through `/inspect [index]`, so event-log
   review works even outside a full-screen TUI and can target historical events.
 - The REPL exposes plugin inspection through `/plugin <id|tool>`, showing

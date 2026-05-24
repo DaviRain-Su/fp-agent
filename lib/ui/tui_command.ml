@@ -457,6 +457,90 @@ let usage_lines ctx =
     Printf.sprintf "total_tokens: %d" (View.token_usage_total usage);
   ]
 
+let preview_text ?(cols = 180) text =
+  let flat = String.substr_replace_all text ~pattern:"\n" ~with_:" " in
+  View.truncate ~cols (String.strip flat)
+
+let content_kind = function
+  | Llm.Text _ -> "text"
+  | Llm.Thinking _ -> "thinking"
+  | Llm.Tool_use _ -> "tool_use"
+  | Llm.Tool_result _ -> "tool_result"
+
+let content_preview_lines indent = function
+  | Llm.Text text -> [ indent ^ "text: " ^ preview_text text ]
+  | Llm.Thinking { text; signature } ->
+      let signature =
+        if String.is_empty signature then "" else " signature=yes"
+      in
+      [ indent ^ "thinking" ^ signature ^ ": " ^ preview_text text ]
+  | Llm.Tool_use { id; name; input } ->
+      [
+        Printf.sprintf "%stool_use: %s id=%s" indent name id;
+        indent ^ "args: " ^ preview_text (Yojson.Safe.to_string input);
+      ]
+  | Llm.Tool_result { id; content } ->
+      [
+        Printf.sprintf "%stool_result: id=%s" indent id;
+        indent ^ "output: " ^ preview_text content;
+      ]
+
+let role_label = function Llm.User -> "user" | Llm.Assistant -> "assistant"
+
+let turn_preview_lines index (turn : Llm.turn) =
+  let role = role_label turn.role in
+  let kinds =
+    List.map turn.content ~f:content_kind |> String.concat ~sep:", "
+  in
+  let header = Printf.sprintf "  %d. %s (%s)" (index + 1) role kinds in
+  header :: List.concat_map turn.content ~f:(content_preview_lines "     ")
+
+let instruction_state workspace_root =
+  match Workspace.create ~root:workspace_root with
+  | Error _ -> "unavailable"
+  | Ok workspace -> (
+      match Project_instructions.load workspace with
+      | None -> "none"
+      | Some instructions ->
+          Printf.sprintf "loaded (%d chars)" (String.length instructions))
+
+let context_lines ctx =
+  let state = Session_state.replay ctx.events in
+  let turns = Session_state.turns state in
+  let usage = View.token_usage_of_events ctx.events in
+  let compactions =
+    List.count ctx.events ~f:(function
+      | Event.Context_compacted _ -> true
+      | _ -> false)
+  in
+  let role_counts role =
+    List.count turns ~f:(fun (turn : Llm.turn) -> Poly.equal turn.role role)
+  in
+  let header =
+    [
+      "Model context preview";
+      Printf.sprintf "events: %d" (List.length ctx.events);
+      Printf.sprintf "replayed_turns: %d" (List.length turns);
+      Printf.sprintf "user_turns: %d" (role_counts Llm.User);
+      Printf.sprintf "assistant_turns: %d" (role_counts Llm.Assistant);
+      "agent_state: " ^ Agent_state.to_string (Session_state.agent_state state);
+      Printf.sprintf "steps: %d" (Session_state.steps state);
+      Printf.sprintf "compactions: %d" compactions;
+      Printf.sprintf "tokens: input %d output %d total %d" usage.input_tokens
+        usage.output_tokens
+        (View.token_usage_total usage);
+      "project_instructions: " ^ instruction_state ctx.workspace_root;
+      "note: this previews the replayed conversation history; the next model \
+       call also prepends the task-specific system prompt.";
+      "";
+    ]
+  in
+  match turns with
+  | [] -> header @ [ "(no replayed turns yet)" ]
+  | turns ->
+      let turn_lines = List.mapi turns ~f:turn_preview_lines |> List.concat in
+      header @ ("Replay turns:" :: turn_lines)
+
 let latest_plan events =
   List.find_map (List.rev events) ~f:(function
     | Event.Plan_updated { items } -> Some items
@@ -613,6 +697,7 @@ let run ctx command =
   | Command (Plan, _) -> Some (command_section command (plan_lines ctx.events))
   | Command (Usage, _) -> Some (command_section command (usage_lines ctx))
   | Command (Status, _) -> Some (command_section command (status_lines ctx))
+  | Command (Context, _) -> Some (command_section command (context_lines ctx))
   | Command (Handoff, _) -> Some (command_section command (handoff_lines ctx))
   | Command (Instructions, _) ->
       Some (command_section command (instruction_lines ctx))

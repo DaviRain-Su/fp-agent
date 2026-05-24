@@ -34,6 +34,7 @@ type id =
   | PlanClear
   | Usage
   | Status
+  | Context
   | Handoff
   | Instructions
   | Compact
@@ -333,6 +334,14 @@ let specs =
       acceptance = Execute "/status";
     };
     {
+      id = Context;
+      command = "/context";
+      description = "preview model-visible replay context";
+      aliases = [ "/ctx" ];
+      palette = true;
+      acceptance = Execute "/context";
+    };
+    {
       id = Handoff;
       command = "/handoff";
       description = "show a session handoff summary";
@@ -419,7 +428,7 @@ let group_of_id = function
   | Sessions | Tree | NewSession | Resume -> "Sessions"
   | Model | ModelNext | Models | Providers | Provider | ProviderAdd -> "Models"
   | Log | Inspect | Plan | PlanSet | PlanAdd | PlanUpdate | PlanClear | Usage
-  | Status | Handoff | Instructions ->
+  | Status | Context | Handoff | Instructions ->
       "Context"
   | Compact | Fork | Diff | Review | Retry | Undo -> "Run Control"
   | Help | Exit -> "Shell"

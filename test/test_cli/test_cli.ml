@@ -1041,6 +1041,7 @@ let test_repl_inspects_session_events () =
          /log\n\
          /usage\n\
          /status\n\
+         /context\n\
          /inspect 0\n\
          /inspect\n\
          /inspect 3\n\
@@ -1089,6 +1090,9 @@ let test_repl_inspects_session_events () =
   assert_contains "status tokens" repl.stdout
     "tokens: input 31 output 9 total 40";
   assert_contains "status tools" repl.stdout "tools:";
+  assert_contains "context header" repl.stdout "Model context preview";
+  assert_contains "context replay count" repl.stdout "replayed_turns: 1";
+  assert_contains "context assistant turn" repl.stdout "assistant (text)";
   assert_contains "inspect range" repl.stdout "no event at index 3 (0..2)";
   assert_contains "inspect usage" repl.stdout "usage: /inspect [event-index]";
   assert_contains "retry without user task" repl.stdout

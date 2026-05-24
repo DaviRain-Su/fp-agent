@@ -32,6 +32,7 @@ type id =
   | PlanClear
   | Usage
   | Status
+  | Context
   | Handoff
   | Instructions
   | Compact

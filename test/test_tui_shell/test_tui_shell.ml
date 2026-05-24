@@ -450,6 +450,19 @@ let test_tui_command_model_log_and_inspect () =
       Alcotest.(check bool)
         "usage command shows total" true
         (String.is_substring usage ~substring:"total_tokens: 28");
+      let context_preview = output "/context" context in
+      Alcotest.(check bool)
+        "context command header" true
+        (String.is_substring context_preview ~substring:"[tui] /context");
+      Alcotest.(check bool)
+        "context shows replay turns" true
+        (String.is_substring context_preview ~substring:"replayed_turns: 2");
+      Alcotest.(check bool)
+        "context shows user text" true
+        (String.is_substring context_preview ~substring:"text: inspect README");
+      Alcotest.(check bool)
+        "context shows assistant text" true
+        (String.is_substring context_preview ~substring:"text: ok");
       let plan_context =
         tui_context
           ~events:
@@ -520,6 +533,26 @@ let test_tui_command_model_log_and_inspect () =
       Alcotest.(check bool)
         "status shows instruction state" true
         (String.is_substring status ~substring:"project_instructions: none");
+      let compact_context =
+        tui_context
+          ~events:
+            [
+              Event.Context_compacted
+                {
+                  summary = "older summary";
+                  recent = [ Llm.user "recent task" ];
+                };
+            ]
+          root
+      in
+      let compact_preview = output "/context" compact_context in
+      Alcotest.(check bool)
+        "context shows compaction count" true
+        (String.is_substring compact_preview ~substring:"compactions: 1");
+      Alcotest.(check bool)
+        "context shows summary turn" true
+        (String.is_substring compact_preview
+           ~substring:"[Earlier conversation summary]");
       let inspect_by_index = output "/inspect 0" context in
       Alcotest.(check bool)
         "inspect accepts explicit index" true
