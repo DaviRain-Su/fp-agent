@@ -37,6 +37,7 @@ type tui_view = {
   reporter : reporter;
   append_lines : string list -> unit;
   take_submitted : unit -> string option;
+  set_runtime : provider:string -> model:string -> api_base:string -> unit;
 }
 
 let spinner_frames = [| "⠋"; "⠙"; "⠹"; "⠸"; "⠼"; "⠴"; "⠦"; "⠧"; "⠇"; "⠏" |]
@@ -123,6 +124,9 @@ let make_tui_view ~initial_events ~provider ~model ~api_base ~workspace_root
   let module I = Notty.I in
   let module A = Notty.A in
   let term = Notty_unix.Term.create () in
+  let provider_ref = ref provider in
+  let model_ref = ref model in
+  let api_base_ref = ref api_base in
   let manifests = Plugin.manifests () in
   let session = Stdlib.Filename.basename session_dir in
   Tool_loader.register_all ();
@@ -155,6 +159,11 @@ let make_tui_view ~initial_events ~provider ~model ~api_base ~workspace_root
     | prompt :: rest ->
         submitted := rest;
         Some prompt
+  in
+  let set_runtime ~provider ~model ~api_base =
+    provider_ref := provider;
+    model_ref := model;
+    api_base_ref := api_base
   in
   let has_key_modifier mods modifier =
     List.mem mods modifier ~equal:Poly.equal
@@ -224,9 +233,9 @@ let make_tui_view ~initial_events ~provider ~model ~api_base ~workspace_root
         | Some command ->
             let context : Tui_command.context =
               {
-                provider;
-                model;
-                api_base;
+                provider = !provider_ref;
+                model = !model_ref;
+                api_base = !api_base_ref;
                 workspace_root;
                 sessions_root;
                 session_dir;
@@ -282,8 +291,8 @@ let make_tui_view ~initial_events ~provider ~model ~api_base ~workspace_root
     let phase_text = phase_label !(fst phase) in
     let status : View.status =
       {
-        provider;
-        model;
+        provider = !provider_ref;
+        model = !model_ref;
         session;
         phase = phase_text;
         events = event_count;
@@ -405,7 +414,12 @@ let make_tui_view ~initial_events ~provider ~model ~api_base ~workspace_root
     redraw ()
   in
   let close () = Notty_unix.Term.release term in
-  { reporter = { on_event; tick; close }; append_lines; take_submitted }
+  {
+    reporter = { on_event; tick; close };
+    append_lines;
+    take_submitted;
+    set_runtime;
+  }
 
 let make_tui_reporter ~initial_events ~provider ~model ~api_base ~workspace_root
     ~session_dir ~sessions_root ~header =
@@ -535,18 +549,19 @@ let run_tui_repl config workspace ~resume_opt ~yolo =
     Option.value resume_opt ~default:(Session.create ~base_dir:root)
   in
   let event_log = Event_log.create ~session_dir in
-  let model_client = Model_client.create ~config in
+  let config_ref = ref config in
+  let model_client = ref (Model_client.create ~config) in
   let policy = policy_of ~confirm:false in
   let events () =
     match Journal.read ~session_dir with Ok events -> events | Error _ -> []
   in
   let view =
-    make_tui_view ~provider:config.provider ~model:config.model
-      ~api_base:config.api_base ~workspace_root:root ~session_dir ~sessions_root
-      ~initial_events:(events ())
+    make_tui_view ~provider:!config_ref.provider ~model:!config_ref.model
+      ~api_base:!config_ref.api_base ~workspace_root:root ~session_dir
+      ~sessions_root ~initial_events:(events ())
       ~header:
         (Printf.sprintf "fp-agent TUI  %s  Ctrl+Enter submit  / palette"
-           config.model)
+           !config_ref.model)
   in
   let latest_event_index events =
     if List.is_empty events then None else Some (List.length events - 1)
@@ -554,9 +569,9 @@ let run_tui_repl config workspace ~resume_opt ~yolo =
   let command_context () =
     let events = events () in
     {
-      Tui_command.provider = config.provider;
-      model = config.model;
-      api_base = config.api_base;
+      Tui_command.provider = !config_ref.provider;
+      model = !config_ref.model;
+      api_base = !config_ref.api_base;
       workspace_root = root;
       sessions_root;
       session_dir;
@@ -584,10 +599,60 @@ let run_tui_repl config workspace ~resume_opt ~yolo =
       Lwt_main.run
         (run_with_reporter view.reporter
            (Agent_loop.run ~on_event:view.reporter.on_event ~policy
-              ~on_approval:prompt_approval ~initial_history ~yolo ~config
-              ~model_client ~event_log ~workspace ~task ()))
+              ~on_approval:prompt_approval ~initial_history ~yolo
+              ~config:!config_ref ~model_client:!model_client ~event_log
+              ~workspace ~task ()))
     in
     append_summary outcome
+  in
+  let current_model_lines command =
+    Option.value
+      (Tui_command.run (command_context ()) command)
+      ~default:
+        [
+          "[tui] " ^ command;
+          "provider: " ^ !config_ref.provider;
+          "model: " ^ !config_ref.model;
+          "api_base: " ^ !config_ref.api_base;
+        ]
+  in
+  let switch_model model =
+    config_ref := { !config_ref with model };
+    model_client := Model_client.create ~config:!config_ref;
+    view.set_runtime ~provider:!config_ref.provider ~model:!config_ref.model
+      ~api_base:!config_ref.api_base;
+    view.append_lines (current_model_lines ("/model " ^ model))
+  in
+  let switch_provider args =
+    let parts =
+      String.split args ~on:' ' |> List.map ~f:String.strip
+      |> List.filter ~f:(fun s -> not (String.is_empty s))
+    in
+    match parts with
+    | [] ->
+        view.append_lines
+          [ "[tui] /provider"; "usage: /provider <name> [model] [api-base]" ]
+    | provider :: rest -> (
+        let model, api_base =
+          match rest with
+          | [] -> (None, None)
+          | [ model ] -> (Some model, None)
+          | model :: api_base :: _ -> (Some model, Some api_base)
+        in
+        match Config.load ?provider:(Some provider) ?api_base ?model () with
+        | Error e ->
+            view.append_lines [ "[tui] /provider"; "provider error: " ^ e ]
+        | Ok next ->
+            config_ref :=
+              {
+                next with
+                workspace_root = !config_ref.workspace_root;
+                max_steps = !config_ref.max_steps;
+              };
+            model_client := Model_client.create ~config:!config_ref;
+            view.set_runtime ~provider:!config_ref.provider
+              ~model:!config_ref.model ~api_base:!config_ref.api_base;
+            view.append_lines (current_model_lines ("/provider " ^ args)))
   in
   let stop = ref false in
   let handle_submission raw =
@@ -600,6 +665,9 @@ let run_tui_repl config workspace ~resume_opt ~yolo =
     | Command (Exit, _) ->
         view.append_lines [ "[tui] exiting" ];
         stop := true
+    | Command (Model, "") -> view.append_lines (current_model_lines "/model")
+    | Command (Model, model) -> switch_model model
+    | Command (Provider, args) -> switch_provider args
     | Command _ -> (
         match Tui_command.run (command_context ()) raw with
         | Some lines -> view.append_lines lines

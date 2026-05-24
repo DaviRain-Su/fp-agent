@@ -266,6 +266,13 @@ let test_tui_command_model_log_and_inspect () =
       Alcotest.(check bool)
         "model provider" true
         (String.is_substring model ~substring:"provider: local-llm");
+      Alcotest.(check bool)
+        "model switch is stateful" true
+        (Option.is_none (Tui_command.run context "/model qwen-coder"));
+      Alcotest.(check bool)
+        "provider switch is stateful" true
+        (Option.is_none
+           (Tui_command.run context "/provider local-llm qwen36-rtx"));
       let log = output "/log" context in
       Alcotest.(check bool)
         "log includes event summary" true
