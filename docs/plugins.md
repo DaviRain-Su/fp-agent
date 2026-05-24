@@ -190,10 +190,12 @@ dune exec -- fp-agent --new-plugin my-plugin --plugin-kind exec
 dune exec -- fp-agent --new-plugin my-plugin --plugin-template python
 ```
 
-The scaffold includes `fp-agent-plugin.json`, `hello.sh`, a README with the
-local development commands, and `examples/<tool>.args.json` for a first
-`--run-plugin-tool` smoke test. Python scaffolds use `main.py` and
-`python3 main.py` instead of `hello.sh`. Add more JSON files under
+The scaffold includes `fp-agent-plugin.json`, a README with the local
+development commands, and `examples/<tool>.args.json` for a first
+`--run-plugin-tool` smoke test. Shell scaffolds use `hello.sh`. Python
+scaffolds use `main.py`, `python3 main.py`, and a generated `fp_agent_sdk.py`
+helper that reads JSON args, builds a `ToolContext` from the `FP_AGENT_*`
+runtime environment, and serializes handler results. Add more JSON files under
 `examples/<tool>/` to run multiple smoke cases for the same tool.
 
 Validate it before installing:

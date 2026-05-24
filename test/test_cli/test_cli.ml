@@ -485,6 +485,10 @@ let test_new_plugin_custom_id_cli () =
   Alcotest.(check bool)
     "python scaffold created main.py" true
     (Stdlib.Sys.file_exists (Stdlib.Filename.concat python_dir "main.py"));
+  Alcotest.(check bool)
+    "python scaffold created sdk" true
+    (Stdlib.Sys.file_exists
+       (Stdlib.Filename.concat python_dir "fp_agent_sdk.py"));
   let python_manifest =
     Stdlib.In_channel.with_open_bin
       (Stdlib.Filename.concat python_dir "fp-agent-plugin.json")

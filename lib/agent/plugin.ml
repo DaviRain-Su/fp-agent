@@ -1014,6 +1014,7 @@ type scaffold_template = {
   script_name : string;
   command : string;
   script_body : string;
+  extra_files : (string * string) list;
 }
 
 let shell_scaffold_template =
@@ -1022,7 +1023,84 @@ let shell_scaffold_template =
     script_name = "hello.sh";
     command = "sh hello.sh";
     script_body = "#!/bin/sh\nprintf 'hello from fp-agent plugin: '\ncat\n";
+    extra_files = [];
   }
+
+let python_sdk_body =
+  {|#!/usr/bin/env python3
+from __future__ import annotations
+
+from dataclasses import dataclass
+import json
+import os
+import sys
+from typing import Any, Callable
+
+
+@dataclass(frozen=True)
+class ToolContext:
+    workspace: str
+    plugin_dir: str
+    plugin_id: str
+    plugin_name: str
+    plugin_version: str
+    plugin_sdk_version: str
+    tool_name: str
+    tool_kind: str
+    tool_permissions: Any
+    args_file: str
+
+
+def _json_env(name: str, default: Any) -> Any:
+    raw = os.environ.get(name, "")
+    if not raw:
+        return default
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return raw
+
+
+def context() -> ToolContext:
+    return ToolContext(
+        workspace=os.environ.get("FP_AGENT_WORKSPACE", ""),
+        plugin_dir=os.environ.get("FP_AGENT_PLUGIN_DIR", ""),
+        plugin_id=os.environ.get("FP_AGENT_PLUGIN_ID", ""),
+        plugin_name=os.environ.get("FP_AGENT_PLUGIN_NAME", ""),
+        plugin_version=os.environ.get("FP_AGENT_PLUGIN_VERSION", ""),
+        plugin_sdk_version=os.environ.get("FP_AGENT_PLUGIN_SDK_VERSION", ""),
+        tool_name=os.environ.get("FP_AGENT_TOOL_NAME", ""),
+        tool_kind=os.environ.get("FP_AGENT_TOOL_KIND", ""),
+        tool_permissions=_json_env("FP_AGENT_TOOL_PERMISSIONS", {}),
+        args_file=os.environ.get("FP_AGENT_ARGS_FILE", ""),
+    )
+
+
+def read_args() -> Any:
+    raw = sys.stdin.read()
+    if not raw.strip():
+        return {}
+    return json.loads(raw)
+
+
+def write_result(value: Any) -> None:
+    if value is None:
+        return
+    if isinstance(value, (dict, list, str, int, float, bool)):
+        json.dump(value, sys.stdout, separators=(",", ":"))
+        sys.stdout.write("\n")
+    else:
+        sys.stdout.write(str(value))
+        sys.stdout.write("\n")
+
+
+def run_json_tool(handler: Callable[[Any, ToolContext], Any]) -> None:
+    try:
+        write_result(handler(read_args(), context()))
+    except Exception as exc:
+        sys.stderr.write(f"plugin error: {exc}\n")
+        raise SystemExit(1)
+|}
 
 let python_scaffold_template =
   {
@@ -1031,15 +1109,22 @@ let python_scaffold_template =
     command = "python3 main.py";
     script_body =
       {|#!/usr/bin/env python3
-import sys
+from fp_agent_sdk import ToolContext, run_json_tool
 
-def main():
-    sys.stdout.write("hello from fp-agent python plugin: ")
-    sys.stdout.write(sys.stdin.read())
+
+def handle(args, ctx: ToolContext):
+    return {
+        "greeting": "hello from fp-agent python plugin",
+        "tool": ctx.tool_name,
+        "workspace": ctx.workspace,
+        "echo": args,
+    }
+
 
 if __name__ == "__main__":
-    main()
+    run_json_tool(handle)
 |};
+    extra_files = [ ("fp_agent_sdk.py", python_sdk_body) ];
   }
 
 let scaffold_template_of_string template =
@@ -1118,6 +1203,9 @@ let scaffold ?id ?tool_name ?(kind = "read") ?(template = "shell") dir =
                    permissions));
           Stdlib.Out_channel.with_open_bin script_path (fun oc ->
               Stdlib.Out_channel.output_string oc template.script_body);
+          List.iter template.extra_files ~f:(fun (name, body) ->
+              Stdlib.Out_channel.with_open_bin (Stdlib.Filename.concat dir name)
+                (fun oc -> Stdlib.Out_channel.output_string oc body));
           mkdir_p examples_dir;
           Stdlib.Out_channel.with_open_bin args_path (fun oc ->
               Stdlib.Out_channel.output_string oc {|{"message":"hi"}|});
@@ -1132,6 +1220,7 @@ Initial tool kind: `%s`.
 Initial permissions: `%s`.
 Initial template: `%s`.
 Generated command: `%s`.
+Generated files: %s.
 
 ## Interactive Development Loop
 
@@ -1202,7 +1291,13 @@ dune exec -- fp-agent --install-plugin . --replace-plugin
                    id kind
                    (permissions_label
                       (Some (Yojson.Safe.from_string permissions)))
-                   template.template_id template.command tool_name id tool_name
-                   tool_name tool_name));
+                   template.template_id template.command
+                   (String.concat
+                      (List.map
+                         (template.script_name
+                         :: List.map template.extra_files ~f:fst)
+                         ~f:(fun name -> "`" ^ name ^ "`"))
+                      ~sep:", ")
+                   tool_name id tool_name tool_name tool_name));
           Ok dir
         with exn -> Error ("plugin scaffold failed: " ^ Exn.to_string exn))

@@ -138,6 +138,10 @@ shown in `/plugins` and `/plugin`, passed through to SDK wrappers, and used by
 `--confirm` to require approval for sensitive plugin permissions such as
 network, shell, env, secrets, tokens, or workspace writes. `/plugin` also shows
 the exact approval reason that would appear before a model-triggered call.
+The Python scaffold includes a local `fp_agent_sdk.py` helper that reads JSON
+args, constructs a `ToolContext` from those env vars, and serializes handler
+results, so plugin authors can start from a handler instead of raw stdin/stdout
+plumbing.
 
 ```sh
 export FP_AGENT_PLUGIN_PATH=$PWD/examples/plugins/echo
@@ -248,9 +252,10 @@ copy. Two consequences:
 - **Plugin install management** (`/plugin-new [--id ID] [--tool-name NAME]
   [--kind KIND] [--template NAME] <dir>`, `/plugin-dev [--replace] <dir>`,
   `/plugin-check <dir>`, `/plugin-install [--replace] <dir>`,
-  `/plugin-remove <id>`) scaffolds, validates, smoke-tests, installs, and removes plugins
-  from the REPL or fullscreen TUI, then reloads the in-process tool registry so
-  `/tools`, the status strip, and later model calls see the updated plugin set.
+  `/plugin-remove <id>`) scaffolds, validates, smoke-tests, installs, and
+  removes plugins from the REPL or fullscreen TUI, then reloads the in-process
+  tool registry so `/tools`, the status strip, and later model calls see the
+  updated plugin set.
 - **TUI model/provider switching** lets `/model <id>`, `/model-next`, and
   `/provider <name> [model] [api-base]` change the runtime used by later TUI
   task submissions.

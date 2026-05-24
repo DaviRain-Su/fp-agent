@@ -135,8 +135,10 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - Plugin scaffolding accepts `--plugin-kind` / `--kind` so the starter manifest
   can begin as a `read`, `write`, or `exec` tool without manual JSON edits.
 - Plugin scaffolding accepts `--plugin-template` / `--template`, with `shell`
-  and `python` starters that generate the matching command, script file,
-  README, manifest, and smoke args.
+  and `python` starters that generate the matching command, script files,
+  README, manifest, and smoke args. Python starters now include a local
+  `fp_agent_sdk.py` helper with JSON arg parsing, `ToolContext`, result
+  serialization, and error handling.
 - Plugin local development now has `--smoke-plugin`, which validates a plugin
   and runs each tool against `examples/<tool>.args.json` plus any sorted
   `examples/<tool>/*.json` case files before install.

@@ -937,8 +937,32 @@ let test_scaffold_creates_python_template () =
             "python file exists" true
             (Stdlib.Sys.file_exists (Stdlib.Filename.concat dir "main.py"));
           Alcotest.(check bool)
+            "python sdk file exists" true
+            (Stdlib.Sys.file_exists
+               (Stdlib.Filename.concat dir "fp_agent_sdk.py"));
+          Alcotest.(check bool)
             "shell file omitted" false
             (Stdlib.Sys.file_exists (Stdlib.Filename.concat dir "hello.sh"));
+          let main_py =
+            Stdlib.In_channel.with_open_bin
+              (Stdlib.Filename.concat dir "main.py")
+              Stdlib.In_channel.input_all
+          in
+          Alcotest.(check bool)
+            "main imports sdk" true
+            (String.is_substring main_py
+               ~substring:"from fp_agent_sdk import ToolContext, run_json_tool");
+          let sdk_py =
+            Stdlib.In_channel.with_open_bin
+              (Stdlib.Filename.concat dir "fp_agent_sdk.py")
+              Stdlib.In_channel.input_all
+          in
+          Alcotest.(check bool)
+            "sdk exposes context" true
+            (String.is_substring sdk_py ~substring:"class ToolContext");
+          Alcotest.(check bool)
+            "sdk reads args" true
+            (String.is_substring sdk_py ~substring:"def read_args()");
           let readme =
             Stdlib.In_channel.with_open_bin
               (Stdlib.Filename.concat dir "README.md")
@@ -951,14 +975,43 @@ let test_scaffold_creates_python_template () =
             "readme documents python command" true
             (String.is_substring readme
                ~substring:"Generated command: `python3 main.py`");
+          Alcotest.(check bool)
+            "readme documents sdk file" true
+            (String.is_substring readme ~substring:"`fp_agent_sdk.py`");
           match Plugin.check dir with
           | Error e -> Alcotest.failf "python scaffold check failed: %s" e
-          | Ok manifest ->
+          | Ok manifest -> (
               let tool = Option.value_exn (List.hd manifest.tools) in
               Alcotest.(check string)
                 "python command" "python3 main.py" tool.tool_command;
-              Alcotest.(check string) "python tool" "python_echo" tool.tool_name
-          ))
+              Alcotest.(check string) "python tool" "python_echo" tool.tool_name;
+              match
+                Plugin.run_tool ~dir ~tool_name:"python_echo"
+                  ~workspace:(workspace root)
+                  ~args:(`Assoc [ ("message", `String "hi") ])
+              with
+              | Error e -> Alcotest.failf "python run failed: %s" e
+              | Ok (Tool_result.Error { message }) ->
+                  Alcotest.failf "python tool error: %s" message
+              | Ok (Tool_result.Success { output }) ->
+                  let json = Yojson.Safe.from_string output in
+                  let member = Yojson.Safe.Util.member in
+                  Alcotest.(check (option string))
+                    "python sdk greeting"
+                    (Some "hello from fp-agent python plugin")
+                    (match member "greeting" json with
+                    | `String value -> Some value
+                    | _ -> None);
+                  Alcotest.(check (option string))
+                    "python sdk tool" (Some "python_echo")
+                    (match member "tool" json with
+                    | `String value -> Some value
+                    | _ -> None);
+                  Alcotest.(check (option string))
+                    "python sdk echoed input" (Some "hi")
+                    (match member "echo" json |> member "message" with
+                    | `String value -> Some value
+                    | _ -> None))))
 
 let test_check_rejects_invalid_manifest () =
   with_temp_dir "fp_agent_plugin_bad" (fun root ->
