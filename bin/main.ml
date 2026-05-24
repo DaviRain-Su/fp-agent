@@ -262,7 +262,10 @@ let print_help () =
     \  /help              show this help\n\
     \  /tools             list available tools\n\
     \  /sessions          list sessions in this workspace\n\
+    \  /tree              show the session fork tree\n\
     \  /resume <dir>      switch to a session (name under sessions/ or a path)\n\
+    \  /log               list this session's events with indices\n\
+    \  /fork [<index>]    fork the session (at an event index, or the end)\n\
     \  /diff              show uncommitted changes (git)\n\
     \  /undo              revert the last turn's changes (git)\n\
     \  /exit, /quit       leave the REPL\n\
@@ -358,6 +361,73 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
           Stdlib.print_string stdout
       | _ -> ())
   in
+  let oneline s =
+    let flat = String.substr_replace_all s ~pattern:"\n" ~with_:" " in
+    if String.length flat > 60 then String.prefix flat 60 ^ "…" else flat
+  in
+  let describe_event (e : Event.t) =
+    match e with
+    | User_message { content } -> "user: " ^ oneline content
+    | Model_response { action = Tool_call tc } ->
+        "model → " ^ Event.describe_tool tc
+    | Model_response { action = Final_answer _ } -> "model: final answer"
+    | Tool_call tc -> "tool_call " ^ Event.describe_tool tc
+    | Tool_result (Success _) -> "result ok"
+    | Tool_result (Error _) -> "result err"
+    | Policy_decision { permission; _ } ->
+        "policy " ^ Permission.to_string permission
+    | State_transition { to_state; _ } ->
+        "state → " ^ Agent_state.to_string to_state
+  in
+  let print_log () =
+    match Journal.read ~session_dir:!session with
+    | Error e -> Stdlib.print_endline e
+    | Ok events ->
+        List.iteri events ~f:(fun i e ->
+            Stdlib.Printf.printf "  %3d  %s\n" i (describe_event e))
+  in
+  let print_tree () =
+    match Stdlib.Sys.readdir sessions_root with
+    | exception _ -> Stdlib.print_endline "(no sessions yet)"
+    | names ->
+        Array.sort names ~compare:String.compare;
+        let metas =
+          Array.to_list names
+          |> List.map ~f:(fun n ->
+              (n, Session.read_meta (Stdlib.Filename.concat sessions_root n)))
+        in
+        let current_name = Stdlib.Filename.basename !session in
+        let children_of p =
+          List.filter_map metas ~f:(fun (n, (par, fa)) ->
+              if Option.equal String.equal par (Some p) then Some (n, fa)
+              else None)
+        in
+        let rec render indent name fa =
+          let mark = if String.equal name current_name then "  *" else "" in
+          let fa_s =
+            match fa with Some k -> Printf.sprintf " (fork@%d)" k | None -> ""
+          in
+          Stdlib.Printf.printf "%s%s%s%s\n" indent name fa_s mark;
+          List.iter (children_of name) ~f:(fun (c, cfa) ->
+              render (indent ^ "  ") c cfa)
+        in
+        List.iter metas ~f:(fun (n, (par, _)) ->
+            if Option.is_none par then render "" n None)
+  in
+  let do_fork arg =
+    let at =
+      if String.is_empty arg then Ok None
+      else
+        try Ok (Some (Int.of_string arg))
+        with _ -> Error "usage: /fork [<event-index>]  (see /log)"
+    in
+    match at with
+    | Error e -> Stdlib.print_endline e
+    | Ok at -> (
+        match Session.fork ~base_dir:root ~parent_session_dir:!session ~at with
+        | Ok child -> switch child
+        | Error e -> Stdlib.print_endline ("fork failed: " ^ e))
+  in
   Stdlib.Printf.eprintf
     "fp-agent REPL — model %s. Type /help for commands, /exit to quit.\n\
      session: %s\n\
@@ -405,6 +475,18 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
           loop ())
         else if String.equal line "/undo" then (
           undo ();
+          loop ())
+        else if String.equal line "/log" then (
+          print_log ();
+          loop ())
+        else if String.equal line "/tree" then (
+          print_tree ();
+          loop ())
+        else if String.equal line "/fork" then (
+          do_fork "";
+          loop ())
+        else if String.is_prefix line ~prefix:"/fork " then (
+          do_fork (String.strip (String.drop_prefix line 6));
           loop ())
         else if String.is_prefix line ~prefix:"/resume " then (
           let arg = String.strip (String.drop_prefix line 8) in

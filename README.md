@@ -51,6 +51,9 @@ dune exec -- fp-agent
 > now add a second line "bye" to it
 > /diff              # show uncommitted changes (git)
 > /undo              # revert the last turn's changes (git)
+> /log               # list this session's events with indices
+> /fork 3            # fork a new branch at event index 3 (or /fork for the end)
+> /tree              # show the session fork tree
 > /sessions          # list sessions in this workspace
 > /resume <name>     # switch to a past session
 > /tools             # preview available tools
@@ -60,6 +63,19 @@ dune exec -- fp-agent
 
 Each turn replays the session's event log as context, so the agent remembers
 earlier turns. Meta-commands start with `/`; anything else is a task.
+
+### Event-sourced sessions and forking
+
+The event log is the source of truth: the agent's conversation state is a pure
+fold over the events (`Session_state.reduce`/`replay`), not a separate mutable
+copy. Two consequences:
+
+- **Resume** (`--resume` / `/resume`) reconstructs state by replaying a
+  session's log.
+- **Fork** (`/fork [index]`) branches a session at an event index — the child's
+  log is a prefix of the parent's, so replaying it yields the state at that
+  point. Sessions therefore form a **tree** (`/tree`), letting you explore
+  alternative continuations without disturbing the original branch.
 
 Options:
 
