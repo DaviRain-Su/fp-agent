@@ -1,4 +1,4 @@
 (executable
  (public_name fp-agent)
  (name main)
- (libraries fp_agent cmdliner lwt lwt.unix))
+ (libraries fp_agent cmdliner lwt lwt.unix notty notty.unix))

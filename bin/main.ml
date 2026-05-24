@@ -24,6 +24,42 @@ let print_changes root =
         Stdlib.print_string stdout
     | _ -> ()
 
+(* Full-screen live view driven by the event stream. Keeps a rolling buffer of
+   display lines and redraws on each event; no keyboard input (the agent runs
+   autonomously). *)
+let make_tui_reporter ~header =
+  let module I = Notty.I in
+  let module A = Notty.A in
+  let term = Notty_unix.Term.create () in
+  let lines = ref [] in
+  let redraw () =
+    let _, h = Notty_unix.Term.size term in
+    let body_rows = Int.max 1 (h - 3) in
+    let shown = List.rev (List.take (List.rev !lines) body_rows) in
+    let colored s =
+      let attr =
+        if String.is_prefix (String.lstrip s) ~prefix:"✓" then A.fg A.green
+        else if String.is_prefix (String.lstrip s) ~prefix:"✗" then A.fg A.red
+        else if String.is_prefix s ~prefix:"→" then A.fg A.yellow
+        else A.empty
+      in
+      I.string attr s
+    in
+    let header_img = I.string A.(fg lightblue ++ st bold) header in
+    let body = I.vcat (List.map shown ~f:colored) in
+    Notty_unix.Term.image term (I.vcat [ header_img; I.void 0 1; body ])
+  in
+  redraw ();
+  let on_event e =
+    match Event.to_display e with
+    | Some line ->
+        lines := !lines @ [ line ];
+        redraw ()
+    | None -> ()
+  in
+  let close () = Notty_unix.Term.release term in
+  (on_event, close)
+
 (* Blocking Y/n prompt on stdin; defaults to deny on EOF or anything but yes. *)
 let prompt_approval tc reason =
   Stdlib.Printf.eprintf "\nAPPROVE? %s\n  %s\n  [y/N] %!" reason
@@ -36,7 +72,7 @@ let prompt_approval tc reason =
   Lwt.return (String.equal answer "y" || String.equal answer "yes")
 
 let run_agent task provider_opt api_base_opt model_opt workspace_opt
-    max_steps_opt confirm resume_opt =
+    max_steps_opt confirm resume_opt tui =
   match
     Config.load ?provider:provider_opt ?api_base:api_base_opt ?model:model_opt
       ()
@@ -76,13 +112,21 @@ let run_agent task provider_opt api_base_opt model_opt workspace_opt
                  (List.length initial_history));
           let event_log = Event_log.create ~session_dir in
           let model_client = Model_client.create ~config in
-          let on_event e =
-            match Event.to_display e with
-            | Some line -> Stdlib.Printf.eprintf "%s\n%!" line
-            | None -> ()
+          (* TUI takes over the screen, so it runs autonomously (no stdin
+             approval prompts) and the stderr stream is replaced by the view. *)
+          let on_event, close_view =
+            if tui then
+              make_tui_reporter
+                ~header:(Printf.sprintf "fp-agent  %s  —  %s" config.model task)
+            else
+              ( (fun e ->
+                  match Event.to_display e with
+                  | Some line -> Stdlib.Printf.eprintf "%s\n%!" line
+                  | None -> ()),
+                fun () -> () )
           in
           let policy =
-            if confirm then
+            if confirm && not tui then
               { Policy.approve_commands = true; approve_writes = true }
             else Policy.default
           in
@@ -92,6 +136,7 @@ let run_agent task provider_opt api_base_opt model_opt workspace_opt
                  ~initial_history ~config ~model_client ~event_log ~workspace
                  ~task ())
           in
+          close_view ();
           Event_log.close event_log;
           print_summary outcome;
           print_changes root;
@@ -158,11 +203,17 @@ let () =
             "Resume from a previous session directory: replay its event log as \
              context and continue.")
   in
+  let tui =
+    Arg.(
+      value & flag
+      & info [ "tui" ]
+          ~doc:"Render a full-screen live view of the run (runs autonomously).")
+  in
   let doc = "A type-safe local CLI code agent harness." in
   let term =
     Term.(
       const run_agent $ task $ provider $ api_base $ model $ workspace
-      $ max_steps $ confirm $ resume)
+      $ max_steps $ confirm $ resume $ tui)
   in
   let info = Cmd.info "fp-agent" ~version:"0.1.0" ~doc in
   Stdlib.exit (Cmd.eval' (Cmd.v info term))
