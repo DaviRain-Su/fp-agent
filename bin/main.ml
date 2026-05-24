@@ -39,7 +39,7 @@ type tui_view = {
   take_submitted : unit -> string option;
   set_runtime : provider:string -> model:string -> api_base:string -> unit;
   set_session : session_dir:string -> events:Event.t list -> unit;
-  refresh_tooling : unit -> unit;
+  refresh_tooling : unit -> Tool_loader.counts;
   request_approval : Tool_call.t -> string -> bool Lwt.t;
 }
 
@@ -83,6 +83,11 @@ let phase_label = function
   | `Running tool -> Some (Printf.sprintf "running %s…" tool)
 
 let event_display_lines events = List.filter_map events ~f:Event.to_display
+
+let tooling_counts_line (counts : Tool_loader.counts) =
+  Printf.sprintf "tooling: %d plugin(s), %d tool(s)" counts.plugins counts.tools
+
+let tools_reloaded_line counts = "tools reloaded; " ^ tooling_counts_line counts
 
 (* Plain reporter: step lines + an animated spinner line on stderr. The spinner
    line is rewritten in place with CR + clear-to-EOL. *)
@@ -144,9 +149,10 @@ let make_tui_view ~initial_events ~provider ~model ~api_base ~workspace_root
   let refresh_tooling () =
     let counts = Tool_loader.refresh_counts () in
     plugin_count := counts.plugins;
-    tool_count := counts.tools
+    tool_count := counts.tools;
+    counts
   in
-  refresh_tooling ();
+  ignore (refresh_tooling ());
   let lines = ref (event_display_lines initial_events) in
   let current_delta = ref "" in
   let phase = make_phase () in
@@ -703,8 +709,8 @@ let plugin_install_lines args =
       match Plugin.install ~replace dir with
       | Error e -> [ "plugin install error: " ^ e ]
       | Ok dst ->
-          Tool_loader.register_all ();
-          [ "installed plugin: " ^ dst; "tools reloaded" ])
+          let counts = Tool_loader.refresh_counts () in
+          [ "installed plugin: " ^ dst; tools_reloaded_line counts ])
 
 let plugin_remove_lines arg =
   let id = String.strip arg in
@@ -713,8 +719,8 @@ let plugin_remove_lines arg =
     match Plugin.remove id with
     | Error e -> [ "plugin remove error: " ^ e ]
     | Ok dst ->
-        Tool_loader.register_all ();
-        [ "removed plugin: " ^ dst; "tools reloaded" ]
+        let counts = Tool_loader.refresh_counts () in
+        [ "removed plugin: " ^ dst; tools_reloaded_line counts ]
 
 let plugin_smoke_lines ~workspace args =
   match
@@ -929,8 +935,10 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
     view.append_lines ("[tui] /undo" :: Git_snapshot.undo snapshots)
   in
   let new_plugin arg =
-    view.append_lines ("[tui] /plugin-new" :: plugin_new_lines arg);
-    view.refresh_tooling ()
+    let lines = plugin_new_lines arg in
+    let counts = view.refresh_tooling () in
+    view.append_lines
+      (("[tui] /plugin-new" :: lines) @ [ tooling_counts_line counts ])
   in
   let smoke_plugin arg =
     view.append_lines
@@ -941,11 +949,11 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
   in
   let install_plugin arg =
     view.append_lines ("[tui] /plugin-install" :: plugin_install_lines arg);
-    view.refresh_tooling ()
+    ignore (view.refresh_tooling ())
   in
   let remove_plugin arg =
     view.append_lines ("[tui] /plugin-remove" :: plugin_remove_lines arg);
-    view.refresh_tooling ()
+    ignore (view.refresh_tooling ())
   in
   let stop = ref false in
   let handle_submission raw =

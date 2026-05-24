@@ -296,10 +296,14 @@ let test_repl_installs_and_removes_plugin () =
   assert_contains "check output" repl.stdout "plugin manifest ok:";
   assert_contains "install output" repl.stdout "installed plugin:";
   assert_contains "install reload output" repl.stdout "tools reloaded";
+  assert_contains "install count output" repl.stdout
+    "tools reloaded; tooling: 1 plugin(s)";
   assert_contains "plugin listed after install" repl.stdout "local.repl-plugin";
   assert_contains "tool available after install" repl.stdout "name: repl_echo";
   assert_contains "smoke output" repl.stdout "smoke ok: repl_echo";
   assert_contains "remove output" repl.stdout "removed plugin:";
+  assert_contains "remove count output" repl.stdout
+    "tools reloaded; tooling: 0 plugin(s)";
   assert_contains "tool gone after remove" repl.stdout
     "no tool matching: repl_echo";
   assert_contains "plugins empty after remove" repl.stdout
