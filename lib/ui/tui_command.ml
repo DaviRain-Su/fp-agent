@@ -49,6 +49,15 @@ let tools_lines () =
         (tool_kind_label tool.kind)
         tool.description)
 
+let tool_detail_lines query =
+  Tool_loader.register_all ();
+  let query = String.strip query in
+  if String.is_empty query then [ "usage: /tool <tool-name>" ]
+  else
+    match Tool.find query with
+    | None -> [ "no tool matching: " ^ query ]
+    | Some tool -> View.tool_inspector_lines tool
+
 let plugins_lines () =
   match Plugin.manifests () with
   | [] -> [ "(no plugins discovered)" ]
@@ -62,6 +71,19 @@ let plugins_lines () =
                 tool.tool_description)
           @ [ "" ])
       |> List.drop_last |> Option.value ~default:[]
+
+let plugin_matches query (plugin : Plugin.manifest) =
+  String.equal plugin.id query
+  || String.equal plugin.name query
+  || List.exists plugin.tools ~f:(fun tool -> String.equal tool.tool_name query)
+
+let plugin_detail_lines query =
+  let query = String.strip query in
+  if String.is_empty query then [ "usage: /plugin <plugin-id|tool-name>" ]
+  else
+    match List.find (Plugin.manifests ()) ~f:(plugin_matches query) with
+    | None -> [ "no plugin or tool matching: " ^ query ]
+    | Some plugin -> View.plugin_inspector_lines plugin
 
 let current_model_lines ctx =
   [
@@ -189,11 +211,22 @@ let log_lines ctx =
       List.mapi events ~f:(fun index event ->
           Printf.sprintf "  %3d  %s" index (View.event_summary event))
 
-let inspect_lines ctx =
-  match (ctx.selected_event_index, ctx.events) with
+let inspect_lines ctx arg =
+  let selected =
+    let arg = String.strip arg in
+    if String.is_empty arg then Ok ctx.selected_event_index
+    else
+      try
+        let index = Int.of_string arg in
+        if index < 0 then Error "usage: /inspect [event-index]"
+        else Ok (Some index)
+      with _ -> Error "usage: /inspect [event-index]"
+  in
+  match (selected, ctx.events) with
+  | Error e, _ -> [ e ]
   | _, [] -> [ "(no events yet)" ]
-  | None, _ -> [ "(no selected event)" ]
-  | Some index, events -> (
+  | Ok None, _ -> [ "(no selected event)" ]
+  | Ok (Some index), events -> (
       match List.nth events index with
       | None ->
           [
@@ -209,7 +242,11 @@ let run ctx command =
   | Command (Help, _) ->
       Some (command_section command (String.split_lines (help_text ())))
   | Command (Tools, _) -> Some (command_section command (tools_lines ()))
+  | Command (Tool, arg) ->
+      Some (command_section command (tool_detail_lines arg))
   | Command (Plugins, _) -> Some (command_section command (plugins_lines ()))
+  | Command (Plugin, arg) ->
+      Some (command_section command (plugin_detail_lines arg))
   | Command (Sessions, _) -> Some (command_section command (sessions_lines ctx))
   | Command (Tree, _) -> Some (command_section command (tree_lines ctx))
   | Command (Model, "") ->
@@ -217,5 +254,6 @@ let run ctx command =
   | Command (Models, _) -> Some (command_section command (models_lines ctx))
   | Command (Diff, _) -> Some (command_section command (diff_lines ctx))
   | Command (Log, _) -> Some (command_section command (log_lines ctx))
-  | Command (Inspect, _) -> Some (command_section command (inspect_lines ctx))
+  | Command (Inspect, arg) ->
+      Some (command_section command (inspect_lines ctx arg))
   | Empty | Task _ | Unknown _ | Command _ -> None

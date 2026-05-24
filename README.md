@@ -74,6 +74,10 @@ dune exec -- fp-agent
 Each turn replays the session's event log as context, so the agent remembers
 earlier turns. Meta-commands start with `/`; anything else is a task.
 
+Use `--tui` without a task to start the fullscreen interactive shell. It uses
+the same session log and command palette as one-shot TUI runs; Ctrl+Enter
+submits the current draft as either a slash command or an agent task.
+
 Code review requests get a review-specific system instruction: the agent starts
 from `git status --short` and `git diff --stat`, inspects changed files and
 related code, and reports concise findings with evidence. The original user
@@ -148,8 +152,8 @@ copy. Two consequences:
   palette movement, and event inspection selection in a pure state machine.
   It also owns the abstract keyboard/mouse input mapping, including palette
   priority, event browsing, multiline prompt editing, and Ctrl+Enter submit
-  semantics for the future interactive shell. Palette Enter returns the selected
-  command entry so the next shell layer can dispatch commands without re-parsing
+  semantics for the interactive shell. Palette Enter returns the selected
+  command entry so fullscreen command handling does not need to re-parse
   terminal key events.
 
 Options:
@@ -164,7 +168,8 @@ Options:
   compatible with `--tui`)
 - `--yolo` — bypass the dangerous-command deny-list (workspace bounds still apply)
 - `--resume SESSION_DIR` — replay a previous session's event log as context and continue
-- `--tui` — full-screen live view of the run (autonomous; needs a real terminal)
+- `--tui` — full-screen live view for one-shot tasks, or an interactive
+  fullscreen shell when no task is supplied (needs a real terminal)
 - `--new-plugin DIR` — create a starter plugin directory, then exit
 - `--check-plugin DIR` — validate a plugin directory, then exit
 - `--run-plugin-tool DIR --plugin-tool NAME --plugin-args JSON` — run a plugin

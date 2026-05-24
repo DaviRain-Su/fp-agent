@@ -61,6 +61,10 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   prompt draft when the palette is closed, so seeded commands like `/tool ` can
   be completed in the fullscreen view. The live draft renders with the same
   prompt editor lines used by unit tests.
+- `--tui` without an initial task now starts a fullscreen interactive shell.
+  Ctrl+Enter drains the prompt into the session loop: slash commands render in
+  the timeline and ordinary task prompts run the agent against the same
+  event-sourced session log.
 - The command palette controller now distinguishes close from accept: Enter
   returns the highlighted command entry, giving the future fullscreen shell a
   tested command-dispatch point while preserving the current overlay behavior.

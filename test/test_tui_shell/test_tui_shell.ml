@@ -276,7 +276,11 @@ let test_tui_command_model_log_and_inspect () =
         (String.is_substring inspect ~substring:"event 0");
       Alcotest.(check bool)
         "inspect includes event kind" true
-        (String.is_substring inspect ~substring:"kind: user_message"))
+        (String.is_substring inspect ~substring:"kind: user_message");
+      let inspect_by_index = output "/inspect 0" context in
+      Alcotest.(check bool)
+        "inspect accepts explicit index" true
+        (String.is_substring inspect_by_index ~substring:"event 0"))
 
 let test_tui_command_sessions_and_diff () =
   with_temp_dir "fp_agent_tui_command_sessions" (fun root ->
@@ -325,7 +329,15 @@ let test_tui_command_plugins_and_tools () =
       let tools = output "/tools" context in
       Alcotest.(check bool)
         "tools include plugin tool" true
-        (String.is_substring tools ~substring:"tui_echo"))
+        (String.is_substring tools ~substring:"tui_echo");
+      let tool = output "/tool tui_echo" context in
+      Alcotest.(check bool)
+        "tool detail includes schema" true
+        (String.is_substring tool ~substring:"input_schema:");
+      let plugin = output "/plugin tui_echo" context in
+      Alcotest.(check bool)
+        "plugin detail includes command" true
+        (String.is_substring plugin ~substring:"command: sh echo.sh"))
 
 let () =
   Alcotest.run "tui_shell"

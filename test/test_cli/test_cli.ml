@@ -344,6 +344,14 @@ let test_tui_confirm_conflict_fails_before_config () =
   assert_contains "conflict stderr" result.stderr
     "--confirm cannot be combined with --tui"
 
+let test_tui_repl_confirm_conflict_fails_before_config () =
+  let root = tmp_dir "fp-agent-cli-tui-repl-" in
+  let env = isolated_env root in
+  let result = run ~env [ fp_agent_bin (); "--confirm"; "--tui" ] in
+  assert_failure "confirm tui repl conflict" result;
+  assert_contains "conflict stderr" result.stderr
+    "--confirm cannot be combined with --tui"
+
 let () =
   Alcotest.run "cli"
     [
@@ -360,5 +368,7 @@ let () =
             test_repl_inspects_session_events;
           Alcotest.test_case "tui confirm conflict" `Quick
             test_tui_confirm_conflict_fails_before_config;
+          Alcotest.test_case "tui repl confirm conflict" `Quick
+            test_tui_repl_confirm_conflict_fails_before_config;
         ] );
     ]

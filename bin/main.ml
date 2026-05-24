@@ -33,6 +33,12 @@ type reporter = {
   close : unit -> unit;
 }
 
+type tui_view = {
+  reporter : reporter;
+  append_lines : string list -> unit;
+  take_submitted : unit -> string option;
+}
+
 let spinner_frames = [| "⠋"; "⠙"; "⠹"; "⠸"; "⠼"; "⠴"; "⠦"; "⠧"; "⠇"; "⠏" |]
 
 let now () = Unix.gettimeofday ()
@@ -112,8 +118,8 @@ let make_plain_reporter () =
 
 (* Full-screen view: header, status strip, timeline, optional inspector, and a
    footer phase line. *)
-let make_tui_reporter ~provider ~model ~api_base ~workspace_root ~session_dir
-    ~sessions_root ~header =
+let make_tui_view ~initial_events ~provider ~model ~api_base ~workspace_root
+    ~session_dir ~sessions_root ~header =
   let module I = Notty.I in
   let module A = Notty.A in
   let term = Notty_unix.Term.create () in
@@ -125,8 +131,9 @@ let make_tui_reporter ~provider ~model ~api_base ~workspace_root ~session_dir
   let lines = ref [] in
   let current_delta = ref "" in
   let phase = make_phase () in
-  let events = ref [] in
+  let events = ref initial_events in
   let shell = ref (Tui_shell.create ()) in
+  let submitted = ref [] in
   let i = ref 0 in
   let visible_lines () =
     if String.is_empty !current_delta then !lines
@@ -136,6 +143,18 @@ let make_tui_reporter ~provider ~model ~api_base ~workspace_root ~session_dir
     if not (String.is_empty !current_delta) then (
       lines := !lines @ View.display_lines !current_delta;
       current_delta := "")
+  in
+  let append_lines new_lines =
+    if not (List.is_empty new_lines) then (
+      flush_delta ();
+      lines := !lines @ new_lines)
+  in
+  let take_submitted () =
+    match !submitted with
+    | [] -> None
+    | prompt :: rest ->
+        submitted := rest;
+        Some prompt
   in
   let has_key_modifier mods modifier =
     List.mem mods modifier ~equal:Poly.equal
@@ -196,6 +215,9 @@ let make_tui_reporter ~provider ~model ~api_base ~workspace_root ~session_dir
     let apply input =
       let result = Tui_shell.handle_input ~page_size !shell input in
       shell := result.state;
+      (match result.submitted with
+      | None -> ()
+      | Some prompt -> submitted := !submitted @ [ prompt ]);
       let feedback =
         match result.dispatched_command with
         | None -> Tui_shell.feedback_lines result
@@ -217,11 +239,7 @@ let make_tui_reporter ~provider ~model ~api_base ~workspace_root ~session_dir
               (Tui_command.run context command)
               ~default:(Tui_shell.feedback_lines result)
       in
-      match feedback with
-      | [] -> ()
-      | feedback ->
-          flush_delta ();
-          lines := !lines @ feedback
+      match feedback with [] -> () | feedback -> append_lines feedback
     in
     let rec loop () =
       if Notty_unix.Term.pending term then (
@@ -387,7 +405,13 @@ let make_tui_reporter ~provider ~model ~api_base ~workspace_root ~session_dir
     redraw ()
   in
   let close () = Notty_unix.Term.release term in
-  { on_event; tick; close }
+  { reporter = { on_event; tick; close }; append_lines; take_submitted }
+
+let make_tui_reporter ~initial_events ~provider ~model ~api_base ~workspace_root
+    ~session_dir ~sessions_root ~header =
+  (make_tui_view ~initial_events ~provider ~model ~api_base ~workspace_root
+     ~session_dir ~sessions_root ~header)
+    .reporter
 
 (* Run [agent] (an Agent_loop.run promise) while ticking [reporter] on a timer
    for the spinner; stop ticking once the run resolves. *)
@@ -472,10 +496,14 @@ let run_oneshot config workspace ~confirm ~resume_opt ~tui ~yolo ~task =
          (List.length initial_history));
   let event_log = Event_log.create ~session_dir in
   let model_client = Model_client.create ~config in
+  let initial_events =
+    match Journal.read ~session_dir with Ok events -> events | Error _ -> []
+  in
   let reporter =
     if tui then
-      make_tui_reporter ~provider:config.provider ~model:config.model
-        ~api_base:config.api_base ~workspace_root:root ~session_dir
+      make_tui_reporter ~initial_events ~provider:config.provider
+        ~model:config.model ~api_base:config.api_base ~workspace_root:root
+        ~session_dir
         ~sessions_root:
           (Stdlib.Filename.concat root
              (Stdlib.Filename.concat ".ocaml-agent" "sessions"))
@@ -496,6 +524,117 @@ let run_oneshot config workspace ~confirm ~resume_opt ~tui ~yolo ~task =
   print_summary outcome;
   print_changes root;
   match outcome.status with Agent_loop.Completed -> 0 | _ -> 1
+
+let run_tui_repl config workspace ~resume_opt ~yolo =
+  let root = Workspace.root workspace in
+  let sessions_root =
+    Stdlib.Filename.concat root
+      (Stdlib.Filename.concat ".ocaml-agent" "sessions")
+  in
+  let session_dir =
+    Option.value resume_opt ~default:(Session.create ~base_dir:root)
+  in
+  let event_log = Event_log.create ~session_dir in
+  let model_client = Model_client.create ~config in
+  let policy = policy_of ~confirm:false in
+  let events () =
+    match Journal.read ~session_dir with Ok events -> events | Error _ -> []
+  in
+  let view =
+    make_tui_view ~provider:config.provider ~model:config.model
+      ~api_base:config.api_base ~workspace_root:root ~session_dir ~sessions_root
+      ~initial_events:(events ())
+      ~header:
+        (Printf.sprintf "fp-agent TUI  %s  Ctrl+Enter submit  / palette"
+           config.model)
+  in
+  let latest_event_index events =
+    if List.is_empty events then None else Some (List.length events - 1)
+  in
+  let command_context () =
+    let events = events () in
+    {
+      Tui_command.provider = config.provider;
+      model = config.model;
+      api_base = config.api_base;
+      workspace_root = root;
+      sessions_root;
+      session_dir;
+      events;
+      selected_event_index = latest_event_index events;
+    }
+  in
+  let append_summary (outcome : Agent_loop.outcome) =
+    view.append_lines
+      [
+        "";
+        Printf.sprintf "=== %s (after %d step(s)) ==="
+          (String.uppercase (Agent_loop.status_to_string outcome.status))
+          outcome.steps;
+        outcome.summary;
+      ]
+  in
+  let run_task task =
+    let initial_history =
+      match Transcript.of_session ~session_dir with
+      | Ok history -> history
+      | Error _ -> []
+    in
+    let outcome =
+      Lwt_main.run
+        (run_with_reporter view.reporter
+           (Agent_loop.run ~on_event:view.reporter.on_event ~policy
+              ~on_approval:prompt_approval ~initial_history ~yolo ~config
+              ~model_client ~event_log ~workspace ~task ()))
+    in
+    append_summary outcome
+  in
+  let stop = ref false in
+  let handle_submission raw =
+    match Shell_command.parse raw with
+    | Empty -> ()
+    | Task task -> run_task task
+    | Unknown command ->
+        view.append_lines
+          [ "[tui] unknown command: " ^ command ^ " (try /help)" ]
+    | Command (Exit, _) ->
+        view.append_lines [ "[tui] exiting" ];
+        stop := true
+    | Command _ -> (
+        match Tui_command.run (command_context ()) raw with
+        | Some lines -> view.append_lines lines
+        | None ->
+            view.append_lines
+              [
+                "[tui] command is not available in fullscreen yet: "
+                ^ String.strip raw;
+              ])
+  in
+  Exn.protect
+    ~f:(fun () ->
+      view.append_lines
+        ((if yolo then
+            [
+              "[tui] YOLO mode: dangerous-command deny-list bypassed \
+               (workspace bounds still apply).";
+            ]
+          else [])
+        @ [
+            Printf.sprintf "[tui] session: %s" session_dir;
+            "[tui] Ctrl+Enter submits the prompt; type /exit then Ctrl+Enter \
+             to quit.";
+          ]);
+      while not !stop do
+        view.reporter.tick ();
+        (match view.take_submitted () with
+        | None -> ()
+        | Some raw -> handle_submission raw);
+        ignore (Unix.select [] [] [] 0.05 : _ * _ * _)
+      done;
+      0)
+    ~finally:(fun () ->
+      view.reporter.close ();
+      Event_log.close event_log)
 
 let tool_kind_label = function
   | Tool.Read -> "read"
@@ -1022,22 +1161,23 @@ let dispatch new_plugin check_plugin install_plugin list_plugins remove_plugin
           1)
   | None, None, None, false, None, Some dir ->
       run_plugin_tool_cli dir plugin_tool plugin_args workspace
-  | None, None, None, false, None, None -> (
-      match task with
-      | Some _ when confirm && tui ->
-          Stdlib.prerr_endline
-            "--confirm cannot be combined with --tui; run without --tui when \
-             approval prompts are required.";
-          1
-      | _ ->
-          with_setup provider api_base model workspace max_steps
-            (fun config workspace ->
-              match task with
-              | Some task ->
-                  run_oneshot config workspace ~confirm ~resume_opt:resume ~tui
-                    ~yolo ~task
-              | None ->
-                  run_repl config workspace ~confirm ~resume_opt:resume ~yolo))
+  | None, None, None, false, None, None ->
+      if confirm && tui then (
+        Stdlib.prerr_endline
+          "--confirm cannot be combined with --tui; run without --tui when \
+           approval prompts are required.";
+        1)
+      else
+        with_setup provider api_base model workspace max_steps
+          (fun config workspace ->
+            match task with
+            | Some task ->
+                run_oneshot config workspace ~confirm ~resume_opt:resume ~tui
+                  ~yolo ~task
+            | None when tui ->
+                run_tui_repl config workspace ~resume_opt:resume ~yolo
+            | None ->
+                run_repl config workspace ~confirm ~resume_opt:resume ~yolo)
 
 let () =
   let open Cmdliner in
