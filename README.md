@@ -151,21 +151,39 @@ file modification.
 
 ### Modules
 
+`lib/` is one library (`fp_agent`) with modules grouped by concern via
+`(include_subdirs unqualified)`, so module names stay flat (`Tool_call`,
+`Workspace`, …) regardless of folder.
+
+**`lib/core/`** — pure types:
+
 | Module | Responsibility |
 | --- | --- |
 | `tool_call` / `tool_result` | Typed tool calls and results (+ JSON) |
 | `model_action` / `event` | Model actions and event-log entries |
 | `agent_state` | State machine and legal transitions |
+| `permission` / `message` | Policy decisions and chat messages |
+
+**`lib/io/`** — side effects:
+
+| Module | Responsibility |
+| --- | --- |
 | `workspace` | Path resolution and workspace bounds |
 | `shell` | Command execution with timeout |
-| `policy` / `permission` | Allow/deny decisions, dangerous-command deny-list |
-| `tool_runner` | Executes tools behind the policy |
-| `session` / `event_log` | Session dirs and JSONL audit log |
-| `transcript` | Rebuilds conversation history from an event log (resume) |
+| `session` / `event_log` | Session dirs (fork tree) and JSONL audit log |
+| `journal` | Reads an event log back |
+
+**`lib/agent/`** — the agent itself:
+
+| Module | Responsibility |
+| --- | --- |
 | `config` / `provider` | Env config and per-provider key/base/model/protocol |
-| `message` / `model_client` | Chat messages and the OpenAI/Anthropic HTTP client |
+| `model_client` | OpenAI/Anthropic HTTP client + action parsing |
+| `policy` / `tool_runner` | Deny-list/approval and tool execution |
+| `session_state` / `transcript` | Event-sourced state (fold over the log) |
 | `agent_loop` | The model↔tool loop |
-| `view` | Pure TUI helpers (windowing, line classification) |
+
+**`lib/ui/`** — `view` (pure TUI helpers: windowing, line classification).
 
 ### Safety
 

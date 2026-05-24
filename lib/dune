@@ -1,3 +1,5 @@
+(include_subdirs unqualified)
+
 (library
  (name fp_agent)
  (libraries base yojson unix lwt cohttp-lwt-unix uri)
