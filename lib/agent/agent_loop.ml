@@ -36,10 +36,15 @@ let review_task_guidance =
    evidence, tests run, and any residual risks. If there are no findings, say \
    so and cite what you checked."
 
-let system_for_task task =
-  if is_code_review_task task then
-    Model_client.system_prompt ^ "\n\n" ^ review_task_guidance
-  else Model_client.system_prompt
+let system_for_task ~workspace task =
+  let base =
+    if is_code_review_task task then
+      Model_client.system_prompt ^ "\n\n" ^ review_task_guidance
+    else Model_client.system_prompt
+  in
+  match Project_instructions.load workspace with
+  | None -> base
+  | Some instructions -> base ^ "\n\n" ^ instructions
 
 let review_final_answer_nudge =
   "Review budget exhausted. Do not call any more tools. Produce a code review \
@@ -258,7 +263,7 @@ let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
     emit (Event.State_transition { from_state; to_state })
   in
   let review_task = is_code_review_task task in
-  let system = system_for_task task in
+  let system = system_for_task ~workspace task in
   let effective_max_steps =
     if review_task then Int.min config.max_steps review_max_steps
     else config.max_steps

@@ -91,6 +91,15 @@ from `git status --short` and `git diff --stat`, inspects changed files and
 related code, and reports concise findings with evidence. The original user
 request remains unchanged in the event log for audit and resume.
 
+### Project instructions
+
+`fp-agent` reads workspace-local instruction files from `AGENTS.md`,
+`CLAUDE.md`, and `.fp-agent/instructions.md`, then appends them to the model
+system prompt. Whole-line `@relative/path.md` includes are expanded relative to
+the file that references them, and includes must stay inside the workspace.
+Project instructions are not written into the event log, so session logs remain
+focused on user-visible events and audit data.
+
 ### Plugins
 
 Third-party tools can be added as plugin directories with a

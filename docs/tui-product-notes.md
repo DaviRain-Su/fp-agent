@@ -136,6 +136,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   built-in and plugin tool schemas can be checked without asking the model.
 - Code-review tasks add review-specific system guidance without rewriting the
   logged user event, preserving audit and replay fidelity.
+- Project instructions from `AGENTS.md`, `CLAUDE.md`, and
+  `.fp-agent/instructions.md` now load into the model system prompt, with
+  workspace-bounded whole-line `@relative` includes and no event-log leakage.
 - CLI regression tests cover plugin lifecycle commands, REPL plugin/tool
   discovery, custom provider model listing/switching, and the `--confirm --tui`
   argument path before a real terminal is opened.

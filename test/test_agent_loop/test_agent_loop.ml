@@ -43,6 +43,10 @@ let content_of_action = function
 
 let response action = (content_of_action action, Llm.zero_usage)
 
+let write_file path content =
+  Stdlib.Out_channel.with_open_bin path (fun oc ->
+      Stdlib.Out_channel.output_string oc content)
+
 (* A mock that returns a scripted sequence of responses, one per call. *)
 let scripted actions =
   let remaining = ref (List.map actions ~f:response) in
@@ -328,6 +332,48 @@ let test_regular_task_uses_base_system_prompt () =
         "regular task has no review guidance" false
         (String.is_substring !captured_system ~substring:"Code review mode"))
 
+let test_project_instructions_are_added_to_system_prompt () =
+  with_env (fun config workspace event_log session_dir ->
+      let root = Workspace.root workspace in
+      write_file
+        (Stdlib.Filename.concat root "RTK.md")
+        "Prefer repo-specific test evidence.\n";
+      write_file
+        (Stdlib.Filename.concat root "AGENTS.md")
+        "Follow workspace conventions.\n@RTK.md\n";
+      let captured_system = ref "" in
+      let client =
+        Model_client.create_mock_with_request
+          ~send:(fun ~system ~tools_enabled:_ _turns ->
+            captured_system := system;
+            Lwt.return (Ok ([ Llm.Text "done" ], Llm.zero_usage)))
+      in
+      let outcome = run config workspace event_log client "add a feature" in
+      Alcotest.(check string)
+        "status completed" "completed"
+        (Agent_loop.status_to_string outcome.status);
+      Alcotest.(check bool)
+        "system has project instruction header" true
+        (String.is_substring !captured_system
+           ~substring:"Project instructions loaded");
+      Alcotest.(check bool)
+        "system has agents file" true
+        (String.is_substring !captured_system ~substring:"--- AGENTS.md ---");
+      Alcotest.(check bool)
+        "system has included file" true
+        (String.is_substring !captured_system ~substring:"--- RTK.md ---");
+      Alcotest.(check bool)
+        "system has included content" true
+        (String.is_substring !captured_system
+           ~substring:"Prefer repo-specific test evidence.");
+      let log_path = Stdlib.Filename.concat session_dir "events.jsonl" in
+      let contents =
+        Stdlib.In_channel.with_open_bin log_path Stdlib.In_channel.input_all
+      in
+      Alcotest.(check bool)
+        "instructions stay out of event log" false
+        (String.is_substring contents ~substring:"Project instructions loaded"))
+
 let test_max_steps () =
   with_env (fun config workspace event_log _ ->
       let config = { config with Config.max_steps = 3 } in
@@ -465,6 +511,8 @@ let () =
             test_code_review_task_adds_system_guidance_without_rewriting_user_event;
           Alcotest.test_case "regular_task_system" `Quick
             test_regular_task_uses_base_system_prompt;
+          Alcotest.test_case "project_instructions" `Quick
+            test_project_instructions_are_added_to_system_prompt;
           Alcotest.test_case "max_steps" `Quick test_max_steps;
           Alcotest.test_case "max_steps_finalizes" `Quick
             test_max_steps_requests_final_answer_without_tools;
