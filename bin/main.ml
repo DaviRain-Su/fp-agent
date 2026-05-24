@@ -24,17 +24,80 @@ let print_changes root =
         Stdlib.print_string stdout
     | _ -> ()
 
-(* Full-screen live view driven by the event stream. Keeps a rolling buffer of
-   display lines and redraws on each event; no keyboard input (the agent runs
-   autonomously). *)
+(* A reporter renders the run: [on_event] handles each logged event, [tick] is
+   called on a timer to animate a spinner while waiting, and [close] tears
+   down. *)
+type reporter = {
+  on_event : Event.t -> unit;
+  tick : unit -> unit;
+  close : unit -> unit;
+}
+
+let spinner_frames = [| "⠋"; "⠙"; "⠹"; "⠸"; "⠼"; "⠴"; "⠦"; "⠧"; "⠇"; "⠏" |]
+
+let now () = Unix.gettimeofday ()
+
+(* Current phase, derived from state transitions and tool calls, with the time
+   it started so the spinner can show elapsed seconds. *)
+let make_phase () = (ref `Idle, ref (now ()))
+
+let update_phase (phase, t0) (e : Event.t) =
+  match e with
+  | State_transition { to_state = Agent_state.Waiting_for_model; _ } ->
+      phase := `Thinking;
+      t0 := now ()
+  | Tool_call tc ->
+      phase := `Running (Event.describe_tool tc);
+      t0 := now ()
+  | Model_response { action = Model_action.Final_answer _ } -> phase := `Idle
+  | _ -> ()
+
+let phase_label = function
+  | `Idle -> None
+  | `Thinking -> Some "thinking…"
+  | `Running tool -> Some (Printf.sprintf "running %s…" tool)
+
+(* Plain reporter: step lines + an animated spinner line on stderr. The spinner
+   line is rewritten in place with CR + clear-to-EOL. *)
+let make_plain_reporter () =
+  let phase = make_phase () in
+  let i = ref 0 in
+  let clear () = Stdlib.Printf.eprintf "\r\027[K" in
+  let on_event e =
+    update_phase phase e;
+    match Event.to_display e with
+    | Some line ->
+        clear ();
+        Stdlib.Printf.eprintf "%s\n%!" line
+    | None -> ()
+  in
+  let tick () =
+    match phase_label !(fst phase) with
+    | None -> ()
+    | Some label ->
+        let frame = spinner_frames.(!i % Array.length spinner_frames) in
+        Int.incr i;
+        Stdlib.Printf.eprintf "\r\027[K%s %s (%.0fs)%!" frame label
+          (now () -. !(snd phase))
+  in
+  let close () =
+    clear ();
+    Stdlib.Out_channel.flush Stdlib.stderr
+  in
+  { on_event; tick; close }
+
+(* Full-screen view: header, rule, scrolling body, and a footer status line
+   with the spinner. *)
 let make_tui_reporter ~header =
   let module I = Notty.I in
   let module A = Notty.A in
   let term = Notty_unix.Term.create () in
   let lines = ref [] in
+  let phase = make_phase () in
+  let i = ref 0 in
   let redraw () =
-    let _, h = Notty_unix.Term.size term in
-    let body_rows = Int.max 1 (h - 3) in
+    let w, h = Notty_unix.Term.size term in
+    let body_rows = Int.max 1 (h - 4) in
     let shown = View.window ~rows:body_rows !lines in
     let colored s =
       let attr =
@@ -47,19 +110,53 @@ let make_tui_reporter ~header =
       I.string attr s
     in
     let header_img = I.string A.(fg lightblue ++ st bold) header in
+    let rule = I.string A.(fg lightblue) (String.make (Int.max 1 w) '-') in
     let body = I.vcat (List.map shown ~f:colored) in
-    Notty_unix.Term.image term (I.vcat [ header_img; I.void 0 1; body ])
+    let footer =
+      match phase_label !(fst phase) with
+      | None -> I.string A.(fg (gray 12)) "done — ctrl-c to exit"
+      | Some label ->
+          let frame = spinner_frames.(!i % Array.length spinner_frames) in
+          I.string
+            A.(fg cyan)
+            (Printf.sprintf "%s %s (%.0fs)" frame label
+               (now () -. !(snd phase)))
+    in
+    Notty_unix.Term.image term
+      (I.vcat [ header_img; rule; body; I.void 0 1; footer ])
   in
   redraw ();
   let on_event e =
-    match Event.to_display e with
-    | Some line ->
-        lines := !lines @ [ line ];
-        redraw ()
-    | None -> ()
+    update_phase phase e;
+    (match Event.to_display e with
+    | Some line -> lines := !lines @ [ line ]
+    | None -> ());
+    redraw ()
+  in
+  let tick () =
+    Int.incr i;
+    redraw ()
   in
   let close () = Notty_unix.Term.release term in
-  (on_event, close)
+  { on_event; tick; close }
+
+(* Run [agent] (an Agent_loop.run promise) while ticking [reporter] on a timer
+   for the spinner; stop ticking once the run resolves. *)
+let run_with_reporter reporter agent =
+  let stop = ref false in
+  let rec ticker () =
+    if !stop then Lwt.return_unit
+    else
+      Lwt.bind (Lwt_unix.sleep 0.12) (fun () ->
+          reporter.tick ();
+          ticker ())
+  in
+  let main =
+    Lwt.bind agent (fun outcome ->
+        stop := true;
+        Lwt.return outcome)
+  in
+  Lwt.map (fun (outcome, ()) -> outcome) (Lwt.both main (ticker ()))
 
 (* Blocking Y/n prompt on stdin; defaults to deny on EOF or anything but yes. *)
 let prompt_approval tc reason =
@@ -71,11 +168,6 @@ let prompt_approval tc reason =
     | None -> ""
   in
   Lwt.return (String.equal answer "y" || String.equal answer "yes")
-
-let stderr_reporter e =
-  match Event.to_display e with
-  | Some line -> Stdlib.Printf.eprintf "%s\n%!" line
-  | None -> ()
 
 let policy_of ~confirm =
   if confirm then { Policy.approve_commands = true; approve_writes = true }
@@ -131,21 +223,22 @@ let run_oneshot config workspace ~confirm ~resume_opt ~tui ~yolo ~task =
          (List.length initial_history));
   let event_log = Event_log.create ~session_dir in
   let model_client = Model_client.create ~config in
-  let on_event, close_view =
+  let reporter =
     if tui then
       make_tui_reporter
         ~header:(Printf.sprintf "fp-agent  %s  —  %s" config.model task)
-    else (stderr_reporter, fun () -> ())
+    else make_plain_reporter ()
   in
   let policy = policy_of ~confirm:(confirm && not tui) in
   warn_yolo yolo;
   let outcome =
     Lwt_main.run
-      (Agent_loop.run ~on_event ~policy ~on_approval:prompt_approval
-         ~initial_history ~yolo ~config ~model_client ~event_log ~workspace
-         ~task ())
+      (run_with_reporter reporter
+         (Agent_loop.run ~on_event:reporter.on_event ~policy
+            ~on_approval:prompt_approval ~initial_history ~yolo ~config
+            ~model_client ~event_log ~workspace ~task ()))
   in
-  close_view ();
+  reporter.close ();
   Event_log.close event_log;
   print_summary outcome;
   print_changes root;
@@ -278,12 +371,15 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
       | Ok h -> h
       | Error _ -> []
     in
+    let reporter = make_plain_reporter () in
     let outcome =
       Lwt_main.run
-        (Agent_loop.run ~on_event:stderr_reporter ~policy
-           ~on_approval:prompt_approval ~initial_history ~yolo ~config
-           ~model_client ~event_log:!log ~workspace ~task ())
+        (run_with_reporter reporter
+           (Agent_loop.run ~on_event:reporter.on_event ~policy
+              ~on_approval:prompt_approval ~initial_history ~yolo ~config
+              ~model_client ~event_log:!log ~workspace ~task ()))
     in
+    reporter.close ();
     print_summary outcome
   in
   let rec loop () =
