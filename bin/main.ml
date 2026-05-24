@@ -765,10 +765,56 @@ let print_plugin_summary (plugin : Plugin.manifest) =
         (tool_kind_label tool.tool_kind)
         tool.tool_description)
 
-let dispatch new_plugin check_plugin install_plugin task provider api_base model
-    workspace max_steps confirm resume tui yolo =
-  match (new_plugin, check_plugin, install_plugin) with
-  | Some path, _, _ -> (
+let parse_json_arg json =
+  match Yojson.Safe.from_string json with
+  | json -> Ok json
+  | exception exn -> Error ("invalid plugin args JSON: " ^ Exn.to_string exn)
+
+let workspace_for_plugin_debug workspace_opt =
+  let root =
+    Option.value workspace_opt
+      ~default:
+        (Option.value
+           (Stdlib.Sys.getenv_opt "WORKSPACE_ROOT")
+           ~default:(Unix.getcwd ()))
+  in
+  Workspace.create ~root
+
+let run_plugin_tool_cli dir tool_name args_json workspace_opt =
+  match (tool_name, args_json, workspace_for_plugin_debug workspace_opt) with
+  | None, _, _ ->
+      Stdlib.prerr_endline
+        "plugin tool error: --plugin-tool is required with --run-plugin-tool";
+      1
+  | _, None, _ ->
+      Stdlib.prerr_endline
+        "plugin tool error: --plugin-args is required with --run-plugin-tool";
+      1
+  | _, _, Error e ->
+      Stdlib.prerr_endline ("plugin tool error: " ^ e);
+      1
+  | Some tool_name, Some args_json, Ok workspace -> (
+      match parse_json_arg args_json with
+      | Error e ->
+          Stdlib.prerr_endline ("plugin tool error: " ^ e);
+          1
+      | Ok args -> (
+          match Plugin.run_tool ~dir ~tool_name ~workspace ~args with
+          | Error e ->
+              Stdlib.prerr_endline ("plugin tool error: " ^ e);
+              1
+          | Ok (Tool_result.Success { output }) ->
+              Stdlib.print_endline output;
+              0
+          | Ok (Tool_result.Error { message }) ->
+              Stdlib.prerr_endline ("plugin tool error: " ^ message);
+              1))
+
+let dispatch new_plugin check_plugin install_plugin run_plugin_tool plugin_tool
+    plugin_args task provider api_base model workspace max_steps confirm resume
+    tui yolo =
+  match (new_plugin, check_plugin, install_plugin, run_plugin_tool) with
+  | Some path, _, _, _ -> (
       match Plugin.scaffold path with
       | Ok dst ->
           Stdlib.Printf.printf "created plugin scaffold: %s\n" dst;
@@ -776,7 +822,7 @@ let dispatch new_plugin check_plugin install_plugin task provider api_base model
       | Error e ->
           Stdlib.prerr_endline ("plugin scaffold error: " ^ e);
           1)
-  | None, Some path, _ -> (
+  | None, Some path, _, _ -> (
       match Plugin.check path with
       | Ok manifest ->
           Stdlib.print_endline "plugin manifest ok:";
@@ -785,7 +831,7 @@ let dispatch new_plugin check_plugin install_plugin task provider api_base model
       | Error e ->
           Stdlib.prerr_endline ("plugin check error: " ^ e);
           1)
-  | None, None, Some path -> (
+  | None, None, Some path, _ -> (
       match Plugin.install path with
       | Ok dst ->
           Stdlib.Printf.printf "installed plugin: %s\n" dst;
@@ -793,7 +839,9 @@ let dispatch new_plugin check_plugin install_plugin task provider api_base model
       | Error e ->
           Stdlib.prerr_endline ("plugin install error: " ^ e);
           1)
-  | None, None, None -> (
+  | None, None, None, Some dir ->
+      run_plugin_tool_cli dir plugin_tool plugin_args workspace
+  | None, None, None, None -> (
       match task with
       | Some _ when confirm && tui ->
           Stdlib.prerr_endline
@@ -829,6 +877,29 @@ let () =
           ~doc:
             "Install a plugin directory containing fp-agent-plugin.json into \
              the plugin home, then exit.")
+  in
+  let run_plugin_tool =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "run-plugin-tool" ] ~docv:"DIR"
+          ~doc:
+            "Run a plugin tool locally from DIR, then exit. Requires \
+             --plugin-tool and --plugin-args.")
+  in
+  let plugin_tool =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "plugin-tool" ] ~docv:"NAME"
+          ~doc:"Plugin tool name for --run-plugin-tool.")
+  in
+  let plugin_args =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "plugin-args" ] ~docv:"JSON"
+          ~doc:"JSON argument object for --run-plugin-tool.")
   in
   let check_plugin =
     Arg.(
@@ -917,9 +988,9 @@ let () =
   let doc = "A type-safe local CLI code agent harness." in
   let term =
     Term.(
-      const dispatch $ new_plugin $ check_plugin $ install_plugin $ task
-      $ provider $ api_base $ model $ workspace $ max_steps $ confirm $ resume
-      $ tui $ yolo)
+      const dispatch $ new_plugin $ check_plugin $ install_plugin
+      $ run_plugin_tool $ plugin_tool $ plugin_args $ task $ provider $ api_base
+      $ model $ workspace $ max_steps $ confirm $ resume $ tui $ yolo)
   in
   let info = Cmd.info "fp-agent" ~version:"0.1.0" ~doc in
   Stdlib.exit (Cmd.eval' (Cmd.v info term))

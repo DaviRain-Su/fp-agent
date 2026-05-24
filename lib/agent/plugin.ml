@@ -247,6 +247,26 @@ let plugin_check kind workspace args =
       | Error reason -> Permission.Deny reason)
   | _ -> Permission.Allow
 
+let run_tool ~dir ~tool_name ~workspace ~args =
+  match load_manifest dir with
+  | Error e -> Error e
+  | Ok manifest -> (
+      match
+        List.find manifest.tools ~f:(fun tool ->
+            String.equal tool.tool_name tool_name)
+      with
+      | None -> Error ("unknown plugin tool: " ^ tool_name)
+      | Some tool -> (
+          match plugin_check tool.tool_kind workspace args with
+          | Permission.Allow ->
+              Ok (run_plugin_tool manifest tool workspace args)
+          | Permission.Ask_user reason ->
+              Ok
+                (Tool_result.Error
+                   { message = "requires user approval: " ^ reason })
+          | Permission.Deny reason ->
+              Ok (Tool_result.Error { message = "policy denied: " ^ reason })))
+
 let register_manifest manifest =
   List.iter manifest.tools ~f:(fun plugin_tool ->
       if Option.is_none (Tool.find plugin_tool.tool_name) then

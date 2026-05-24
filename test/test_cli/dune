@@ -1,3 +1,4 @@
 (test
  (name test_cli)
+ (deps %{bin:fp-agent})
  (libraries alcotest base unix))

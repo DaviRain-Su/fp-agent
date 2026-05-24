@@ -164,6 +164,44 @@ let test_install_plugin_copies_to_home () =
             (List.exists manifests ~f:(fun (m : Plugin.manifest) ->
                  String.equal m.id "com.example.install")))
 
+let test_run_tool_for_plugin_development () =
+  with_temp_dir "fp_agent_plugin_run_tool" (fun root ->
+      let plugin_dir = Stdlib.Filename.concat root "plugin" in
+      mkdir_p plugin_dir;
+      write_plugin plugin_dir ~id:"com.example.run_tool"
+        ~tool_name:"plugin_dev_echo" ~kind:"read";
+      match
+        Plugin.run_tool ~dir:plugin_dir ~tool_name:"plugin_dev_echo"
+          ~workspace:(workspace root)
+          ~args:(`Assoc [ ("message", `String "hello") ])
+      with
+      | Error e -> Alcotest.failf "run_tool failed: %s" e
+      | Ok (Tool_result.Error { message }) ->
+          Alcotest.failf "plugin returned error: %s" message
+      | Ok (Tool_result.Success { output }) ->
+          Alcotest.(check bool)
+            "output includes tool" true
+            (String.is_substring output ~substring:"tool=plugin_dev_echo");
+          Alcotest.(check bool)
+            "output includes args" true
+            (String.is_substring output ~substring:{|"message":"hello"|}))
+
+let test_run_tool_reports_unknown_tool () =
+  with_temp_dir "fp_agent_plugin_unknown_tool" (fun root ->
+      let plugin_dir = Stdlib.Filename.concat root "plugin" in
+      mkdir_p plugin_dir;
+      write_plugin plugin_dir ~id:"com.example.unknown_tool"
+        ~tool_name:"plugin_known" ~kind:"read";
+      match
+        Plugin.run_tool ~dir:plugin_dir ~tool_name:"plugin_missing"
+          ~workspace:(workspace root) ~args:(`Assoc [])
+      with
+      | Ok _ -> Alcotest.fail "expected unknown tool error"
+      | Error e ->
+          Alcotest.(check bool)
+            "unknown tool message" true
+            (String.is_substring e ~substring:"unknown plugin tool"))
+
 let test_scaffold_creates_valid_plugin () =
   with_temp_dir "fp_agent_plugin_scaffold" (fun root ->
       let dir = Stdlib.Filename.concat root "starter" in
@@ -231,6 +269,10 @@ let () =
             test_plugin_write_policy_uses_path_bounds;
           Alcotest.test_case "install_plugin" `Quick
             test_install_plugin_copies_to_home;
+          Alcotest.test_case "run_tool" `Quick
+            test_run_tool_for_plugin_development;
+          Alcotest.test_case "run_tool_unknown" `Quick
+            test_run_tool_reports_unknown_tool;
           Alcotest.test_case "scaffold_plugin" `Quick
             test_scaffold_creates_valid_plugin;
           Alcotest.test_case "check_invalid_plugin" `Quick

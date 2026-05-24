@@ -119,6 +119,56 @@ let test_plugin_lifecycle_cli () =
        (Stdlib.Filename.concat home
           (Stdlib.Filename.concat "local.my-plugin" "fp-agent-plugin.json")))
 
+let test_plugin_tool_debug_cli () =
+  let root = tmp_dir "fp-agent-cli-plugin-run-" in
+  let plugin_dir = Stdlib.Filename.concat root "my-plugin" in
+  let bin = fp_agent_bin () in
+  let env = isolated_env root in
+  assert_success "new plugin" (run ~env [ bin; "--new-plugin"; plugin_dir ]);
+  let ok =
+    run ~env
+      [
+        bin;
+        "--run-plugin-tool";
+        plugin_dir;
+        "--plugin-tool";
+        "hello_world";
+        "--plugin-args";
+        {|{"message":"hi"}|};
+      ]
+  in
+  assert_success "run plugin tool" ok;
+  assert_contains "plugin output prefix" ok.stdout "hello from fp-agent plugin:";
+  assert_contains "plugin output args" ok.stdout {|"message":"hi"|};
+  let bad_json =
+    run ~env
+      [
+        bin;
+        "--run-plugin-tool";
+        plugin_dir;
+        "--plugin-tool";
+        "hello_world";
+        "--plugin-args";
+        "{";
+      ]
+  in
+  assert_failure "bad plugin JSON" bad_json;
+  assert_contains "bad json stderr" bad_json.stderr "invalid plugin args JSON";
+  let missing =
+    run ~env
+      [
+        bin;
+        "--run-plugin-tool";
+        plugin_dir;
+        "--plugin-tool";
+        "missing_tool";
+        "--plugin-args";
+        "{}";
+      ]
+  in
+  assert_failure "missing plugin tool" missing;
+  assert_contains "missing tool stderr" missing.stderr "unknown plugin tool"
+
 let test_repl_lists_dynamic_plugin_tools () =
   let root = tmp_dir "fp-agent-cli-repl-plugin-" in
   let plugin_dir = Stdlib.Filename.concat root "my-plugin" in
@@ -229,6 +279,8 @@ let () =
       ( "cli",
         [
           Alcotest.test_case "plugin lifecycle" `Quick test_plugin_lifecycle_cli;
+          Alcotest.test_case "plugin tool debug" `Quick
+            test_plugin_tool_debug_cli;
           Alcotest.test_case "repl plugin tools" `Quick
             test_repl_lists_dynamic_plugin_tools;
           Alcotest.test_case "custom provider models" `Quick

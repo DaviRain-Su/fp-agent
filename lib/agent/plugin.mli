@@ -38,6 +38,15 @@ val check : string -> (manifest, string) result
 val scaffold : ?id:string -> string -> (string, string) result
 (** Create a starter plugin directory and return its path. *)
 
+val run_tool :
+  dir:string ->
+  tool_name:string ->
+  workspace:Workspace.t ->
+  args:Yojson.Safe.t ->
+  (Tool_result.t, string) result
+(** Load [dir], run [tool_name] with [args], and return the tool result. This is
+    the local developer-facing runner used by the CLI debug command. *)
+
 val install_home : unit -> string option
 (** Directory used by [install]. Controlled by [FP_AGENT_PLUGIN_HOME], falling
     back to [~/.local/share/fp-agent/plugins]. *)

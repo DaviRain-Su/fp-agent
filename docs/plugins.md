@@ -79,6 +79,19 @@ Validate it before installing:
 dune exec -- fp-agent --check-plugin my-plugin
 ```
 
+Run one tool locally while developing, without calling a model:
+
+```sh
+dune exec -- fp-agent --run-plugin-tool my-plugin \
+  --plugin-tool hello_world \
+  --plugin-args '{"message":"hi"}'
+```
+
+The command loads the manifest, validates the JSON args, runs the tool from the
+plugin directory, and prints stdout. It uses `--workspace` or `WORKSPACE_ROOT`
+for `FP_AGENT_WORKSPACE` and applies the same path guard used by plugin tools in
+agent runs.
+
 Install a local plugin directory:
 
 ```sh
