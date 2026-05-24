@@ -322,6 +322,107 @@ let providers_lines ctx =
            model id, or /provider-add <name> <base-url> <model> to add one.";
         ]
 
+let provider_config_file_lines (file : Config.provider_config_file_diagnostic) =
+  let status =
+    if file.config_exists then
+      match file.config_error with None -> "ok" | Some _ -> "invalid"
+    else "missing"
+  in
+  let provider_names =
+    match file.config_provider_names with
+    | [] -> []
+    | names -> [ "      providers: " ^ String.concat names ~sep:", " ]
+  in
+  let error =
+    match file.config_error with
+    | None -> []
+    | Some e -> [ "      error: " ^ e ]
+  in
+  (Printf.sprintf "  - %s [%s]" file.config_path status :: provider_names)
+  @ error
+
+let provider_profile_lines (profile : Config.custom_provider_diagnostic) =
+  let status =
+    match profile.custom_provider_error with
+    | None -> "ok"
+    | Some _ -> "invalid"
+  in
+  let protocol =
+    Option.value_map profile.custom_provider_protocol ~default:"?"
+      ~f:protocol_label
+  in
+  let api_base = Option.value profile.custom_provider_api_base ~default:"?" in
+  let models =
+    match profile.custom_provider_models with
+    | [] -> "(no models configured)"
+    | models -> String.concat models ~sep:", "
+  in
+  let default_model =
+    Option.value profile.custom_provider_default_model ~default:"?"
+  in
+  let auth =
+    if profile.custom_provider_has_api_key then "configured" else "empty"
+  in
+  let error =
+    match profile.custom_provider_error with
+    | None -> []
+    | Some e -> [ "      error: " ^ e ]
+  in
+  [
+    Printf.sprintf "  - %s [%s]" profile.custom_provider_name status;
+    "      source: " ^ profile.custom_provider_path;
+    "      protocol: " ^ protocol;
+    "      api_base: " ^ api_base;
+    "      auth: " ^ auth;
+    "      default_model: " ^ default_model;
+    "      models: " ^ models;
+  ]
+  @ error
+
+let provider_catalog_lines (entry : Config.provider_catalog_entry) =
+  let models =
+    match entry.provider_models with
+    | [] -> "(no models configured)"
+    | models -> String.concat models ~sep:", "
+  in
+  [
+    "  - " ^ entry.provider_name;
+    "      protocol: " ^ protocol_label entry.provider_protocol;
+    "      api_base: " ^ entry.provider_api_base;
+    "      models: " ^ models;
+  ]
+
+let provider_diagnostics_lines () =
+  let diagnostics = Config.provider_diagnostics () in
+  let config_lines =
+    match diagnostics.provider_config_files with
+    | [] -> [ "  (no config paths)" ]
+    | files -> List.concat_map files ~f:provider_config_file_lines
+  in
+  let custom_lines =
+    match diagnostics.custom_provider_diagnostics with
+    | [] -> [ "  (no custom provider profiles found)" ]
+    | profiles -> List.concat_map profiles ~f:provider_profile_lines
+  in
+  let catalog_lines =
+    match diagnostics.provider_catalog with
+    | [] -> [ "  (no configured providers)" ]
+    | entries -> List.concat_map entries ~f:provider_catalog_lines
+  in
+  [ "Provider diagnostics"; "config_paths:" ]
+  @ config_lines
+  @ [ ""; "custom_providers:" ]
+  @ custom_lines
+  @ [ ""; "provider_catalog:" ]
+  @ catalog_lines
+  @ [
+      "";
+      "next: /providers";
+      "next: /models";
+      "next: /provider <name> [model]";
+      "next: /provider-add <name> <base-url> <model>";
+    ]
+
 let models_lines ctx =
   match Config.available_providers () with
   | [] -> [ "(no configured providers; add providers to FP_AGENT_CONFIG)" ]
@@ -784,6 +885,8 @@ let run ctx command =
   | Command (Models, _) -> Some (command_section command (models_lines ctx))
   | Command (Providers, _) ->
       Some (command_section command (providers_lines ctx))
+  | Command (ProviderDoctor, _) ->
+      Some (command_section command (provider_diagnostics_lines ()))
   | Command (Diff, _) -> Some (command_section command (diff_lines ctx))
   | Command (Log, _) -> Some (command_section command (log_lines ctx))
   | Command (Inspect, arg) ->

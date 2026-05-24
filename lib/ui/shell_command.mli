@@ -22,6 +22,7 @@ type id =
   | ModelNext
   | Models
   | Providers
+  | ProviderDoctor
   | Provider
   | ProviderAdd
   | Log

@@ -572,6 +572,34 @@ let test_config_providers () =
         [ "qwen36-rtx"; "qwen-coder" ]
         entry.provider_models
   | None -> Alcotest.fail "custom provider missing from catalog");
+  let diagnostics = Config.provider_diagnostics () in
+  (match
+     List.find diagnostics.provider_config_files ~f:(fun file ->
+         String.equal file.config_path config_path)
+   with
+  | Some file ->
+      Alcotest.(check bool) "diagnostic config exists" true file.config_exists;
+      Alcotest.(check (option string))
+        "diagnostic config valid" None file.config_error;
+      Alcotest.(check (list string))
+        "diagnostic config provider names" [ "local-llm" ]
+        file.config_provider_names
+  | None -> Alcotest.fail "diagnostic config path missing");
+  (match
+     List.find diagnostics.custom_provider_diagnostics ~f:(fun profile ->
+         String.equal profile.custom_provider_name "local-llm")
+   with
+  | Some profile ->
+      Alcotest.(check (option string))
+        "diagnostic custom provider valid" None profile.custom_provider_error;
+      Alcotest.(check (list string))
+        "diagnostic custom provider models"
+        [ "qwen36-rtx"; "qwen-coder" ]
+        profile.custom_provider_models;
+      Alcotest.(check bool)
+        "diagnostic custom provider hides key as bool" true
+        profile.custom_provider_has_api_key
+  | None -> Alcotest.fail "custom provider diagnostic missing");
   (match
      Config.load ~provider:"local-llm" ~model:"qwen-coder"
        ~api_base:"http://127.0.0.1:18080/v1" ()

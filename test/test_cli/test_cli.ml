@@ -930,6 +930,40 @@ let provider_config =
 }
 |}
 
+let provider_diagnostic_config =
+  {|{
+  "providers": {
+    "local-llm": {
+      "baseUrl": "http://101.132.142.56:18080/v1",
+      "api": "openai-completions",
+      "apiKey": "dummy",
+      "models": ["qwen36-rtx"]
+    },
+    "broken-llm": {
+      "api": "openai-completions",
+      "models": ["broken-model"]
+    }
+  }
+}
+|}
+
+let test_cli_provider_doctor () =
+  let root = tmp_dir "fp-agent-cli-provider-doctor-" in
+  let config_path = Stdlib.Filename.concat root "providers.json" in
+  write_file config_path provider_diagnostic_config;
+  let env = isolated_env root @ [ ("FP_AGENT_CONFIG", config_path) ] in
+  let doctor = run ~env [ fp_agent_bin (); "--doctor-providers" ] in
+  assert_success "doctor providers" doctor;
+  assert_contains "provider doctor header" doctor.stdout "Provider diagnostics";
+  assert_contains "provider doctor config path" doctor.stdout config_path;
+  assert_contains "provider doctor good profile" doctor.stdout "local-llm [ok]";
+  assert_contains "provider doctor invalid profile" doctor.stdout
+    "broken-llm [invalid]";
+  assert_contains "provider doctor invalid reason" doctor.stdout
+    "missing baseUrl/base_url/apiBase/api_base";
+  assert_contains "provider doctor catalog deepseek" doctor.stdout "deepseek";
+  assert_contains "provider doctor next command" doctor.stdout "next: /models"
+
 let test_repl_lists_and_switches_custom_provider_models () =
   let root = tmp_dir "fp-agent-cli-models-" in
   let config_path = Stdlib.Filename.concat root "providers.json" in
@@ -939,6 +973,7 @@ let test_repl_lists_and_switches_custom_provider_models () =
     run ~env
       ~stdin:
         "/providers\n\
+         /provider-doctor\n\
          /models\n\
          /model qwen36-rtx\n\
          /model-next\n\
@@ -955,6 +990,13 @@ let test_repl_lists_and_switches_custom_provider_models () =
     "auth: custom config (api key hidden)";
   assert_contains "providers include custom base" repl.stdout
     "api_base: http://101.132.142.56:18080/v1";
+  assert_contains "provider doctor header" repl.stdout "Provider diagnostics";
+  assert_contains "provider doctor config paths" repl.stdout "config_paths:";
+  assert_contains "provider doctor config file" repl.stdout config_path;
+  assert_contains "provider doctor custom profile" repl.stdout "local-llm [ok]";
+  assert_contains "provider doctor custom models" repl.stdout
+    "models: qwen36-rtx, qwen36-rtx-fast";
+  assert_contains "provider doctor catalog" repl.stdout "provider_catalog:";
   assert_contains "models include deepseek" repl.stdout "deepseek";
   assert_contains "models include custom provider" repl.stdout "local-llm";
   assert_contains "models include custom model" repl.stdout "qwen36-rtx";
@@ -1235,6 +1277,7 @@ let () =
             test_repl_lists_dynamic_plugin_tools;
           Alcotest.test_case "custom provider models" `Quick
             test_repl_lists_and_switches_custom_provider_models;
+          Alcotest.test_case "provider doctor" `Quick test_cli_provider_doctor;
           Alcotest.test_case "add provider profile" `Quick
             test_cli_adds_custom_provider_profile;
           Alcotest.test_case "repl instructions" `Quick

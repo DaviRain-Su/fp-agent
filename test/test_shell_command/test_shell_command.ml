@@ -38,6 +38,10 @@ let test_parse () =
     (Shell_command.parse "/providers");
   require_command "providers alias" Shell_command.Providers ""
     (Shell_command.parse "/provider-list");
+  require_command "provider doctor" Shell_command.ProviderDoctor ""
+    (Shell_command.parse "/provider-doctor");
+  require_command "provider doctor alias" Shell_command.ProviderDoctor ""
+    (Shell_command.parse "/providers-doctor");
   require_command "new session" Shell_command.NewSession ""
     (Shell_command.parse "/new");
   require_command "usage" Shell_command.Usage "" (Shell_command.parse "/usage");
@@ -141,6 +145,11 @@ let test_metadata () =
     "palette has providers" true
     (List.mem palette "/providers" ~equal:String.equal);
   Alcotest.(check string) "providers group" "Models" (entry "/providers").group;
+  Alcotest.(check bool)
+    "palette has provider doctor" true
+    (List.mem palette "/provider-doctor" ~equal:String.equal);
+  Alcotest.(check string)
+    "provider doctor group" "Models" (entry "/provider-doctor").group;
   Alcotest.(check string)
     "provider group" "Models"
     (entry "/provider <name> [model] [api-base]").group;
@@ -288,6 +297,9 @@ let test_acceptance () =
     (Shell_command.accept (entry "/model-next"));
   require_acceptance "providers execute" ("execute", "/providers")
     (Shell_command.accept (entry "/providers"));
+  require_acceptance "provider doctor execute"
+    ("execute", "/provider-doctor")
+    (Shell_command.accept (entry "/provider-doctor"));
   require_acceptance "usage execute" ("execute", "/usage")
     (Shell_command.accept (entry "/usage"));
   require_acceptance "plan execute" ("execute", "/plan")

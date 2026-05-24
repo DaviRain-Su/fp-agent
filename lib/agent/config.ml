@@ -27,6 +27,30 @@ type provider_catalog_entry = {
   provider_protocol : Provider.protocol;
 }
 
+type provider_config_file_diagnostic = {
+  config_path : string;
+  config_exists : bool;
+  config_error : string option;
+  config_provider_names : string list;
+}
+
+type custom_provider_diagnostic = {
+  custom_provider_name : string;
+  custom_provider_path : string;
+  custom_provider_error : string option;
+  custom_provider_api_base : string option;
+  custom_provider_models : string list;
+  custom_provider_protocol : Provider.protocol option;
+  custom_provider_has_api_key : bool;
+  custom_provider_default_model : string option;
+}
+
+type provider_diagnostics = {
+  provider_config_files : provider_config_file_diagnostic list;
+  custom_provider_diagnostics : custom_provider_diagnostic list;
+  provider_catalog : provider_catalog_entry list;
+}
+
 let default_max_steps = 30
 
 let default_compat =
@@ -162,6 +186,40 @@ let provider_fields json =
   | `Assoc fields -> fields
   | _ -> ( match json with `Assoc fields -> fields | _ -> [])
 
+let parse_custom_provider name obj =
+  let api =
+    json_string obj [ "api"; "protocol" ]
+    |> Option.value ~default:"openai-completions"
+    |> String.lowercase
+  in
+  match
+    ( json_string obj [ "baseUrl"; "base_url"; "apiBase"; "api_base" ],
+      protocol_of_api api )
+  with
+  | None, _ -> Error "missing baseUrl/base_url/apiBase/api_base"
+  | _, None -> Error ("unsupported provider api: " ^ api)
+  | Some api_base, Some protocol ->
+      let models = model_specs obj in
+      let api_key =
+        json_string obj [ "apiKey"; "api_key" ]
+        |> Option.value_map ~default:"" ~f:api_key_from_spec
+      in
+      let default_model =
+        Option.first_some
+          (json_string obj [ "defaultModel"; "default_model"; "model" ])
+          (List.hd (model_ids models))
+      in
+      Ok
+        {
+          name;
+          api_key;
+          api_base;
+          protocol;
+          compat = compat_of_json obj;
+          default_model;
+          models;
+        }
+
 let candidate_config_paths () =
   let explicit =
     match getenv_nonempty "FP_AGENT_CONFIG" with Some p -> [ p ] | None -> []
@@ -177,6 +235,7 @@ let candidate_config_paths () =
     | None -> []
   in
   explicit @ [ ".fp-agent/providers.json"; ".fp-agent.json" ] @ home
+  |> dedupe_nonempty
 
 let load_custom_provider name =
   let parse path =
@@ -187,39 +246,7 @@ let load_custom_provider name =
           List.Assoc.find (provider_fields json) name ~equal:String.equal
         with
         | None -> None
-        | Some obj -> (
-            let api =
-              json_string obj [ "api"; "protocol" ]
-              |> Option.value ~default:"openai-completions"
-              |> String.lowercase
-            in
-            match
-              ( json_string obj [ "baseUrl"; "base_url"; "apiBase"; "api_base" ],
-                protocol_of_api api )
-            with
-            | Some api_base, Some protocol ->
-                let models = model_specs obj in
-                let api_key =
-                  json_string obj [ "apiKey"; "api_key" ]
-                  |> Option.value_map ~default:"" ~f:api_key_from_spec
-                in
-                let default_model =
-                  Option.first_some
-                    (json_string obj
-                       [ "defaultModel"; "default_model"; "model" ])
-                    (List.hd (model_ids models))
-                in
-                Some
-                  {
-                    name;
-                    api_key;
-                    api_base;
-                    protocol;
-                    compat = compat_of_json obj;
-                    default_model;
-                    models;
-                  }
-            | _ -> None))
+        | Some obj -> Result.ok (parse_custom_provider name obj))
   in
   List.find_map (candidate_config_paths ()) ~f:parse
 
@@ -441,6 +468,84 @@ let available_providers () =
             }))
   in
   builtin_entries @ custom_entries
+
+let read_provider_fields path =
+  match Yojson.Safe.from_file path with
+  | exception exn ->
+      Error
+        (Printf.sprintf "invalid provider config %s: %s" path
+           (Exn.to_string exn))
+  | json -> Ok (provider_fields json)
+
+let provider_config_file_diagnostic path =
+  if not (Stdlib.Sys.file_exists path) then
+    {
+      config_path = path;
+      config_exists = false;
+      config_error = None;
+      config_provider_names = [];
+    }
+  else
+    match read_provider_fields path with
+    | Error e ->
+        {
+          config_path = path;
+          config_exists = true;
+          config_error = Some e;
+          config_provider_names = [];
+        }
+    | Ok fields ->
+        {
+          config_path = path;
+          config_exists = true;
+          config_error = None;
+          config_provider_names = List.map fields ~f:fst;
+        }
+
+let custom_provider_diagnostic path name obj =
+  match parse_custom_provider name obj with
+  | Error e ->
+      {
+        custom_provider_name = name;
+        custom_provider_path = path;
+        custom_provider_error = Some e;
+        custom_provider_api_base = None;
+        custom_provider_models = [];
+        custom_provider_protocol = None;
+        custom_provider_has_api_key = false;
+        custom_provider_default_model = None;
+      }
+  | Ok custom ->
+      {
+        custom_provider_name = custom.name;
+        custom_provider_path = path;
+        custom_provider_error = None;
+        custom_provider_api_base = Some custom.api_base;
+        custom_provider_models = dedupe_nonempty (custom_models custom);
+        custom_provider_protocol = Some custom.protocol;
+        custom_provider_has_api_key = not (String.is_empty custom.api_key);
+        custom_provider_default_model = custom.default_model;
+      }
+
+let custom_provider_diagnostics () =
+  candidate_config_paths ()
+  |> List.concat_map ~f:(fun path ->
+      if not (Stdlib.Sys.file_exists path) then []
+      else
+        match read_provider_fields path with
+        | Error _ -> []
+        | Ok fields ->
+            List.filter_map fields ~f:(fun (name, obj) ->
+                if Option.is_some (Provider.of_string name) then None
+                else Some (custom_provider_diagnostic path name obj)))
+
+let provider_diagnostics () =
+  {
+    provider_config_files =
+      List.map (candidate_config_paths ()) ~f:provider_config_file_diagnostic;
+    custom_provider_diagnostics = custom_provider_diagnostics ();
+    provider_catalog = available_providers ();
+  }
 
 let resolve_provider provider =
   match Option.first_some provider (getenv_nonempty "PROVIDER") with

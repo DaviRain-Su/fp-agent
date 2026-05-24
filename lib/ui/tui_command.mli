@@ -25,6 +25,10 @@ val context_lines : context -> string list
 val providers_lines : context -> string list
 (** Render configured provider profiles without a command header. *)
 
+val provider_diagnostics_lines : unit -> string list
+(** Render provider config search paths and model discovery diagnostics without
+    a command header. *)
+
 val sessions_lines : context -> string list
 (** Render resumable sessions with event-log metadata. *)
 

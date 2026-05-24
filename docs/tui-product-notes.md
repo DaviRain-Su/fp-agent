@@ -80,6 +80,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - `/providers` now renders a provider discovery panel with built-in and custom
   profiles, protocol, API base, auth hint, models, and active model markers
   while hiding API key values.
+- `/provider-doctor` and `--doctor-providers` now render provider discovery
+  diagnostics: config search paths, parse/field errors, custom profile details,
+  and the final provider/model catalog used by `/models`.
 - `/provider-add <name> <base-url> <model[,model...]>` saves a provider profile
   into `FP_AGENT_CONFIG` or `.fp-agent/providers.json`, including local-server
   compatibility flags, so custom OpenAI-compatible endpoints can be added from

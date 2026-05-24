@@ -25,6 +25,30 @@ type provider_catalog_entry = {
   provider_protocol : Provider.protocol;
 }
 
+type provider_config_file_diagnostic = {
+  config_path : string;
+  config_exists : bool;
+  config_error : string option;
+  config_provider_names : string list;
+}
+
+type custom_provider_diagnostic = {
+  custom_provider_name : string;
+  custom_provider_path : string;
+  custom_provider_error : string option;
+  custom_provider_api_base : string option;
+  custom_provider_models : string list;
+  custom_provider_protocol : Provider.protocol option;
+  custom_provider_has_api_key : bool;
+  custom_provider_default_model : string option;
+}
+
+type provider_diagnostics = {
+  provider_config_files : provider_config_file_diagnostic list;
+  custom_provider_diagnostics : custom_provider_diagnostic list;
+  provider_catalog : provider_catalog_entry list;
+}
+
 val load :
   ?provider:string ->
   ?api_base:string ->
@@ -44,6 +68,11 @@ val available_providers : unit -> provider_catalog_entry list
 (** Return the built-in provider/model catalog plus custom providers found in
     [FP_AGENT_CONFIG] or the default provider config files. API keys are not
     required for catalog listing. *)
+
+val provider_diagnostics : unit -> provider_diagnostics
+(** Return read-only diagnostics for provider/model discovery, including config
+    file search paths, parse errors, custom profile validation, and the final
+    provider catalog. API key values are never returned. *)
 
 val provider_config_path : ?path:string -> unit -> string
 (** Return the custom provider config path that write operations should use.

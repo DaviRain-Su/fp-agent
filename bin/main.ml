@@ -2216,6 +2216,11 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
         | Command (Providers, _) ->
             print_providers ();
             loop ()
+        | Command (ProviderDoctor, _) ->
+            List.iter
+              (Tui_command.provider_diagnostics_lines ())
+              ~f:Stdlib.print_endline;
+            loop ()
         | Command (Provider, args) ->
             switch_provider args;
             loop ()
@@ -2545,9 +2550,9 @@ let dispatch add_provider provider_base provider_models provider_api
     replace_provider new_plugin plugin_id plugin_tool_name plugin_kind
     plugin_template check_plugin install_plugin smoke_plugin dev_plugin
     package_plugin plugin_package_output replace_plugin list_plugins
-    doctor_plugins plugin_sdk remove_plugin run_plugin_tool plugin_tool
-    plugin_args plugin_args_file task provider api_base model workspace
-    max_steps confirm resume tui yolo =
+    doctor_plugins doctor_providers plugin_sdk remove_plugin run_plugin_tool
+    plugin_tool plugin_args plugin_args_file task provider api_base model
+    workspace max_steps confirm resume tui yolo =
   match add_provider with
   | Some name ->
       run_provider_add_cli name provider_base provider_models provider_api
@@ -2567,6 +2572,11 @@ let dispatch add_provider provider_base provider_models provider_api
       1
   | None when plugin_sdk ->
       List.iter (Tui_command.plugin_sdk_lines ()) ~f:Stdlib.print_endline;
+      0
+  | None when doctor_providers ->
+      List.iter
+        (Tui_command.provider_diagnostics_lines ())
+        ~f:Stdlib.print_endline;
       0
   | None
     when Option.is_some plugin_package_output && Option.is_none package_plugin
@@ -2841,6 +2851,15 @@ let () =
           ~doc:
             "Show plugin search roots, install home, invalid manifests, and \
              tool-name conflicts, then exit.")
+  in
+  let doctor_providers =
+    Arg.(
+      value & flag
+      & info
+          [ "doctor-providers"; "provider-doctor" ]
+          ~doc:
+            "Show provider config search paths, custom provider diagnostics, \
+             and the final provider/model catalog, then exit.")
   in
   let plugin_sdk =
     Arg.(
@@ -3160,10 +3179,10 @@ let () =
       $ new_plugin $ plugin_id $ plugin_tool_name $ plugin_kind
       $ plugin_template $ check_plugin $ install_plugin $ smoke_plugin
       $ dev_plugin $ package_plugin $ plugin_package_output $ replace_plugin
-      $ list_plugins $ doctor_plugins $ plugin_sdk $ remove_plugin
-      $ run_plugin_tool $ plugin_tool $ plugin_args $ plugin_args_file $ task
-      $ provider $ api_base $ model $ workspace $ max_steps $ confirm $ resume
-      $ tui $ yolo)
+      $ list_plugins $ doctor_plugins $ doctor_providers $ plugin_sdk
+      $ remove_plugin $ run_plugin_tool $ plugin_tool $ plugin_args
+      $ plugin_args_file $ task $ provider $ api_base $ model $ workspace
+      $ max_steps $ confirm $ resume $ tui $ yolo)
   in
   let info = Cmd.info "fp-agent" ~version:"0.1.0" ~doc in
   Stdlib.exit (Cmd.eval' (Cmd.v info term))

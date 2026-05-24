@@ -85,6 +85,7 @@ dune exec -- fp-agent
 > /model-next        # cycle current provider's configured models
 > /provider local-llm qwen36-rtx
 > /provider-add local-llm http://101.132.142.56:18080/v1 qwen36-rtx --api-key dummy --local-compat
+> /provider-doctor   # explain provider config paths and model discovery
 > /tools             # preview available tools
 > /tool read_file    # inspect a tool's kind/schema/description
 > /plugin-doctor     # show plugin search paths and diagnostics
@@ -111,9 +112,10 @@ the same session log and command palette as one-shot TUI runs; Ctrl+Enter
 submits the current draft as either a slash command or an agent task. `/model
 <id>` can switch to another configured provider when the model id uniquely
 matches that provider; `/providers` shows provider profiles, protocol, API
-base, auth status, and models without exposing API keys; `/model-next` cycles
-the current provider's models; and `/provider <name> [model] [api-base]`
-updates the active runtime directly.
+base, auth status, and models without exposing API keys; `/provider-doctor`
+shows the searched config files, invalid custom profiles, and final
+provider/model catalog; `/model-next` cycles the current provider's models; and
+`/provider <name> [model] [api-base]` updates the active runtime directly.
 `/resume <dir>` and `/fork [index]` switch the active event-sourced session.
 
 Code review requests, including explicit `/review [focus]`, get a
@@ -312,6 +314,10 @@ copy. Two consequences:
 - **Provider discovery** (`/providers`) shows every built-in and custom
   provider profile with protocol, API base, auth hint, models, and the active
   model without exposing API keys.
+- **Provider diagnostics** (`/provider-doctor`, `--doctor-providers`) shows
+  config search paths, parse/field errors, custom profiles, and the final
+  provider/model catalog so missing local or DeepSeek models can be diagnosed
+  without spending a model call.
 - **TUI session navigation** lets `/new`, `/resume <dir>`, and `/fork [index]`
   switch the active fullscreen session and continue writing to the selected
   event log.
@@ -354,6 +360,8 @@ Options:
   `--add-provider`
 - `--provider-local-compat` — OpenAI-compatible local-server defaults for
   `--add-provider` (`max_tokens`, no developer role, no streaming usage)
+- `--doctor-providers` / `--provider-doctor` — show provider config and model
+  discovery diagnostics, then exit
 - `-w`, `--workspace DIR` — workspace root (default: `WORKSPACE_ROOT` or cwd)
 - `--max-steps N` — max agent steps (default: `MAX_STEPS` or 30)
 - `--confirm` — ask for approval before each shell command or file write;
@@ -464,9 +472,11 @@ The implementation uses `baseUrl`, `api`, `apiKey`, `models[].id` or
 `models[].name`, `models[].maxTokens`, `compat.supportsUsageInStreaming`, and
 `compat.maxTokensField`. In the REPL, `/models` lists built-in providers plus
 custom providers from these files, and `/providers` adds protocol, API base, and
-auth hints without printing API keys. `/model <id>` switches to the uniquely
-matching configured provider/model, while `/provider <name> <model>` keeps an
-explicit provider override available.
+auth hints without printing API keys. `/provider-doctor` and
+`--doctor-providers` show which config files were searched, whether a custom
+profile was invalid, and the final catalog used by `/models`. `/model <id>`
+switches to the uniquely matching configured provider/model, while `/provider
+<name> <model>` keeps an explicit provider override available.
 
 ### Environment variables
 

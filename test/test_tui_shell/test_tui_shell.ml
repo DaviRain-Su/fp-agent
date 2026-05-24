@@ -394,6 +394,16 @@ let test_tui_command_model_log_and_inspect () =
       Alcotest.(check bool)
         "providers hides custom key" true
         (String.is_substring providers ~substring:"api key hidden");
+      let provider_doctor = output "/provider-doctor" context in
+      Alcotest.(check bool)
+        "provider doctor command header" true
+        (String.is_substring provider_doctor ~substring:"[tui] /provider-doctor");
+      Alcotest.(check bool)
+        "provider doctor includes config path" true
+        (String.is_substring provider_doctor ~substring:config_path);
+      Alcotest.(check bool)
+        "provider doctor includes custom model" true
+        (String.is_substring provider_doctor ~substring:"qwen36-rtx");
       Alcotest.(check bool)
         "model switch is stateful" true
         (Option.is_none (Tui_command.run context "/model qwen-coder"));
