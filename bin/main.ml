@@ -120,11 +120,11 @@ let make_tui_reporter ~header =
   let i = ref 0 in
   let visible_lines () =
     if String.is_empty !current_delta then !lines
-    else !lines @ [ !current_delta ]
+    else !lines @ View.display_lines !current_delta
   in
   let flush_delta () =
     if not (String.is_empty !current_delta) then (
-      lines := !lines @ [ !current_delta ];
+      lines := !lines @ View.display_lines !current_delta;
       current_delta := "")
   in
   let redraw () =
@@ -162,6 +162,9 @@ let make_tui_reporter ~header =
     update_phase phase e;
     (match e with
     | Model_delta { content } -> current_delta := !current_delta ^ content
+    | Assistant_message { content; _ }
+      when List.is_empty (Llm.tool_uses content) ->
+        flush_delta ()
     | _ -> (
         match Event.to_display e with
         | Some line ->
@@ -492,6 +495,7 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
     | Tool_result_message { result = Error _; _ } -> "result err"
     | Tool_result (Success _) -> "result ok"
     | Tool_result (Error _) -> "result err"
+    | Context_compacted _ -> "context compacted"
     | Graph_event event -> "graph " ^ Graph_event.describe event
     | Policy_decision { permission; _ } ->
         "policy " ^ Permission.to_string permission

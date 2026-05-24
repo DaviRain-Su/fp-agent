@@ -3,6 +3,7 @@ type outcome = { status : status; summary : string; steps : int }
 
 val status_to_string : status -> string
 val max_history_chars_for_test : int
+val compact_threshold_chars_for_test : int
 val truncate_history_for_test : Llm.turn list -> Llm.turn list
 
 val run :

@@ -55,6 +55,17 @@ let reduce (st : t) (event : Event.t) =
         (Llm.Tool_result { id; content = Tool_result.to_observation result })
   | Tool_result result ->
       append_turn st (Llm.user (Tool_result.to_observation result))
+  | Context_compacted { summary; recent } ->
+      {
+        st with
+        turns =
+          {
+            role = Llm.User;
+            content =
+              [ Llm.Text ("[Earlier conversation summary]\n" ^ summary) ];
+          }
+          :: recent;
+      }
   | State_transition { to_state; _ } -> { st with agent_state = to_state }
   | Tool_call _ | Policy_decision _ | Graph_event _ -> st
 

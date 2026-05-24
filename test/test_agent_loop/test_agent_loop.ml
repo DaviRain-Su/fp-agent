@@ -203,6 +203,52 @@ let test_history_truncation_keeps_tool_exchange_atomic () =
       Alcotest.failf "unexpected truncated history: %s"
         (Yojson.Safe.to_string (`List (List.map turns ~f:Llm.turn_to_json)))
 
+let test_auto_compaction_preserves_summary () =
+  with_env (fun config workspace event_log session_dir ->
+      let chunk =
+        String.make
+          ((Agent_loop.compact_threshold_chars_for_test / 8) + 200)
+          'x'
+      in
+      let initial_history =
+        List.init 8 ~f:(fun i -> Llm.user (Printf.sprintf "old-%d %s" i chunk))
+      in
+      let saw_compaction = ref false in
+      let saw_summary = ref false in
+      let client =
+        Model_client.create_mock_with_options ~send:(fun ~tools_enabled turns ->
+            if not tools_enabled then (
+              saw_compaction := true;
+              Lwt.return
+                (Ok ([ Llm.Text "summary of earlier context" ], Llm.zero_usage)))
+            else (
+              saw_summary :=
+                List.exists turns ~f:(fun (turn : Llm.turn) ->
+                    List.exists turn.content ~f:(function
+                      | Llm.Text text ->
+                          String.is_substring text
+                            ~substring:"[Earlier conversation summary]"
+                      | _ -> false));
+              Lwt.return (Ok ([ Llm.Text "done" ], Llm.zero_usage))))
+      in
+      let outcome =
+        Lwt_main.run
+          (Agent_loop.run ~initial_history ~config ~model_client:client
+             ~event_log ~workspace ~task:"continue" ())
+      in
+      Alcotest.(check string)
+        "status completed" "completed"
+        (Agent_loop.status_to_string outcome.status);
+      Alcotest.(check bool) "compaction requested" true !saw_compaction;
+      Alcotest.(check bool) "summary sent to model" true !saw_summary;
+      let log_path = Stdlib.Filename.concat session_dir "events.jsonl" in
+      let contents =
+        Stdlib.In_channel.with_open_bin log_path Stdlib.In_channel.input_all
+      in
+      Alcotest.(check bool)
+        "log has compaction event" true
+        (String.is_substring contents ~substring:"Context_compacted"))
+
 let test_max_steps () =
   with_env (fun config workspace event_log _ ->
       let config = { config with Config.max_steps = 3 } in
@@ -260,6 +306,8 @@ let () =
             test_parallel_tool_batch_then_final;
           Alcotest.test_case "history_truncation_atomic" `Quick
             test_history_truncation_keeps_tool_exchange_atomic;
+          Alcotest.test_case "auto_compaction" `Quick
+            test_auto_compaction_preserves_summary;
           Alcotest.test_case "max_steps" `Quick test_max_steps;
           Alcotest.test_case "max_steps_finalizes" `Quick
             test_max_steps_requests_final_answer_without_tools;

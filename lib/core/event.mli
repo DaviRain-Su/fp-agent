@@ -7,6 +7,7 @@ type t =
   | Tool_call of Tool_call.t
   | Tool_result_message of { id : string; result : Tool_result.t }
   | Tool_result of Tool_result.t
+  | Context_compacted of { summary : string; recent : Llm.turn list }
   | Graph_event of Graph_event.t
   | State_transition of { from_state : Agent_state.t; to_state : Agent_state.t }
 

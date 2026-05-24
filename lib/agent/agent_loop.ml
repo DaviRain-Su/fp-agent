@@ -5,11 +5,19 @@ type outcome = { status : status; summary : string; steps : int }
 
 let max_parse_retries = 2
 let max_history_chars = 60_000
+let compact_threshold_chars = max_history_chars * 3 / 4
+let compact_keep_recent_chunks = 6
 
 let final_answer_nudge =
   "Tool budget exhausted. Do not call any more tools. Provide your best final \
    answer now based only on the context and tool observations already \
    available. If you use the fallback JSON format, return final_answer."
+
+let compact_system_prompt =
+  "You are a summarizer for a coding agent. Produce a concise but complete \
+   summary of the conversation so far, preserving key decisions, file contents \
+   or paths learned, important errors, and open tasks. Output only the \
+   summary."
 
 let status_to_string = function
   | Completed -> "completed"
@@ -28,6 +36,8 @@ let turn_cost (turn : Llm.turn) =
         String.length id + String.length content
   in
   List.sum (module Int) turn.content ~f:content_cost + 16
+
+let history_cost turns = List.sum (module Int) turns ~f:turn_cost
 
 let tool_use_ids content =
   List.filter_map content ~f:(function
@@ -71,6 +81,35 @@ let history_chunks turns =
   in
   loop [] turns
 
+let split_recent_chunks chunks =
+  let n = List.length chunks in
+  if n <= compact_keep_recent_chunks + 1 then None
+  else
+    let older_count = n - compact_keep_recent_chunks in
+    let older, recent = List.split_n chunks older_count in
+    Some (List.concat older, List.concat recent)
+
+let compact_text_of_turn (turn : Llm.turn) =
+  let role =
+    match turn.role with Llm.User -> "User" | Llm.Assistant -> "Assistant"
+  in
+  let block = function
+    | Llm.Text s -> s
+    | Llm.Thinking _ -> ""
+    | Llm.Tool_use { name; input; _ } ->
+        Printf.sprintf "[tool %s %s]" name (Yojson.Safe.to_string input)
+    | Llm.Tool_result { content; _ } -> "[result] " ^ content
+  in
+  role ^ ": "
+  ^ (List.filter_map turn.content ~f:(fun c ->
+         let s = block c in
+         if String.is_empty s then None else Some s)
+    |> String.concat ~sep:"\n")
+
+let summary_text content =
+  List.filter_map content ~f:(function Llm.Text s -> Some s | _ -> None)
+  |> String.concat ~sep:"\n" |> String.strip
+
 (* Keep the most recent turns that fit the budget, so long sessions do not blow
    the context window. Tool exchanges must be kept or dropped as a unit;
    provider APIs reject orphaned tool_result blocks. *)
@@ -87,6 +126,7 @@ let truncate_history turns =
 
 let max_history_chars_for_test = max_history_chars
 let truncate_history_for_test = truncate_history
+let compact_threshold_chars_for_test = compact_threshold_chars
 
 let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
     ?(on_approval = fun _ _ -> Lwt.return false) ?(initial_history = [])
@@ -114,6 +154,35 @@ let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
   let emit_delta content =
     if not (String.is_empty content) then
       on_event (Event.Model_delta { content })
+  in
+  let compact_if_needed () =
+    let current = Session_state.turns !st in
+    if history_cost current < compact_threshold_chars then Lwt.return_unit
+    else
+      match current |> history_chunks |> split_recent_chunks with
+      | None -> Lwt.return_unit
+      | Some (older, recent) ->
+          let transcript =
+            older
+            |> List.map ~f:compact_text_of_turn
+            |> String.concat ~sep:"\n\n"
+          in
+          let prompt =
+            "Summarize this earlier conversation for future context:\n\n"
+            ^ transcript
+          in
+          Lwt.bind
+            (Model_client.send model_client ~tools_enabled:false
+               ~system:compact_system_prompt
+               ~turns:[ Llm.user prompt ])
+            (function
+              | Error _ -> Lwt.return_unit
+              | Ok (content, _) ->
+                  let summary = summary_text content in
+                  if String.is_empty summary then Lwt.return_unit
+                  else (
+                    emit (Event.Context_compacted { summary; recent });
+                    Lwt.return_unit))
   in
   emit (Event.User_message { content = task });
   goto Agent_state.Waiting_for_model;
@@ -146,31 +215,32 @@ let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
                    answer"
                   (Session_state.steps !st)))
   and send_with_retry retries n =
-    Lwt.bind
-      (Model_client.send model_client ~on_delta:emit_delta ~system
-         ~turns:(turns ()))
-      (fun result ->
-        match result with
-        | Error e ->
-            if retries < max_parse_retries then (
-              (* the nudge is a real conversation message, so it is emitted as
+    Lwt.bind (compact_if_needed ()) (fun () ->
+        Lwt.bind
+          (Model_client.send model_client ~on_delta:emit_delta ~system
+             ~turns:(turns ()))
+          (fun result ->
+            match result with
+            | Error e ->
+                if retries < max_parse_retries then (
+                  (* the nudge is a real conversation message, so it is emitted as
                  an event and folded into state like everything else *)
-              emit
-                (Event.User_message
-                   {
-                     content =
-                       Printf.sprintf
-                         "Your previous reply could not be processed (%s). \
-                          Reply with a SINGLE valid JSON action."
-                         e;
-                   });
-              send_with_retry (retries + 1) n)
-            else (
-              goto Agent_state.Failed;
-              finish Failed ("model interaction failed: " ^ e) (n - 1))
-        | Ok (content, usage) ->
-            emit (Event.Assistant_message { content; usage });
-            handle_content content n)
+                  emit
+                    (Event.User_message
+                       {
+                         content =
+                           Printf.sprintf
+                             "Your previous reply could not be processed (%s). \
+                              Reply with a SINGLE valid JSON action."
+                             e;
+                       });
+                  send_with_retry (retries + 1) n)
+                else (
+                  goto Agent_state.Failed;
+                  finish Failed ("model interaction failed: " ^ e) (n - 1))
+            | Ok (content, usage) ->
+                emit (Event.Assistant_message { content; usage });
+                handle_content content n))
   and handle_content content n =
     let denied_result permission =
       match permission with

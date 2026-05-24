@@ -10,6 +10,7 @@ type t =
   | Tool_call of Tool_call.t
   | Tool_result_message of { id : string; result : Tool_result.t }
   | Tool_result of Tool_result.t
+  | Context_compacted of { summary : string; recent : Llm.turn list }
   | Graph_event of Graph_event.t
   | State_transition of { from_state : Agent_state.t; to_state : Agent_state.t }
 [@@deriving yojson_of, of_yojson]
@@ -47,6 +48,8 @@ let to_display (t : t) =
       Some ("  ✗ " ^ first_line message)
   | Tool_result (Success { output }) -> Some ("  ✓ " ^ first_line output)
   | Tool_result (Error { message }) -> Some ("  ✗ " ^ first_line message)
+  | Context_compacted { summary; _ } ->
+      Some ("  ↻ compacted context: " ^ first_line summary)
   | Graph_event event -> Some ("graph: " ^ Graph_event.describe event)
   | Policy_decision { permission = Permission.Deny reason; _ } ->
       Some ("  ✗ policy denied: " ^ reason)

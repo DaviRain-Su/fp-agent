@@ -11,6 +11,13 @@ let test_window () =
   Alcotest.(check (list string)) "zero rows" [] (View.window ~rows:0 [ "a" ]);
   Alcotest.(check (list string)) "empty" [] (View.window ~rows:3 [])
 
+let test_display_lines () =
+  Alcotest.(check (list string))
+    "splits multiline text"
+    [ "one"; "two"; ""; "four" ]
+    (View.display_lines "one\ntwo\n\nfour");
+  Alcotest.(check (list string)) "empty text" [] (View.display_lines "")
+
 let kind_str = function
   | `Ok -> "ok"
   | `Err -> "err"
@@ -31,6 +38,7 @@ let () =
       ( "view",
         [
           Alcotest.test_case "window" `Quick test_window;
+          Alcotest.test_case "display_lines" `Quick test_display_lines;
           Alcotest.test_case "classify" `Quick test_classify;
         ] );
     ]

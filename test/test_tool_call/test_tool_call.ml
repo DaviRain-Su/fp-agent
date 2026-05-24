@@ -120,6 +120,9 @@ let test_event_roundtrips () =
         Event.Tool_result_message
           { id = "call-123"; result = Tool_result.Success { output = "42" } } );
       ("Tool_result", Event.Tool_result (Tool_result.Success { output = "42" }));
+      ( "Context_compacted",
+        Event.Context_compacted
+          { summary = "Earlier findings"; recent = [ Llm.user "continue" ] } );
       ( "Graph_event",
         Event.Graph_event
           (Graph_event.Node_started

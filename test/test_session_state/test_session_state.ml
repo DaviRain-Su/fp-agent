@@ -164,6 +164,35 @@ let test_normalized_events_preserve_tool_ids () =
       Alcotest.failf "unexpected turns: %s"
         (Yojson.Safe.to_string (`List (List.map turns ~f:Llm.turn_to_json)))
 
+let test_context_compaction_replaces_visible_turns () =
+  let st =
+    Session_state.replay
+      [
+        Event.User_message { content = "old task" };
+        Event.Assistant_message
+          { content = [ Llm.Text "old answer" ]; usage = Llm.zero_usage };
+        Event.Context_compacted
+          {
+            summary = "old task was answered";
+            recent = [ Llm.user "recent task" ];
+          };
+      ]
+  in
+  match Session_state.turns st with
+  | [
+   {
+     role = Llm.User;
+     content =
+       [ Llm.Text "[Earlier conversation summary]\nold task was answered" ];
+   };
+   { role = Llm.User; content = [ Llm.Text "recent task" ] };
+  ] ->
+      Alcotest.(check int)
+        "model steps survive compaction" 1 (Session_state.steps st)
+  | turns ->
+      Alcotest.failf "unexpected compacted turns: %s"
+        (Yojson.Safe.to_string (`List (List.map turns ~f:Llm.turn_to_json)))
+
 let () =
   Alcotest.run "session_state"
     [
@@ -177,5 +206,7 @@ let () =
             test_batch_tool_results_reduce_to_observations;
           Alcotest.test_case "normalized_events" `Quick
             test_normalized_events_preserve_tool_ids;
+          Alcotest.test_case "context_compaction" `Quick
+            test_context_compaction_replaces_visible_turns;
         ] );
     ]

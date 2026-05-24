@@ -10,6 +10,9 @@ let window ~rows lines =
     let n = List.length lines in
     if n <= rows then lines else List.drop lines (n - rows)
 
+let display_lines text =
+  if String.is_empty text then [] else String.split_lines text
+
 (* Classify a display line so the renderer can pick a color. Mirrors the icons
    produced by {!Event.to_display}. *)
 let classify s : [ `Ok | `Err | `Action | `Plain ] =
