@@ -521,6 +521,58 @@ let test_plugin_tool_debug_cli () =
   assert_contains "bad args stderr" bad_args.stderr "schema validation failed";
   assert_contains "bad args detail" bad_args.stderr
     "missing required field 'message'";
+  let enum_plugin_dir = Stdlib.Filename.concat root "enum-plugin" in
+  mkdir_p enum_plugin_dir;
+  write_file
+    (Stdlib.Filename.concat enum_plugin_dir "fp-agent-plugin.json")
+    {|{
+  "id": "com.example.enum",
+  "tools": [
+    {
+      "name": "enum_echo",
+      "kind": "read",
+      "description": "Requires an enum mode",
+      "command": "sh echo.sh",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "mode": { "type": "string", "enum": ["fast", "safe"] }
+        },
+        "required": ["mode"]
+      }
+    }
+  ]
+}|};
+  write_file (Stdlib.Filename.concat enum_plugin_dir "echo.sh") "cat\n";
+  let enum_bad =
+    run ~env
+      [
+        bin;
+        "--run-plugin-tool";
+        enum_plugin_dir;
+        "--plugin-tool";
+        "enum_echo";
+        "--plugin-args";
+        {|{"mode":"slow"}|};
+      ]
+  in
+  assert_failure "bad plugin enum args" enum_bad;
+  assert_contains "bad enum stderr" enum_bad.stderr
+    "field 'mode' expected one of: \"fast\", \"safe\"";
+  let enum_ok =
+    run ~env
+      [
+        bin;
+        "--run-plugin-tool";
+        enum_plugin_dir;
+        "--plugin-tool";
+        "enum_echo";
+        "--plugin-args";
+        {|{"mode":"safe"}|};
+      ]
+  in
+  assert_success "good plugin enum args" enum_ok;
+  assert_contains "good enum output" enum_ok.stdout {|"mode":"safe"|};
   let missing =
     run ~env
       [

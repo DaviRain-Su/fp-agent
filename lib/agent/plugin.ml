@@ -91,6 +91,12 @@ let expected_types_label types =
   | [ type_ ] -> type_
   | _ -> "one of " ^ String.concat types ~sep:", "
 
+let schema_enum_values schema =
+  match schema_member "enum" schema with `List values -> values | _ -> []
+
+let enum_values_label values =
+  values |> List.map ~f:Yojson.Safe.to_string |> String.concat ~sep:", "
+
 let required_fields schema =
   match schema_member "required" schema with
   | `List values ->
@@ -132,7 +138,10 @@ and validate_schema_keywords ~path (schema : Yojson.Safe.t)
   in
   match object_result with
   | Error _ as e -> e
-  | Ok () -> validate_array_schema ~path schema value
+  | Ok () -> (
+      match validate_array_schema ~path schema value with
+      | Error _ as e -> e
+      | Ok () -> validate_enum_schema ~path schema value)
 
 and validate_object_schema ~path schema fields =
   let required_result =
@@ -175,6 +184,17 @@ and validate_array_schema ~path (schema : Yojson.Safe.t) (value : Yojson.Safe.t)
           | Ok () ->
               validate_schema ~path:(item_path path index) item_schema item)
   | _, _ -> Ok ()
+
+and validate_enum_schema ~path schema value =
+  match schema_enum_values schema with
+  | [] -> Ok ()
+  | values ->
+      if List.exists values ~f:(fun expected -> Poly.equal expected value) then
+        Ok ()
+      else
+        Error
+          (Printf.sprintf "%s expected one of: %s" (schema_path_label path)
+             (enum_values_label values))
 
 let validate_args_schema schema args =
   match schema with

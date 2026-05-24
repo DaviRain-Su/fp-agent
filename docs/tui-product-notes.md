@@ -111,6 +111,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - Plugin runtime commands now receive richer SDK environment metadata:
   workspace, plugin id/name/version/sdk version, tool name/kind, and the args
   JSON file path used for stdin.
+- Plugin `input_schema` validation now supports JSON Schema `enum`, so local
+  runs, smoke checks, and model-triggered plugin calls reject invalid option
+  values before executing plugin code.
 - Plugin scaffolding now accepts `--plugin-id`, letting developers create a
   starter manifest with the final package id instead of the directory-derived
   `local.*` default.

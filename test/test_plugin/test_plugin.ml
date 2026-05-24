@@ -547,6 +547,66 @@ let test_run_tool_validates_input_schema () =
         "plugin command was not executed" false
         (Stdlib.Sys.file_exists marker))
 
+let test_run_tool_validates_input_schema_enum () =
+  with_temp_dir "fp_agent_plugin_schema_enum" (fun root ->
+      let plugin_dir = Stdlib.Filename.concat root "plugin" in
+      let marker = Stdlib.Filename.concat plugin_dir "ran" in
+      mkdir_p plugin_dir;
+      write
+        (Stdlib.Filename.concat plugin_dir Plugin.manifest_file)
+        {|{
+  "id": "com.example.schema_enum",
+  "tools": [
+    {
+      "name": "plugin_schema_enum",
+      "kind": "read",
+      "description": "Requires an enum value",
+      "command": "sh echo.sh",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": ["fast", "safe"]
+          }
+        },
+        "required": ["mode"]
+      }
+    }
+  ]
+}
+|};
+      write
+        (Stdlib.Filename.concat plugin_dir "echo.sh")
+        "touch ran\nprintf 'mode ok: '\ncat\n";
+      let run args =
+        Plugin.run_tool ~dir:plugin_dir ~tool_name:"plugin_schema_enum"
+          ~workspace:(workspace root) ~args
+      in
+      (match run (`Assoc [ ("mode", `String "slow") ]) with
+      | Error e -> Alcotest.failf "enum load error: %s" e
+      | Ok (Tool_result.Success { output }) ->
+          Alcotest.failf "enum unexpectedly succeeded: %s" output
+      | Ok (Tool_result.Error { message }) ->
+          Alcotest.(check bool)
+            "enum prefix" true
+            (String.is_substring message ~substring:"schema validation failed");
+          Alcotest.(check bool)
+            "enum detail" true
+            (String.is_substring message
+               ~substring:"field 'mode' expected one of: \"fast\", \"safe\""));
+      Alcotest.(check bool)
+        "invalid enum did not execute command" false
+        (Stdlib.Sys.file_exists marker);
+      match run (`Assoc [ ("mode", `String "safe") ]) with
+      | Error e -> Alcotest.failf "enum valid load error: %s" e
+      | Ok (Tool_result.Error { message }) ->
+          Alcotest.failf "enum valid tool error: %s" message
+      | Ok (Tool_result.Success { output }) ->
+          Alcotest.(check bool)
+            "enum valid output" true
+            (String.is_substring output ~substring:{|"mode":"safe"|}))
+
 let test_run_tool_ignores_unsupported_schema_shape () =
   with_temp_dir "fp_agent_plugin_schema_shape" (fun root ->
       let plugin_dir = Stdlib.Filename.concat root "plugin" in
@@ -789,6 +849,8 @@ let () =
             test_plugin_runtime_environment;
           Alcotest.test_case "run_tool_schema_validation" `Quick
             test_run_tool_validates_input_schema;
+          Alcotest.test_case "run_tool_schema_enum" `Quick
+            test_run_tool_validates_input_schema_enum;
           Alcotest.test_case "run_tool_unsupported_schema_shape" `Quick
             test_run_tool_ignores_unsupported_schema_shape;
           Alcotest.test_case "run_tool_unknown" `Quick

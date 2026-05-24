@@ -117,9 +117,11 @@ Third-party tools can be added as plugin directories with a
 `fp-agent-plugin.json` manifest. A plugin tool receives JSON args on stdin and
 returns its result on stdout. `input_schema` is enforced before the plugin
 command runs, so developers get local feedback from `--run-plugin-tool` without
-spending a model call. Manifests can declare `sdk_version`; unsupported future
-SDK versions are rejected by `--check-plugin`, install, and local tool runs.
-Plugin commands also receive runtime env such as `FP_AGENT_WORKSPACE`,
+spending a model call. The local schema subset includes common JSON Schema
+constraints such as `type`, `enum`, `required`, object `properties`, and array
+`items`. Manifests can declare `sdk_version`; unsupported future SDK versions
+are rejected by `--check-plugin`, install, and local tool runs. Plugin commands
+also receive runtime env such as `FP_AGENT_WORKSPACE`,
 `FP_AGENT_PLUGIN_ID`, `FP_AGENT_TOOL_KIND`, and `FP_AGENT_ARGS_FILE`.
 
 ```sh

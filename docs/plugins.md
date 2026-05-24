@@ -65,7 +65,7 @@ to stdin. It exists for plugin SDKs or scripts that prefer reading a file path
 over consuming stdin directly.
 
 Before the command starts, `input_schema` is validated locally. The supported
-subset is intentionally small and portable: `type`, `required`, object
+subset is intentionally small and portable: `type`, `enum`, `required`, object
 `properties`, and array `items`. Supported types are `object`, `array`,
 `string`, `number`, `integer`, `boolean`, and `null`; unsupported schema
 keywords are ignored. If validation fails, the tool returns a schema validation
