@@ -84,6 +84,65 @@ let test_batch_tool_results_reduce_to_observations () =
     [ "user"; "assistant"; "user"; "user" ]
     roles
 
+let test_normalized_events_preserve_tool_ids () =
+  let events =
+    [
+      Event.User_message { content = "inspect f" };
+      Event.Assistant_message
+        {
+          content =
+            [
+              Llm.Tool_use
+                {
+                  id = "provider-call-7";
+                  name = "read_file";
+                  input = `Assoc [ ("path", `String "f") ];
+                };
+            ];
+          usage = { input_tokens = 11; output_tokens = 5 };
+        };
+      Event.Tool_call (Tool_call.read_file "f");
+      Event.Tool_result_message
+        {
+          id = "provider-call-7";
+          result = Tool_result.Success { output = "contents" };
+        };
+      Event.Assistant_message
+        {
+          content = [ Llm.Text "done" ];
+          usage = { input_tokens = 20; output_tokens = 3 };
+        };
+    ]
+  in
+  let st = Session_state.replay events in
+  Alcotest.(check int) "two model steps" 2 (Session_state.steps st);
+  match Session_state.turns st with
+  | [
+   { role = Llm.User; content = [ Llm.Text "inspect f" ] };
+   {
+     role = Llm.Assistant;
+     content = [ Llm.Tool_use { id = requested_id; name; input } ];
+   };
+   {
+     role = Llm.User;
+     content = [ Llm.Tool_result { id = result_id; content } ];
+   };
+   { role = Llm.Assistant; content = [ Llm.Text "done" ] };
+  ] ->
+      Alcotest.(check string) "assistant tool id" "provider-call-7" requested_id;
+      Alcotest.(check string) "tool result id" requested_id result_id;
+      Alcotest.(check string) "tool name" "read_file" name;
+      Alcotest.(check (testable Yojson.Safe.pp Yojson.Safe.equal))
+        "tool input"
+        (`Assoc [ ("path", `String "f") ])
+        input;
+      Alcotest.(check bool)
+        "observation content" true
+        (String.is_substring content ~substring:"contents")
+  | turns ->
+      Alcotest.failf "unexpected turns: %s"
+        (Yojson.Safe.to_string (`List (List.map turns ~f:Llm.turn_to_json)))
+
 let () =
   Alcotest.run "session_state"
     [
@@ -95,5 +154,7 @@ let () =
           Alcotest.test_case "prefix" `Quick test_prefix_is_earlier_state;
           Alcotest.test_case "batch_results" `Quick
             test_batch_tool_results_reduce_to_observations;
+          Alcotest.test_case "normalized_events" `Quick
+            test_normalized_events_preserve_tool_ids;
         ] );
     ]

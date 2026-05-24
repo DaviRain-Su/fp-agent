@@ -66,14 +66,59 @@ let test_model_action_roundtrips () =
   List.iter cases ~f:(fun (name, ma) ->
       yojson_roundtrip name Model_action.of_yojson Model_action.to_yojson ma)
 
+let test_llm_roundtrips () =
+  let content =
+    [
+      Llm.Text "result:";
+      Llm.Thinking { text = "inspect"; signature = "sig-1" };
+      Llm.Tool_use
+        {
+          id = "call-123";
+          name = "read_file";
+          input = `Assoc [ ("path", `String "lib/foo.ml") ];
+        };
+      Llm.Tool_result { id = "call-123"; content = "let x = 1" };
+    ]
+  in
+  List.iteri content ~f:(fun i block ->
+      yojson_roundtrip
+        (Printf.sprintf "Llm.content.%d" i)
+        (fun json -> Ok (Llm.content_of_yojson json))
+        Llm.yojson_of_content block);
+  yojson_roundtrip "Llm.turn"
+    (fun json -> Ok (Llm.turn_of_yojson json))
+    Llm.yojson_of_turn
+    { role = Llm.Assistant; content };
+  yojson_roundtrip "Llm.usage"
+    (fun json -> Ok (Llm.usage_of_yojson json))
+    Llm.yojson_of_usage
+    { input_tokens = 12; output_tokens = 34 }
+
 let test_event_roundtrips () =
   let cases =
     [
       ("User_message", Event.User_message { content = "Fix the bug" });
+      ( "Assistant_message",
+        Event.Assistant_message
+          {
+            content =
+              [
+                Llm.Tool_use
+                  {
+                    id = "call-123";
+                    name = "read_file";
+                    input = `Assoc [ ("path", `String "lib/foo.ml") ];
+                  };
+              ];
+            usage = { input_tokens = 10; output_tokens = 4 };
+          } );
       ( "Model_response",
         Event.Model_response
           { action = Model_action.Final_answer { answer = "Done" } } );
       ("Tool_call", Event.Tool_call (Tool_call.read_file "lib/foo.ml"));
+      ( "Tool_result_message",
+        Event.Tool_result_message
+          { id = "call-123"; result = Tool_result.Success { output = "42" } } );
       ("Tool_result", Event.Tool_result (Tool_result.Success { output = "42" }));
       ( "Graph_event",
         Event.Graph_event
@@ -116,6 +161,7 @@ let () =
           Alcotest.test_case "tool_result" `Quick test_tool_result_roundtrips;
           Alcotest.test_case "graph_event" `Quick test_graph_event_roundtrips;
           Alcotest.test_case "model_action" `Quick test_model_action_roundtrips;
+          Alcotest.test_case "llm" `Quick test_llm_roundtrips;
           Alcotest.test_case "event" `Quick test_event_roundtrips;
         ] );
       ( "invalid_json",
