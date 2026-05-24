@@ -48,6 +48,12 @@ let test_parse () =
     "local-llm qwen36-rtx http://127.0.0.1:8000/v1"
     (Shell_command.parse
        "/provider local-llm qwen36-rtx http://127.0.0.1:8000/v1");
+  require_command "provider add" Shell_command.ProviderAdd
+    "local-llm http://127.0.0.1:8000/v1 qwen36-rtx --api-key dummy \
+     --local-compat"
+    (Shell_command.parse
+       "/provider-add local-llm http://127.0.0.1:8000/v1 qwen36-rtx --api-key \
+        dummy --local-compat");
   require_command "plugin new" Shell_command.PluginNew
     "--id local.foo --tool-name foo --kind exec --template python ./my-plugin"
     (Shell_command.parse
@@ -100,6 +106,18 @@ let test_metadata () =
   Alcotest.(check string)
     "provider group" "Models"
     (entry "/provider <name> [model] [api-base]").group;
+  Alcotest.(check bool)
+    "palette has provider add" true
+    (List.mem palette
+       "/provider-add <name> <base-url> <model[,model...]> [--api-key KEY] \
+        [--local-compat]"
+       ~equal:String.equal);
+  Alcotest.(check string)
+    "provider add group" "Models"
+    (entry
+       "/provider-add <name> <base-url> <model[,model...]> [--api-key KEY] \
+        [--local-compat]")
+      .group;
   Alcotest.(check bool)
     "palette has model next" true
     (List.mem palette "/model-next" ~equal:String.equal);
@@ -199,6 +217,12 @@ let test_acceptance () =
     (Shell_command.accept (entry "/tool <name>"));
   require_acceptance "provider draft" ("draft", "/provider ")
     (Shell_command.accept (entry "/provider <name> [model] [api-base]"));
+  require_acceptance "provider add draft"
+    ("draft", "/provider-add ")
+    (Shell_command.accept
+       (entry
+          "/provider-add <name> <base-url> <model[,model...]> [--api-key KEY] \
+           [--local-compat]"));
   require_acceptance "plugin new draft" ("draft", "/plugin-new ")
     (Shell_command.accept
        (entry

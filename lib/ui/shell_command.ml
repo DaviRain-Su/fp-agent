@@ -22,6 +22,7 @@ type id =
   | ModelNext
   | Models
   | Provider
+  | ProviderAdd
   | Log
   | Inspect
   | Usage
@@ -225,6 +226,16 @@ let specs =
       acceptance = Draft "/provider ";
     };
     {
+      id = ProviderAdd;
+      command =
+        "/provider-add <name> <base-url> <model[,model...]> [--api-key KEY] \
+         [--local-compat]";
+      description = "save a custom provider profile";
+      aliases = [];
+      palette = true;
+      acceptance = Draft "/provider-add ";
+    };
+    {
       id = Log;
       command = "/log";
       description = "list this session's events with indices";
@@ -325,7 +336,7 @@ let group_of_id = function
   | PluginRemove | PluginSmoke | PluginRun | PluginDoctor ->
       "Plugins"
   | Sessions | Tree | NewSession | Resume -> "Sessions"
-  | Model | ModelNext | Models | Provider -> "Models"
+  | Model | ModelNext | Models | Provider | ProviderAdd -> "Models"
   | Log | Inspect | Usage | Status | Instructions -> "Context"
   | Compact | Fork | Diff | Retry | Undo -> "Run Control"
   | Help | Exit -> "Shell"

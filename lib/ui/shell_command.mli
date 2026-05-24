@@ -20,6 +20,7 @@ type id =
   | ModelNext
   | Models
   | Provider
+  | ProviderAdd
   | Log
   | Inspect
   | Usage

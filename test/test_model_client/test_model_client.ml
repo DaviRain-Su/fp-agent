@@ -573,6 +573,71 @@ let test_config_providers () =
     "missing key errors" true
     (Result.is_error (Config.load ()))
 
+let test_write_custom_provider_config () =
+  let dir = Stdlib.Filename.temp_dir "fp_agent_provider_write" "" in
+  let config_path = Stdlib.Filename.concat dir "providers.json" in
+  Unix.putenv "FP_AGENT_CONFIG" config_path;
+  let compat =
+    Config.
+      {
+        supports_developer_role = false;
+        supports_reasoning_effort = false;
+        supports_usage_in_streaming = false;
+        max_tokens_field = Some "max_tokens";
+      }
+  in
+  (match
+     Config.write_custom_provider ~name:"local-added"
+       ~api_base:"http://127.0.0.1:18080/v1" ~api_key:"dummy" ~compat
+       ~max_tokens:2048
+       ~models:[ "qwen-added"; "qwen-added-fast" ]
+       ()
+   with
+  | Error e -> Alcotest.failf "write provider: %s" e
+  | Ok path ->
+      Alcotest.(check string) "write path" config_path path;
+      Alcotest.(check bool)
+        "config file exists" true
+        (Stdlib.Sys.file_exists config_path));
+  (match
+     Config.write_custom_provider ~name:"local-added"
+       ~api_base:"http://127.0.0.1:18080/v1" ~models:[ "qwen-added" ] ()
+   with
+  | Ok _ -> Alcotest.fail "duplicate provider write unexpectedly succeeded"
+  | Error e ->
+      Alcotest.(check bool)
+        "duplicate asks for replace" true
+        (String.is_substring e ~substring:"pass --replace"));
+  (match Config.load ~provider:"local-added" () with
+  | Error e -> Alcotest.failf "load written provider: %s" e
+  | Ok cfg ->
+      Alcotest.(check string) "written provider" "local-added" cfg.provider;
+      Alcotest.(check string)
+        "written base" "http://127.0.0.1:18080/v1" cfg.api_base;
+      Alcotest.(check (list string))
+        "written models"
+        [ "qwen-added"; "qwen-added-fast" ]
+        cfg.models;
+      Alcotest.(check string) "written default model" "qwen-added" cfg.model;
+      Alcotest.(check (option int))
+        "written max tokens" (Some 2048) cfg.max_tokens;
+      Alcotest.(check bool)
+        "written local compat" false cfg.compat.supports_usage_in_streaming);
+  (match
+     Config.write_custom_provider ~replace:true ~name:"local-added"
+       ~api_base:"http://127.0.0.1:18080/v1" ~models:[ "qwen-replaced" ] ()
+   with
+  | Error e -> Alcotest.failf "replace provider: %s" e
+  | Ok _ -> ());
+  (match Config.load ~provider:"local-added" () with
+  | Error e -> Alcotest.failf "load replaced provider: %s" e
+  | Ok cfg ->
+      Alcotest.(check (list string))
+        "replaced models" [ "qwen-replaced" ] cfg.models);
+  (try Unix.unlink config_path with Unix.Unix_error _ -> ());
+  (try Unix.rmdir dir with Unix.Unix_error _ -> ());
+  Unix.putenv "FP_AGENT_CONFIG" ""
+
 let () =
   Alcotest.run "model_client"
     [
@@ -620,5 +685,10 @@ let () =
           Alcotest.test_case "request_can_disable_tools" `Quick
             test_request_can_disable_tools;
         ] );
-      ("config", [ Alcotest.test_case "providers" `Quick test_config_providers ]);
+      ( "config",
+        [
+          Alcotest.test_case "providers" `Quick test_config_providers;
+          Alcotest.test_case "write_provider" `Quick
+            test_write_custom_provider_config;
+        ] );
     ]

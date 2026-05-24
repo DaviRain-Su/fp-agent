@@ -664,6 +664,168 @@ let plugin_smoke_result_lines results =
       Printf.sprintf "smoke ok: %s (%s)" result.tool_name result.args_file
       :: (if String.is_empty output then [] else String.split_lines output))
 
+type provider_add_profile = {
+  provider_name : string;
+  provider_api_base : string;
+  provider_models : string list;
+  provider_api : string;
+  provider_api_key : string;
+  provider_config_path : string option;
+  provider_compat : Config.provider_compat;
+  provider_max_tokens : int option;
+  provider_replace : bool;
+}
+
+let provider_add_usage =
+  "usage: /provider-add <name> <base-url> <model[,model...]> [--api API] \
+   [--api-key KEY] [--config PATH] [--max-tokens N] [--replace] \
+   [--local-compat]"
+
+let local_provider_compat =
+  Config.
+    {
+      supports_developer_role = false;
+      supports_reasoning_effort = false;
+      supports_usage_in_streaming = false;
+      max_tokens_field = Some "max_tokens";
+    }
+
+let split_model_values value =
+  String.split value ~on:',' |> List.map ~f:String.strip
+  |> List.filter ~f:(fun model -> not (String.is_empty model))
+
+let parse_positive_int ~what value =
+  try
+    let n = Int.of_string value in
+    if n <= 0 then Error (what ^ " must be positive") else Ok n
+  with _ -> Error (what ^ " must be an integer")
+
+let provider_add_success_lines profile path =
+  let first_model =
+    Option.value (List.hd profile.provider_models) ~default:"<model>"
+  in
+  [
+    "provider saved: " ^ profile.provider_name;
+    "config: " ^ path;
+    "api_base: " ^ profile.provider_api_base;
+    "models: " ^ String.concat profile.provider_models ~sep:", ";
+    "next: /provider " ^ profile.provider_name ^ " " ^ first_model;
+    "next: /models";
+  ]
+
+let write_provider_profile profile =
+  match
+    Config.write_custom_provider ?path:profile.provider_config_path
+      ~api:profile.provider_api ~api_key:profile.provider_api_key
+      ~compat:profile.provider_compat ?max_tokens:profile.provider_max_tokens
+      ~replace:profile.provider_replace ~name:profile.provider_name
+      ~api_base:profile.provider_api_base ~models:profile.provider_models ()
+  with
+  | Error e -> Error e
+  | Ok path -> Ok (provider_add_success_lines profile path)
+
+let parse_provider_add_args raw =
+  let tokens =
+    String.split (String.strip raw) ~on:' '
+    |> List.filter ~f:(fun s -> not (String.is_empty s))
+  in
+  let rec loop name api_base models api api_key config_path compat max_tokens
+      replace positionals = function
+    | [] -> (
+        let positionals = List.rev positionals in
+        let name, api_base, models =
+          match positionals with
+          | [] -> (name, api_base, models)
+          | [ value ] -> (Option.first_some name (Some value), api_base, models)
+          | value :: base :: rest ->
+              ( Option.first_some name (Some value),
+                Option.first_some api_base (Some base),
+                models @ List.concat_map rest ~f:split_model_values )
+        in
+        match (name, api_base, models) with
+        | Some provider_name, Some provider_api_base, _ :: _ ->
+            Ok
+              {
+                provider_name;
+                provider_api_base;
+                provider_models = models;
+                provider_api = api;
+                provider_api_key = api_key;
+                provider_config_path = config_path;
+                provider_compat = compat;
+                provider_max_tokens = max_tokens;
+                provider_replace = replace;
+              }
+        | _ -> Error provider_add_usage)
+    | ("--api" | "--provider-api") :: value :: rest ->
+        loop name api_base models value api_key config_path compat max_tokens
+          replace positionals rest
+    | ("--api" | "--provider-api") :: [] -> Error provider_add_usage
+    | ("--api-key" | "--provider-api-key") :: value :: rest ->
+        loop name api_base models api value config_path compat max_tokens
+          replace positionals rest
+    | ("--api-key" | "--provider-api-key") :: [] -> Error provider_add_usage
+    | ("--config" | "--provider-config") :: value :: rest ->
+        loop name api_base models api api_key (Some value) compat max_tokens
+          replace positionals rest
+    | ("--config" | "--provider-config") :: [] -> Error provider_add_usage
+    | ("--model" | "--provider-model" | "--models" | "--provider-models")
+      :: value :: rest ->
+        loop name api_base
+          (models @ split_model_values value)
+          api api_key config_path compat max_tokens replace positionals rest
+    | ("--model" | "--provider-model" | "--models" | "--provider-models") :: []
+      ->
+        Error provider_add_usage
+    | ("--max-tokens" | "--provider-max-tokens") :: value :: rest -> (
+        match parse_positive_int ~what:"max tokens" value with
+        | Error e -> Error e
+        | Ok max_tokens ->
+            loop name api_base models api api_key config_path compat
+              (Some max_tokens) replace positionals rest)
+    | ("--max-tokens" | "--provider-max-tokens") :: [] ->
+        Error provider_add_usage
+    | ("--max-tokens-field" | "--provider-max-tokens-field") :: value :: rest ->
+        let compat = { compat with max_tokens_field = Some value } in
+        loop name api_base models api api_key config_path compat max_tokens
+          replace positionals rest
+    | ("--max-tokens-field" | "--provider-max-tokens-field") :: [] ->
+        Error provider_add_usage
+    | "--replace" :: rest ->
+        loop name api_base models api api_key config_path compat max_tokens true
+          positionals rest
+    | "--local-compat" :: rest ->
+        loop name api_base models api api_key config_path local_provider_compat
+          max_tokens replace positionals rest
+    | "--no-developer-role" :: rest ->
+        let compat = { compat with supports_developer_role = false } in
+        loop name api_base models api api_key config_path compat max_tokens
+          replace positionals rest
+    | "--no-reasoning-effort" :: rest ->
+        let compat = { compat with supports_reasoning_effort = false } in
+        loop name api_base models api api_key config_path compat max_tokens
+          replace positionals rest
+    | "--no-usage-streaming" :: rest ->
+        let compat = { compat with supports_usage_in_streaming = false } in
+        loop name api_base models api api_key config_path compat max_tokens
+          replace positionals rest
+    | flag :: _ when String.is_prefix flag ~prefix:"--" ->
+        Error ("provider add error: unknown option " ^ flag)
+    | value :: rest ->
+        loop name api_base models api api_key config_path compat max_tokens
+          replace (value :: positionals) rest
+  in
+  loop None None [] "openai-completions" "" None Config.default_compat None
+    false [] tokens
+
+let provider_add_lines args =
+  match parse_provider_add_args args with
+  | Error e -> [ e ]
+  | Ok profile -> (
+      match write_provider_profile profile with
+      | Error e -> [ "provider add error: " ^ e ]
+      | Ok lines -> lines)
+
 let plugin_new_usage =
   "usage: /plugin-new [--id ID] [--tool-name NAME] [--kind KIND] [--template \
    NAME] <dir>"
@@ -1114,6 +1276,9 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
             apply_config next;
             view.append_lines (current_model_lines ("/provider " ^ args)))
   in
+  let add_provider args =
+    view.append_lines ("[tui] /provider-add" :: provider_add_lines args)
+  in
   let switch_session ?message dir =
     Event_log.close !log;
     session := dir;
@@ -1208,6 +1373,7 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
     | Command (Model, model) -> switch_model model
     | Command (ModelNext, _) -> cycle_model ()
     | Command (Provider, args) -> switch_provider args
+    | Command (ProviderAdd, args) -> add_provider args
     | Command (NewSession, _) -> new_session ()
     | Command (Resume, arg) -> resume_session arg
     | Command (Fork, arg) -> fork_session arg
@@ -1498,6 +1664,9 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
             apply_config next;
             show_current_model ())
   in
+  let add_provider args =
+    List.iter (provider_add_lines args) ~f:Stdlib.print_endline
+  in
   let oneline s =
     let flat = String.substr_replace_all s ~pattern:"\n" ~with_:" " in
     if String.length flat > 60 then String.prefix flat 60 ^ "…" else flat
@@ -1768,6 +1937,9 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
         | Command (Provider, args) ->
             switch_provider args;
             loop ()
+        | Command (ProviderAdd, args) ->
+            add_provider args;
+            loop ()
         | Command (NewSession, _) ->
             start_new_session ();
             loop ()
@@ -1939,175 +2111,287 @@ let run_plugin_dev_cli dir replace_plugin workspace_opt =
           List.iter lines ~f:(fun line -> Stdlib.Printf.printf "%s\n%!" line);
           0)
 
-let dispatch new_plugin plugin_id plugin_tool_name plugin_kind plugin_template
-    check_plugin install_plugin smoke_plugin dev_plugin replace_plugin
-    list_plugins doctor_plugins remove_plugin run_plugin_tool plugin_tool
-    plugin_args plugin_args_file task provider api_base model workspace
-    max_steps confirm resume tui yolo =
-  match
-    ( new_plugin,
-      plugin_id,
-      plugin_tool_name,
-      plugin_kind,
-      plugin_template,
-      check_plugin,
-      install_plugin,
-      smoke_plugin,
-      dev_plugin,
-      list_plugins,
-      doctor_plugins,
-      remove_plugin,
-      run_plugin_tool )
-  with
-  | ( Some path,
-      plugin_id,
-      plugin_tool_name,
-      plugin_kind,
-      plugin_template,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _,
-      _ ) -> (
+let cli_provider_compat ~local_compat ~no_developer_role ~no_reasoning_effort
+    ~no_usage_in_streaming ~max_tokens_field =
+  let compat =
+    if local_compat then local_provider_compat else Config.default_compat
+  in
+  let compat =
+    if no_developer_role then { compat with supports_developer_role = false }
+    else compat
+  in
+  let compat =
+    if no_reasoning_effort then
+      { compat with supports_reasoning_effort = false }
+    else compat
+  in
+  let compat =
+    if no_usage_in_streaming then
+      { compat with supports_usage_in_streaming = false }
+    else compat
+  in
+  match max_tokens_field with
+  | None -> compat
+  | Some field -> { compat with max_tokens_field = Some field }
+
+let provider_add_cli_options_present provider_base provider_models provider_api
+    provider_api_key provider_config provider_local_compat
+    provider_no_developer_role provider_no_reasoning_effort
+    provider_no_usage_in_streaming provider_max_tokens_field provider_max_tokens
+    replace_provider =
+  Option.is_some provider_base
+  || (not (List.is_empty provider_models))
+  || Option.is_some provider_api
+  || Option.is_some provider_api_key
+  || Option.is_some provider_config
+  || provider_local_compat || provider_no_developer_role
+  || provider_no_reasoning_effort || provider_no_usage_in_streaming
+  || Option.is_some provider_max_tokens_field
+  || Option.is_some provider_max_tokens
+  || replace_provider
+
+let run_provider_add_cli name provider_base provider_models provider_api
+    provider_api_key provider_config provider_local_compat
+    provider_no_developer_role provider_no_reasoning_effort
+    provider_no_usage_in_streaming provider_max_tokens_field provider_max_tokens
+    replace_provider =
+  let models = List.concat_map provider_models ~f:split_model_values in
+  match (provider_base, models) with
+  | None, _ ->
+      Stdlib.prerr_endline
+        "provider add error: --provider-base is required with --add-provider";
+      1
+  | _, [] ->
+      Stdlib.prerr_endline
+        "provider add error: at least one --provider-model is required with \
+         --add-provider";
+      1
+  | Some provider_api_base, provider_models -> (
+      let provider_compat =
+        cli_provider_compat ~local_compat:provider_local_compat
+          ~no_developer_role:provider_no_developer_role
+          ~no_reasoning_effort:provider_no_reasoning_effort
+          ~no_usage_in_streaming:provider_no_usage_in_streaming
+          ~max_tokens_field:provider_max_tokens_field
+      in
+      let profile =
+        {
+          provider_name = name;
+          provider_api_base;
+          provider_models;
+          provider_api = Option.value provider_api ~default:"openai-completions";
+          provider_api_key = Option.value provider_api_key ~default:"";
+          provider_config_path = provider_config;
+          provider_compat;
+          provider_max_tokens;
+          provider_replace = replace_provider;
+        }
+      in
+      match write_provider_profile profile with
+      | Error e ->
+          Stdlib.prerr_endline ("provider add error: " ^ e);
+          1
+      | Ok lines ->
+          List.iter lines ~f:Stdlib.print_endline;
+          0)
+
+let dispatch add_provider provider_base provider_models provider_api
+    provider_api_key provider_config provider_local_compat
+    provider_no_developer_role provider_no_reasoning_effort
+    provider_no_usage_in_streaming provider_max_tokens_field provider_max_tokens
+    replace_provider new_plugin plugin_id plugin_tool_name plugin_kind
+    plugin_template check_plugin install_plugin smoke_plugin dev_plugin
+    replace_plugin list_plugins doctor_plugins remove_plugin run_plugin_tool
+    plugin_tool plugin_args plugin_args_file task provider api_base model
+    workspace max_steps confirm resume tui yolo =
+  match add_provider with
+  | Some name ->
+      run_provider_add_cli name provider_base provider_models provider_api
+        provider_api_key provider_config provider_local_compat
+        provider_no_developer_role provider_no_reasoning_effort
+        provider_no_usage_in_streaming provider_max_tokens_field
+        provider_max_tokens replace_provider
+  | None
+    when provider_add_cli_options_present provider_base provider_models
+           provider_api provider_api_key provider_config provider_local_compat
+           provider_no_developer_role provider_no_reasoning_effort
+           provider_no_usage_in_streaming provider_max_tokens_field
+           provider_max_tokens replace_provider ->
+      Stdlib.prerr_endline
+        "provider add error: provider profile options require --add-provider \
+         NAME";
+      1
+  | None -> (
       match
-        Plugin.scaffold ?id:plugin_id ?tool_name:plugin_tool_name
-          ?kind:plugin_kind ?template:plugin_template path
+        ( new_plugin,
+          plugin_id,
+          plugin_tool_name,
+          plugin_kind,
+          plugin_template,
+          check_plugin,
+          install_plugin,
+          smoke_plugin,
+          dev_plugin,
+          list_plugins,
+          doctor_plugins,
+          remove_plugin,
+          run_plugin_tool )
       with
-      | Ok dst ->
-          List.iter (plugin_new_success_lines dst) ~f:(fun line ->
-              Stdlib.Printf.printf "%s\n%!" line);
-          0
-      | Error e ->
-          Stdlib.prerr_endline ("plugin scaffold error: " ^ e);
-          1)
-  | None, Some _, _, _, _, _, _, _, _, _, _, _, _ ->
-      Stdlib.prerr_endline
-        "plugin scaffold error: --plugin-id requires --new-plugin DIR";
-      1
-  | None, None, Some _, _, _, _, _, _, _, _, _, _, _ ->
-      Stdlib.prerr_endline
-        "plugin scaffold error: --plugin-tool-name requires --new-plugin DIR";
-      1
-  | None, None, None, Some _, _, _, _, _, _, _, _, _, _ ->
-      Stdlib.prerr_endline
-        "plugin scaffold error: --plugin-kind requires --new-plugin DIR";
-      1
-  | None, None, None, None, Some _, _, _, _, _, _, _, _, _ ->
-      Stdlib.prerr_endline
-        "plugin scaffold error: --plugin-template requires --new-plugin DIR";
-      1
-  | None, None, None, None, None, Some path, _, _, _, _, _, _, _ -> (
-      match Plugin.check ~replace:replace_plugin path with
-      | Ok manifest ->
-          Stdlib.print_endline "plugin manifest ok:";
-          print_plugin_summary manifest;
-          0
-      | Error e ->
-          Stdlib.prerr_endline ("plugin check error: " ^ e);
-          1)
-  | None, None, None, None, None, None, Some path, _, _, _, _, _, _ -> (
-      match Plugin.install ~replace:replace_plugin path with
-      | Ok dst ->
-          Stdlib.Printf.printf "installed plugin: %s\n" dst;
-          (match Plugin.check dst with
-          | Ok manifest ->
-              List.iter (plugin_next_lines manifest) ~f:(fun line ->
-                  Stdlib.Printf.printf "%s\n%!" line)
+      | ( Some path,
+          plugin_id,
+          plugin_tool_name,
+          plugin_kind,
+          plugin_template,
+          _,
+          _,
+          _,
+          _,
+          _,
+          _,
+          _,
+          _ ) -> (
+          match
+            Plugin.scaffold ?id:plugin_id ?tool_name:plugin_tool_name
+              ?kind:plugin_kind ?template:plugin_template path
+          with
+          | Ok dst ->
+              List.iter (plugin_new_success_lines dst) ~f:(fun line ->
+                  Stdlib.Printf.printf "%s\n%!" line);
+              0
           | Error e ->
-              Stdlib.Printf.printf "plugin detail error after install: %s\n%!" e);
+              Stdlib.prerr_endline ("plugin scaffold error: " ^ e);
+              1)
+      | None, Some _, _, _, _, _, _, _, _, _, _, _, _ ->
+          Stdlib.prerr_endline
+            "plugin scaffold error: --plugin-id requires --new-plugin DIR";
+          1
+      | None, None, Some _, _, _, _, _, _, _, _, _, _, _ ->
+          Stdlib.prerr_endline
+            "plugin scaffold error: --plugin-tool-name requires --new-plugin \
+             DIR";
+          1
+      | None, None, None, Some _, _, _, _, _, _, _, _, _, _ ->
+          Stdlib.prerr_endline
+            "plugin scaffold error: --plugin-kind requires --new-plugin DIR";
+          1
+      | None, None, None, None, Some _, _, _, _, _, _, _, _, _ ->
+          Stdlib.prerr_endline
+            "plugin scaffold error: --plugin-template requires --new-plugin DIR";
+          1
+      | None, None, None, None, None, Some path, _, _, _, _, _, _, _ -> (
+          match Plugin.check ~replace:replace_plugin path with
+          | Ok manifest ->
+              Stdlib.print_endline "plugin manifest ok:";
+              print_plugin_summary manifest;
+              0
+          | Error e ->
+              Stdlib.prerr_endline ("plugin check error: " ^ e);
+              1)
+      | None, None, None, None, None, None, Some path, _, _, _, _, _, _ -> (
+          match Plugin.install ~replace:replace_plugin path with
+          | Ok dst ->
+              Stdlib.Printf.printf "installed plugin: %s\n" dst;
+              (match Plugin.check dst with
+              | Ok manifest ->
+                  List.iter (plugin_next_lines manifest) ~f:(fun line ->
+                      Stdlib.Printf.printf "%s\n%!" line)
+              | Error e ->
+                  Stdlib.Printf.printf
+                    "plugin detail error after install: %s\n%!" e);
+              0
+          | Error e ->
+              Stdlib.prerr_endline ("plugin install error: " ^ e);
+              1)
+      | None, None, None, None, None, None, None, Some path, _, _, _, _, _ ->
+          run_plugin_smoke_cli path replace_plugin workspace
+      | None, None, None, None, None, None, None, None, Some path, _, _, _, _ ->
+          run_plugin_dev_cli path replace_plugin workspace
+      | None, None, None, None, None, None, None, None, None, true, _, _, _ ->
+          print_installed_plugins ();
           0
-      | Error e ->
-          Stdlib.prerr_endline ("plugin install error: " ^ e);
-          1)
-  | None, None, None, None, None, None, None, Some path, _, _, _, _, _ ->
-      run_plugin_smoke_cli path replace_plugin workspace
-  | None, None, None, None, None, None, None, None, Some path, _, _, _, _ ->
-      run_plugin_dev_cli path replace_plugin workspace
-  | None, None, None, None, None, None, None, None, None, true, _, _, _ ->
-      print_installed_plugins ();
-      0
-  | None, None, None, None, None, None, None, None, None, false, true, _, _ ->
-      List.iter
-        (Tui_command.plugin_diagnostics_lines ())
-        ~f:Stdlib.print_endline;
-      0
-  | ( None,
-      None,
-      None,
-      None,
-      None,
-      None,
-      None,
-      None,
-      None,
-      false,
-      false,
-      Some id,
-      _ ) -> (
-      match Plugin.remove id with
-      | Ok dst ->
-          Stdlib.Printf.printf "removed plugin: %s\n" dst;
+      | None, None, None, None, None, None, None, None, None, false, true, _, _
+        ->
+          List.iter
+            (Tui_command.plugin_diagnostics_lines ())
+            ~f:Stdlib.print_endline;
           0
-      | Error e ->
-          Stdlib.prerr_endline ("plugin remove error: " ^ e);
-          1)
-  | ( None,
-      None,
-      None,
-      None,
-      None,
-      None,
-      None,
-      None,
-      None,
-      false,
-      false,
-      None,
-      Some dir ) ->
-      run_plugin_tool_cli dir plugin_tool plugin_args plugin_args_file workspace
-  | ( None,
-      None,
-      None,
-      None,
-      None,
-      None,
-      None,
-      None,
-      None,
-      false,
-      false,
-      None,
-      None )
-    when replace_plugin ->
-      Stdlib.prerr_endline
-        "plugin error: --replace-plugin requires --install-plugin DIR or \
-         --check-plugin DIR or --smoke-plugin DIR or --dev-plugin DIR";
-      1
-  | ( None,
-      None,
-      None,
-      None,
-      None,
-      None,
-      None,
-      None,
-      None,
-      false,
-      false,
-      None,
-      None ) ->
-      with_setup provider api_base model workspace max_steps
-        (fun config workspace ->
-          match task with
-          | Some task ->
-              run_oneshot config workspace ~confirm ~resume_opt:resume ~tui
-                ~yolo ~task
-          | None when tui ->
-              run_tui_repl config workspace ~confirm ~resume_opt:resume ~yolo
-          | None -> run_repl config workspace ~confirm ~resume_opt:resume ~yolo)
+      | ( None,
+          None,
+          None,
+          None,
+          None,
+          None,
+          None,
+          None,
+          None,
+          false,
+          false,
+          Some id,
+          _ ) -> (
+          match Plugin.remove id with
+          | Ok dst ->
+              Stdlib.Printf.printf "removed plugin: %s\n" dst;
+              0
+          | Error e ->
+              Stdlib.prerr_endline ("plugin remove error: " ^ e);
+              1)
+      | ( None,
+          None,
+          None,
+          None,
+          None,
+          None,
+          None,
+          None,
+          None,
+          false,
+          false,
+          None,
+          Some dir ) ->
+          run_plugin_tool_cli dir plugin_tool plugin_args plugin_args_file
+            workspace
+      | ( None,
+          None,
+          None,
+          None,
+          None,
+          None,
+          None,
+          None,
+          None,
+          false,
+          false,
+          None,
+          None )
+        when replace_plugin ->
+          Stdlib.prerr_endline
+            "plugin error: --replace-plugin requires --install-plugin DIR or \
+             --check-plugin DIR or --smoke-plugin DIR or --dev-plugin DIR";
+          1
+      | ( None,
+          None,
+          None,
+          None,
+          None,
+          None,
+          None,
+          None,
+          None,
+          false,
+          false,
+          None,
+          None ) ->
+          with_setup provider api_base model workspace max_steps
+            (fun config workspace ->
+              match task with
+              | Some task ->
+                  run_oneshot config workspace ~confirm ~resume_opt:resume ~tui
+                    ~yolo ~task
+              | None when tui ->
+                  run_tui_repl config workspace ~confirm ~resume_opt:resume
+                    ~yolo
+              | None ->
+                  run_repl config workspace ~confirm ~resume_opt:resume ~yolo))
 
 let () =
   let open Cmdliner in
@@ -2267,6 +2551,104 @@ let () =
             "Initial scaffold template to use with --new-plugin: shell or \
              python.")
   in
+  let add_provider =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "add-provider" ] ~docv:"NAME"
+          ~doc:
+            "Save a custom provider profile to the provider config, then exit.")
+  in
+  let provider_base =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "provider-base" ] ~docv:"URL" ~doc:"Base URL for --add-provider.")
+  in
+  let provider_models =
+    Arg.(
+      value & opt_all string []
+      & info [ "provider-model" ] ~docv:"ID"
+          ~doc:
+            "Model id for --add-provider. Repeat or pass comma-separated ids.")
+  in
+  let provider_api =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "provider-api" ] ~docv:"API"
+          ~doc:
+            "Wire API for --add-provider: openai-completions or \
+             anthropic-messages.")
+  in
+  let provider_api_key =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "provider-api-key" ] ~docv:"KEY"
+          ~doc:"API key literal or env:NAME reference for --add-provider.")
+  in
+  let provider_config =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "provider-config" ] ~docv:"FILE"
+          ~doc:
+            "Provider config file for --add-provider. Defaults to \
+             FP_AGENT_CONFIG or .fp-agent/providers.json.")
+  in
+  let provider_local_compat =
+    Arg.(
+      value & flag
+      & info
+          [ "provider-local-compat" ]
+          ~doc:
+            "Use local OpenAI-compatible compatibility defaults for \
+             --add-provider.")
+  in
+  let provider_no_developer_role =
+    Arg.(
+      value & flag
+      & info
+          [ "provider-no-developer-role" ]
+          ~doc:"Disable developer-role messages for --add-provider.")
+  in
+  let provider_no_reasoning_effort =
+    Arg.(
+      value & flag
+      & info
+          [ "provider-no-reasoning-effort" ]
+          ~doc:"Disable reasoning-effort request fields for --add-provider.")
+  in
+  let provider_no_usage_in_streaming =
+    Arg.(
+      value & flag
+      & info
+          [ "provider-no-usage-streaming" ]
+          ~doc:"Disable streaming usage options for --add-provider.")
+  in
+  let provider_max_tokens_field =
+    Arg.(
+      value
+      & opt (some string) None
+      & info
+          [ "provider-max-tokens-field" ]
+          ~docv:"FIELD"
+          ~doc:"Request field to use for max tokens with --add-provider.")
+  in
+  let provider_max_tokens =
+    Arg.(
+      value
+      & opt (some int) None
+      & info [ "provider-max-tokens" ] ~docv:"N"
+          ~doc:"Default per-model max token budget for --add-provider.")
+  in
+  let replace_provider =
+    Arg.(
+      value & flag
+      & info [ "replace-provider" ]
+          ~doc:"Allow --add-provider to replace an existing provider profile.")
+  in
   let provider =
     Arg.(
       value
@@ -2339,7 +2721,12 @@ let () =
   let doc = "A type-safe local CLI code agent harness." in
   let term =
     Term.(
-      const dispatch $ new_plugin $ plugin_id $ plugin_tool_name $ plugin_kind
+      const dispatch $ add_provider $ provider_base $ provider_models
+      $ provider_api $ provider_api_key $ provider_config
+      $ provider_local_compat $ provider_no_developer_role
+      $ provider_no_reasoning_effort $ provider_no_usage_in_streaming
+      $ provider_max_tokens_field $ provider_max_tokens $ replace_provider
+      $ new_plugin $ plugin_id $ plugin_tool_name $ plugin_kind
       $ plugin_template $ check_plugin $ install_plugin $ smoke_plugin
       $ dev_plugin $ replace_plugin $ list_plugins $ doctor_plugins
       $ remove_plugin $ run_plugin_tool $ plugin_tool $ plugin_args

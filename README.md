@@ -42,6 +42,11 @@ dune exec -- fp-agent --provider zhipu "add a docstring to lib/foo.ml"
 
 # or a custom OpenAI-compatible endpoint
 export FP_AGENT_CONFIG=./providers.json
+dune exec -- fp-agent --add-provider local-llm \
+  --provider-base http://101.132.142.56:18080/v1 \
+  --provider-model qwen36-rtx \
+  --provider-api-key dummy \
+  --provider-local-compat
 dune exec -- fp-agent --provider local-llm --model qwen36-rtx "fix tests"
 ```
 
@@ -70,6 +75,7 @@ dune exec -- fp-agent
 > /model qwen36-rtx  # switch model inside the REPL
 > /model-next        # cycle current provider's configured models
 > /provider local-llm qwen36-rtx
+> /provider-add local-llm http://101.132.142.56:18080/v1 qwen36-rtx --api-key dummy --local-compat
 > /tools             # preview available tools
 > /tool read_file    # inspect a tool's kind/schema/description
 > /plugin-doctor     # show plugin search paths and diagnostics
@@ -280,6 +286,13 @@ Options:
   or a custom provider from `FP_AGENT_CONFIG`
 - `-m`, `--model ID` — override the model id
 - `--api-base URL` — override the provider's base URL
+- `--add-provider NAME --provider-base URL --provider-model ID` — save a
+  custom provider profile, then exit; repeat `--provider-model` or pass
+  comma-separated ids
+- `--provider-api-key KEY` — API key literal or `env:NAME` reference for
+  `--add-provider`
+- `--provider-local-compat` — OpenAI-compatible local-server defaults for
+  `--add-provider` (`max_tokens`, no developer role, no streaming usage)
 - `-w`, `--workspace DIR` — workspace root (default: `WORKSPACE_ROOT` or cwd)
 - `--max-steps N` — max agent steps (default: `MAX_STEPS` or 30)
 - `--confirm` — ask for approval before each shell command or file write;
@@ -341,6 +354,19 @@ For DeepSeek Pro: `--model deepseek-v4-pro`.
 Custom providers are looked up in `FP_AGENT_CONFIG`, `.fp-agent/providers.json`,
 `.fp-agent.json`, or `~/.config/fp-agent/providers.json`. The file can be a
 top-level provider map or `{ "providers": { ... } }`. A pi-style subset works:
+
+```sh
+dune exec -- fp-agent --add-provider local-llm \
+  --provider-base http://101.132.142.56:18080/v1 \
+  --provider-model qwen36-rtx \
+  --provider-api-key dummy \
+  --provider-local-compat \
+  --provider-max-tokens 8192
+
+# or inside the REPL/TUI:
+> /provider-add local-llm http://101.132.142.56:18080/v1 qwen36-rtx --api-key dummy --local-compat --max-tokens 8192
+> /provider local-llm qwen36-rtx
+```
 
 ```json
 {

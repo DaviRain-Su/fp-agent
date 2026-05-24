@@ -45,6 +45,26 @@ val available_providers : unit -> provider_catalog_entry list
     [FP_AGENT_CONFIG] or the default provider config files. API keys are not
     required for catalog listing. *)
 
+val provider_config_path : ?path:string -> unit -> string
+(** Return the custom provider config path that write operations should use.
+    Explicit [path] wins, then [FP_AGENT_CONFIG], then
+    [.fp-agent/providers.json]. *)
+
+val write_custom_provider :
+  ?path:string ->
+  ?api:string ->
+  ?api_key:string ->
+  ?compat:provider_compat ->
+  ?max_tokens:int ->
+  ?replace:bool ->
+  name:string ->
+  api_base:string ->
+  models:string list ->
+  unit ->
+  (string, string) result
+(** Add or replace a custom provider profile in the selected provider config
+    file and return the file path written. *)
+
 val default_compat : provider_compat
 (** Conservative OpenAI-compatible defaults used by tests and providers without
     explicit compatibility metadata. *)

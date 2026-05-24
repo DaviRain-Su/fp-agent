@@ -223,6 +223,178 @@ let load_custom_provider name =
   in
   List.find_map (candidate_config_paths ()) ~f:parse
 
+let provider_config_path ?path () =
+  match path with
+  | Some path when not (String.is_empty (String.strip path)) -> path
+  | _ -> (
+      match getenv_nonempty "FP_AGENT_CONFIG" with
+      | Some path -> path
+      | None -> ".fp-agent/providers.json")
+
+let rec mkdir_p dir =
+  if String.is_empty dir || String.equal dir "." || Stdlib.Sys.file_exists dir
+  then ()
+  else
+    let parent = Stdlib.Filename.dirname dir in
+    if not (String.equal parent dir) then mkdir_p parent;
+    Unix.mkdir dir 0o755
+
+let provider_name_char = function
+  | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '-' | '_' | '.' -> true
+  | _ -> false
+
+let validate_custom_provider_name name =
+  let name = String.strip name in
+  if String.is_empty name then Error "provider name is required"
+  else if Option.is_some (Provider.of_string name) then
+    Error ("provider name is built-in: " ^ name)
+  else if String.exists name ~f:(fun c -> not (provider_name_char c)) then
+    Error
+      "provider name may only contain letters, numbers, dash, underscore, or \
+       dot"
+  else Ok name
+
+let validate_model_id model =
+  let model = String.strip model in
+  if String.is_empty model then Error "model id is required"
+  else if String.exists model ~f:Char.is_whitespace then
+    Error ("model id may not contain whitespace: " ^ model)
+  else Ok model
+
+let validate_models models =
+  let models =
+    models |> List.map ~f:String.strip
+    |> List.filter ~f:(fun model -> not (String.is_empty model))
+  in
+  match List.map models ~f:validate_model_id |> Result.all with
+  | Error e -> Error e
+  | Ok models -> (
+      match dedupe_nonempty models with
+      | [] -> Error "at least one model is required"
+      | models -> Ok models)
+
+let compat_json compat =
+  let fields =
+    [
+      ("supportsDeveloperRole", `Bool compat.supports_developer_role);
+      ("supportsReasoningEffort", `Bool compat.supports_reasoning_effort);
+      ("supportsUsageInStreaming", `Bool compat.supports_usage_in_streaming);
+    ]
+  in
+  let fields =
+    match compat.max_tokens_field with
+    | None -> fields
+    | Some field -> fields @ [ ("maxTokensField", `String field) ]
+  in
+  `Assoc fields
+
+let model_json ?max_tokens model =
+  let fields = [ ("id", `String model); ("name", `String model) ] in
+  let fields =
+    match max_tokens with
+    | None -> fields
+    | Some max_tokens -> fields @ [ ("maxTokens", `Int max_tokens) ]
+  in
+  `Assoc fields
+
+let provider_json ?max_tokens ~api ~api_key ~api_base ~compat ~models () =
+  `Assoc
+    [
+      ("baseUrl", `String api_base);
+      ("api", `String api);
+      ("apiKey", `String api_key);
+      ("compat", compat_json compat);
+      ("models", `List (List.map models ~f:(model_json ?max_tokens)));
+    ]
+
+let assoc_replace fields key value =
+  (key, value) :: List.Assoc.remove fields key ~equal:String.equal
+
+let update_provider_json ~replace ~name provider = function
+  | `Assoc fields -> (
+      match List.Assoc.find fields "providers" ~equal:String.equal with
+      | Some (`Assoc providers) ->
+          if (not replace) && List.Assoc.mem providers name ~equal:String.equal
+          then Error ("provider already exists: " ^ name ^ " (pass --replace)")
+          else
+            Ok
+              (`Assoc
+                 (assoc_replace fields "providers"
+                    (`Assoc (assoc_replace providers name provider))))
+      | Some _ -> Error "provider config field `providers` must be an object"
+      | None ->
+          if (not replace) && List.Assoc.mem fields name ~equal:String.equal
+          then Error ("provider already exists: " ^ name ^ " (pass --replace)")
+          else Ok (`Assoc (assoc_replace fields name provider)))
+  | _ -> Error "provider config root must be a JSON object"
+
+let read_provider_config path =
+  if Stdlib.Sys.file_exists path then
+    match Yojson.Safe.from_file path with
+    | json -> Ok json
+    | exception exn ->
+        Error
+          (Printf.sprintf "invalid provider config %s: %s" path
+             (Exn.to_string exn))
+  else Ok (`Assoc [])
+
+let write_json_file path json =
+  mkdir_p (Stdlib.Filename.dirname path);
+  Stdlib.Out_channel.with_open_bin path (fun oc ->
+      Stdlib.Out_channel.output_string oc (Yojson.Safe.pretty_to_string json);
+      Stdlib.Out_channel.output_char oc '\n')
+
+let write_custom_provider ?path ?(api = "openai-completions") ?(api_key = "")
+    ?(compat = default_compat) ?max_tokens ?(replace = false) ~name ~api_base
+    ~models () =
+  let path = provider_config_path ?path () in
+  let api_base =
+    if String.is_empty (String.strip api_base) then
+      Error "provider base URL is required"
+    else Ok (String.strip api_base)
+  in
+  let api =
+    let api = String.strip api |> String.lowercase in
+    match protocol_of_api api with
+    | Some _ -> Ok api
+    | None -> Error ("unsupported provider api: " ^ api)
+  in
+  let max_tokens =
+    match max_tokens with
+    | Some n when n <= 0 -> Error "max tokens must be positive"
+    | _ -> Ok max_tokens
+  in
+  match
+    ( validate_custom_provider_name name,
+      api_base,
+      api,
+      validate_models models,
+      max_tokens )
+  with
+  | Error e, _, _, _, _
+  | _, Error e, _, _, _
+  | _, _, Error e, _, _
+  | _, _, _, Error e, _
+  | _, _, _, _, Error e ->
+      Error e
+  | Ok name, Ok api_base, Ok api, Ok models, Ok max_tokens -> (
+      match read_provider_config path with
+      | Error e -> Error e
+      | Ok json -> (
+          let provider =
+            provider_json ?max_tokens ~api ~api_key ~api_base ~compat ~models ()
+          in
+          match update_provider_json ~replace ~name provider json with
+          | Error e -> Error e
+          | Ok next -> (
+              try
+                write_json_file path next;
+                Ok path
+              with exn ->
+                Error
+                  (Printf.sprintf "provider config write failed: %s"
+                     (Exn.to_string exn)))))
+
 let custom_provider_names () =
   let names_from_file path =
     match Yojson.Safe.from_file path with

@@ -901,6 +901,62 @@ let test_repl_lists_and_switches_custom_provider_models () =
   assert_contains "model command selected model" repl.stdout "model: qwen36-rtx";
   assert_contains "model-next switched" repl.stdout "model: qwen36-rtx-fast"
 
+let test_cli_adds_custom_provider_profile () =
+  let root = tmp_dir "fp-agent-cli-provider-add-" in
+  let config_path = Stdlib.Filename.concat root "providers.json" in
+  let env = isolated_env root @ [ ("FP_AGENT_CONFIG", config_path) ] in
+  let bin = fp_agent_bin () in
+  let added =
+    run ~env
+      [
+        bin;
+        "--add-provider";
+        "local-added";
+        "--provider-base";
+        "http://127.0.0.1:18080/v1";
+        "--provider-model";
+        "qwen-added,qwen-added-fast";
+        "--provider-api-key";
+        "dummy";
+        "--provider-local-compat";
+        "--provider-max-tokens";
+        "4096";
+      ]
+  in
+  assert_success "add provider profile" added;
+  assert_contains "add provider stdout" added.stdout
+    "provider saved: local-added";
+  assert_contains "add provider next" added.stdout
+    "next: /provider local-added qwen-added";
+  Alcotest.(check bool)
+    "provider config created" true
+    (Stdlib.Sys.file_exists config_path);
+  let duplicate =
+    run ~env
+      [
+        bin;
+        "--add-provider";
+        "local-added";
+        "--provider-base";
+        "http://127.0.0.1:18080/v1";
+        "--provider-model";
+        "qwen-added";
+      ]
+  in
+  assert_failure "add provider duplicate" duplicate;
+  assert_contains "duplicate stderr" duplicate.stderr "pass --replace";
+  let repl =
+    run ~env ~stdin:"/models\n/model qwen-added\n/model-next\n/model\n/exit\n"
+      [ bin ]
+  in
+  assert_success "repl uses added provider" repl;
+  assert_contains "models includes added provider" repl.stdout "local-added";
+  assert_contains "models includes added model" repl.stdout "qwen-added";
+  assert_contains "model switched to added provider" repl.stdout
+    "provider: local-added";
+  assert_contains "model-next uses added model list" repl.stdout
+    "model: qwen-added-fast"
+
 let test_repl_shows_project_instructions () =
   let root = tmp_dir "fp-agent-cli-instructions-" in
   let env = isolated_env root in
@@ -1079,6 +1135,8 @@ let () =
             test_repl_lists_dynamic_plugin_tools;
           Alcotest.test_case "custom provider models" `Quick
             test_repl_lists_and_switches_custom_provider_models;
+          Alcotest.test_case "add provider profile" `Quick
+            test_cli_adds_custom_provider_profile;
           Alcotest.test_case "repl instructions" `Quick
             test_repl_shows_project_instructions;
           Alcotest.test_case "repl inspect events" `Quick

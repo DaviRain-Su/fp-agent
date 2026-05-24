@@ -23,8 +23,8 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   errors, and final answer.
 - Right/secondary inspector: selected event JSON, tool args/result, usage, and
   policy decision.
-- Footer command palette: `/model`, `/provider`, `/plugins`, `/tools`,
-  `/new`, `/resume`, `/fork`, `/retry`, `/compact`, `/status`,
+- Footer command palette: `/model`, `/provider`, `/provider-add`, `/plugins`,
+  `/tools`, `/new`, `/resume`, `/fork`, `/retry`, `/compact`, `/status`,
   `/instructions`, `/undo`, `/diff`.
 - Status strip: provider/model, session id, step count, token usage, current
   phase, and active plugin count.
@@ -75,6 +75,10 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   client, update the status strip, and subsequent task submissions use the
   switched runtime. `/model <id>` can also switch provider when the model id
   uniquely belongs to another configured provider.
+- `/provider-add <name> <base-url> <model[,model...]>` saves a provider profile
+  into `FP_AGENT_CONFIG` or `.fp-agent/providers.json`, including local-server
+  compatibility flags, so custom OpenAI-compatible endpoints can be added from
+  the shell before `/provider` switches to them.
 - The fullscreen shell now treats `/new`, `/resume <dir>`, and `/fork [index]`
   as stateful commands. They switch the active session directory, reopen the
   event log, reload inspector context, and continue later turns from that
