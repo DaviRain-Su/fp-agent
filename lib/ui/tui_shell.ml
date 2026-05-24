@@ -20,6 +20,9 @@ type action =
   | Toggle_palette
   | Close_palette
   | Accept_palette
+  | Insert_palette_text of string
+  | Palette_backspace
+  | Palette_clear_query
   | Move_palette of int
   | Palette_home
   | Palette_end
@@ -72,10 +75,19 @@ let create ?command_count () =
 let selected_event_index t =
   View.selection_index ~event_count:t.event_count t.selection
 
-let selected_command_index t =
-  View.palette_index ~command_count:t.command_count t.palette
+let command_entries t = List.take View.command_palette_entries t.command_count
 
-let palette_open t = Option.is_some (selected_command_index t)
+let visible_command_entries t =
+  let query = Option.value (View.palette_query t.palette) ~default:"" in
+  View.filter_command_palette_entries ~query (command_entries t)
+
+let visible_command_count t = List.length (visible_command_entries t)
+
+let selected_command_index t =
+  View.palette_index ~command_count:(visible_command_count t) t.palette
+
+let palette_open t = View.palette_is_open t.palette
+let palette_query t = View.palette_query t.palette
 
 let normalize_selection t =
   match selected_event_index t with
@@ -90,7 +102,7 @@ let selection_label t =
   View.selection_label ~event_count:t.event_count t.selection
 
 let palette_label t =
-  View.palette_label ~command_count:t.command_count t.palette
+  View.palette_label ~command_count:(visible_command_count t) t.palette
 
 let no_submit state =
   {
@@ -102,7 +114,30 @@ let no_submit state =
 
 let page_delta page_size = Int.max 1 page_size
 let draft_has_text t = not (String.is_empty t.draft.text)
-let command_at index = List.nth View.command_palette_entries index
+let command_at t index = List.nth (visible_command_entries t) index
+
+let set_palette_index t index =
+  let count = visible_command_count t in
+  if count <= 0 then t
+  else
+    let current = Option.value (selected_command_index t) ~default:0 in
+    {
+      t with
+      palette =
+        View.move_palette ~command_count:count ~delta:(index - current)
+          t.palette;
+    }
+
+let update_palette_query t query =
+  let visible_count =
+    View.filter_command_palette_entries ~query (command_entries t)
+    |> List.length
+  in
+  {
+    t with
+    palette =
+      View.set_palette_query ~command_count:visible_count ~query t.palette;
+  }
 
 let handle_prompt t = function
   | Insert_text text ->
@@ -135,7 +170,7 @@ let handle t action =
         }
   | Close_palette -> no_submit { t with palette = View.Palette_closed }
   | Accept_palette -> (
-      match Option.bind (selected_command_index t) ~f:command_at with
+      match Option.bind (selected_command_index t) ~f:(command_at t) with
       | None -> no_submit { t with palette = View.Palette_closed }
       | Some command -> (
           match Shell_command.accept command with
@@ -163,24 +198,28 @@ let handle t action =
         {
           t with
           palette =
-            View.move_palette ~command_count:t.command_count ~delta t.palette;
+            View.move_palette ~command_count:(visible_command_count t) ~delta
+              t.palette;
         }
   | Palette_home ->
-      no_submit
-        {
-          t with
-          palette =
-            (if t.command_count <= 0 then View.Palette_closed
-             else View.Palette_open 0);
-        }
+      no_submit { t with palette = (set_palette_index t 0).palette }
   | Palette_end ->
       no_submit
         {
           t with
-          palette =
-            (if t.command_count <= 0 then View.Palette_closed
-             else View.Palette_open (t.command_count - 1));
+          palette = (set_palette_index t (visible_command_count t - 1)).palette;
         }
+  | Insert_palette_text text ->
+      let query = Option.value (palette_query t) ~default:"" ^ text in
+      no_submit (update_palette_query t query)
+  | Palette_backspace ->
+      let query = Option.value (palette_query t) ~default:"" in
+      let query =
+        if String.is_empty query then query
+        else String.prefix query (String.length query - 1)
+      in
+      no_submit (update_palette_query t query)
+  | Palette_clear_query -> no_submit (update_palette_query t "")
   | Move_event delta ->
       no_submit
         {
@@ -212,9 +251,10 @@ let action_of_input ~page_size t input =
     | Page_down -> Some (Move_palette page_size)
     | Home -> Some Palette_home
     | End -> Some Palette_end
-    | Text _ | Shift_enter | Backspace_key | Delete_key | Left | Right | Unknown
-      ->
-        None
+    | Text text -> Some (Insert_palette_text text)
+    | Backspace_key -> Some Palette_backspace
+    | Delete_key -> Some Palette_clear_query
+    | Shift_enter | Left | Right | Unknown -> None
   else
     match input with
     | Slash | Question -> Some Toggle_palette

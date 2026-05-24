@@ -133,7 +133,8 @@ copy. Two consequences:
   for models, providers, plugins, tools, sessions, event logs, forks, diffs,
   and undo. The palette and REPL parser share the same command metadata, and
   palette acceptance either dispatches safe no-arg commands or seeds the prompt
-  draft for commands that need arguments.
+  draft for commands that need arguments. Typing while the palette is open
+  filters commands by name or description.
 - **TUI prompt editor groundwork** keeps multiline draft editing pure and
   testable: insert text, newline, delete/backspace, cursor movement, and
   rendering with a visible cursor.

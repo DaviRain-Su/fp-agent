@@ -21,6 +21,9 @@ type action =
   | Toggle_palette
   | Close_palette
   | Accept_palette
+  | Insert_palette_text of string
+  | Palette_backspace
+  | Palette_clear_query
   | Move_palette of int
   | Palette_home
   | Palette_end
@@ -68,10 +71,17 @@ val selected_event_index : t -> int option
 (** Currently inspected event index, if events exist. *)
 
 val selected_command_index : t -> int option
-(** Currently highlighted palette command, if the palette is open. *)
+(** Currently highlighted palette command in the filtered list, if the palette
+    is open and has matches. *)
 
 val palette_open : t -> bool
 (** True when the command palette is open. *)
+
+val palette_query : t -> string option
+(** Current command palette query when open. *)
+
+val visible_command_entries : t -> View.command_entry list
+(** Command entries visible under the current palette query. *)
 
 val selection_label : t -> string
 (** Human-readable event selection label. *)

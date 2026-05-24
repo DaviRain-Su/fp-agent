@@ -159,9 +159,28 @@ let test_command_palette () =
   Alcotest.(check (option int))
     "toggle closes open palette" None
     (View.palette_index ~command_count:count closed);
+  let filtered =
+    View.filter_command_palette_entries ~query:"api-base"
+      View.command_palette_entries
+  in
+  Alcotest.(check int) "filter finds provider" 1 (List.length filtered);
+  Alcotest.(check string)
+    "filter command" "/provider <name> [model] [api-base]"
+    (Option.value_exn (List.hd filtered)).command;
+  let queried =
+    View.set_palette_query ~command_count:(List.length filtered)
+      ~query:"api-base" opened
+  in
+  Alcotest.(check (option int))
+    "query keeps selection" (Some 0)
+    (View.palette_index ~command_count:(List.length filtered) queried);
+  Alcotest.(check string)
+    "query label" "command 1/1 for \"api-base\""
+    (View.palette_label ~command_count:(List.length filtered) queried);
   let selected = 1 in
   let lines =
-    View.command_palette_lines ~selected View.command_palette_entries
+    View.command_palette_lines ~selected:(Some selected)
+      View.command_palette_entries
   in
   let joined = String.concat lines ~sep:"\n" in
   let selected_command =
@@ -178,7 +197,14 @@ let test_command_palette () =
     (String.is_substring joined ~substring:("> " ^ selected_command.command));
   Alcotest.(check bool)
     "renders plugin command" true
-    (String.is_substring joined ~substring:"/plugins")
+    (String.is_substring joined ~substring:"/plugins");
+  let empty_lines =
+    View.command_palette_lines ~query:"nomatch" ~selected:None []
+    |> String.concat ~sep:"\n"
+  in
+  Alcotest.(check bool)
+    "renders no matches" true
+    (String.is_substring empty_lines ~substring:"no matching commands")
 
 let test_prompt_editor () =
   Alcotest.(check string) "empty text" "" View.prompt_empty.text;

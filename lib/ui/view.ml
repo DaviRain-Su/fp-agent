@@ -123,43 +123,93 @@ type command_entry = Shell_command.entry = {
 
 let command_palette_entries = Shell_command.palette_entries
 
-type palette_state = Palette_closed | Palette_open of int
+let filter_command_palette_entries ~query entries =
+  let terms =
+    query |> String.strip |> String.lowercase |> String.split ~on:' '
+    |> List.filter ~f:(fun term -> not (String.is_empty term))
+  in
+  if List.is_empty terms then entries
+  else
+    List.filter entries ~f:(fun entry ->
+        let haystack =
+          String.lowercase (entry.command ^ " " ^ entry.description)
+        in
+        List.for_all terms ~f:(fun term ->
+            String.is_substring haystack ~substring:term))
+
+type palette_state =
+  | Palette_closed
+  | Palette_open of { index : int; query : string }
 
 let normalize_palette ~command_count state =
-  if command_count <= 0 then Palette_closed
-  else
-    match state with
-    | Palette_closed -> Palette_closed
-    | Palette_open index ->
-        Palette_open (clamp ~lo:0 ~hi:(command_count - 1) index)
+  match state with
+  | Palette_closed -> Palette_closed
+  | Palette_open { index; query } ->
+      let index =
+        if command_count <= 0 then 0
+        else clamp ~lo:0 ~hi:(command_count - 1) index
+      in
+      Palette_open { index; query }
+
+let palette_is_open = function
+  | Palette_closed -> false
+  | Palette_open _ -> true
+
+let palette_query = function
+  | Palette_closed -> None
+  | Palette_open p -> Some p.query
 
 let palette_index ~command_count state =
   match normalize_palette ~command_count state with
   | Palette_closed -> None
-  | Palette_open index -> Some index
+  | Palette_open { index; _ } -> if command_count <= 0 then None else Some index
 
 let palette_label ~command_count state =
-  match palette_index ~command_count state with
-  | None -> "palette closed"
-  | Some index -> Printf.sprintf "command %d/%d" (index + 1) command_count
+  match normalize_palette ~command_count state with
+  | Palette_closed -> "palette closed"
+  | Palette_open { index; query } ->
+      let suffix =
+        if String.is_empty query then "" else Printf.sprintf " for %S" query
+      in
+      if command_count <= 0 then "no commands" ^ suffix
+      else Printf.sprintf "command %d/%d%s" (index + 1) command_count suffix
 
 let toggle_palette ~command_count state =
   match normalize_palette ~command_count state with
   | Palette_closed ->
-      if command_count <= 0 then Palette_closed else Palette_open 0
+      if command_count <= 0 then Palette_closed
+      else Palette_open { index = 0; query = "" }
   | Palette_open _ -> Palette_closed
 
 let move_palette ~command_count ~delta state =
-  match palette_index ~command_count state with
-  | None -> state
-  | Some index ->
-      normalize_palette ~command_count (Palette_open (index + delta))
+  match normalize_palette ~command_count state with
+  | Palette_closed -> state
+  | Palette_open { index; query } ->
+      normalize_palette ~command_count
+        (Palette_open { index = index + delta; query })
 
-let command_palette_lines ~selected entries =
-  [ "Command Palette"; "Enter accept, Esc close"; "" ]
-  @ List.mapi entries ~f:(fun index entry ->
-      let marker = if index = selected then "> " else "  " in
-      Printf.sprintf "%s%-24s %s" marker entry.command entry.description)
+let set_palette_query ~command_count ~query state =
+  match state with
+  | Palette_closed -> Palette_closed
+  | Palette_open { index; _ } ->
+      normalize_palette ~command_count (Palette_open { index; query })
+
+let command_palette_lines ?(query = "") ~selected entries =
+  let header =
+    if String.is_empty query then "Command Palette"
+    else Printf.sprintf "Command Palette: %s" query
+  in
+  [ header; "type to filter, Enter accept, Esc close"; "" ]
+  @
+  if List.is_empty entries then [ "  no matching commands" ]
+  else
+    List.mapi entries ~f:(fun index entry ->
+        let marker =
+          match selected with
+          | Some selected when index = selected -> "> "
+          | _ -> "  "
+        in
+        Printf.sprintf "%s%-24s %s" marker entry.command entry.description)
 
 type prompt_editor = { text : string; cursor : int }
 

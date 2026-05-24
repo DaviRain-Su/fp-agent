@@ -156,6 +156,9 @@ let make_tui_reporter ~provider ~model ~session ~header =
     | `Key (`End, _) | `Key (`ASCII 'G', _) -> Some Tui_shell.End
     | `Key (`ASCII '/', _) -> Some Tui_shell.Slash
     | `Key (`ASCII '?', _) -> Some Tui_shell.Question
+    | `Key (`ASCII c, mods)
+      when Tui_shell.palette_open !shell && not (has_key_modifier mods `Ctrl) ->
+        Some (Tui_shell.Text (String.make 1 c))
     | `Mouse (`Press (`Scroll `Up), _, _) -> Some Tui_shell.Mouse_scroll_up
     | `Mouse (`Press (`Scroll `Down), _, _) -> Some Tui_shell.Mouse_scroll_down
     | `Resize _ | `End | `Paste _ | `Key _ | `Mouse _ -> None
@@ -191,8 +194,13 @@ let make_tui_reporter ~provider ~model ~session ~header =
     let palette_index = Tui_shell.selected_command_index shell_state in
     let palette_label = Tui_shell.palette_label shell_state in
     let palette_lines =
-      Option.map palette_index ~f:(fun selected ->
-          View.command_palette_lines ~selected View.command_palette_entries)
+      if Tui_shell.palette_open shell_state then
+        Some
+          (View.command_palette_lines
+             ?query:(Tui_shell.palette_query shell_state)
+             ~selected:palette_index
+             (Tui_shell.visible_command_entries shell_state))
+      else None
     in
     let phase_text = phase_label !(fst phase) in
     let status : View.status =
@@ -271,12 +279,12 @@ let make_tui_reporter ~provider ~model ~session ~header =
     let rule = I.string A.(fg lightblue) (String.make (Int.max 1 w) '-') in
     let footer =
       let hint =
-        match palette_index with
-        | Some _ ->
-            Printf.sprintf "%s | up/down choose | Esc close" palette_label
-        | None ->
-            Printf.sprintf "%s | / palette | up/down inspect | End latest"
-              selection_label
+        if Tui_shell.palette_open shell_state then
+          Printf.sprintf "%s | type filter | up/down choose | Esc close"
+            palette_label
+        else
+          Printf.sprintf "%s | / palette | up/down inspect | End latest"
+            selection_label
       in
       match phase_text with
       | None ->

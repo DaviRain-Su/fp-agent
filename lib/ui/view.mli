@@ -74,10 +74,23 @@ type command_entry = Shell_command.entry = {
 val command_palette_entries : command_entry list
 (** Built-in command palette entries shown in the TUI. *)
 
+val filter_command_palette_entries :
+  query:string -> command_entry list -> command_entry list
+(** Case-insensitive command palette filtering over command text and
+    description. Empty queries preserve all entries. *)
+
 type palette_state =
   | Palette_closed
-  | Palette_open of int
-      (** TUI command palette visibility plus selected command index. *)
+  | Palette_open of { index : int; query : string }
+      (** TUI command palette visibility, selected index in the filtered list,
+          and current search query. *)
+
+val palette_is_open : palette_state -> bool
+(** True when the palette overlay is open, even if the current query has no
+    matches. *)
+
+val palette_query : palette_state -> string option
+(** Current palette query when the overlay is open. *)
 
 val palette_index : command_count:int -> palette_state -> int option
 (** Resolve the selected command index when the palette is open. *)
@@ -92,7 +105,13 @@ val move_palette :
   command_count:int -> delta:int -> palette_state -> palette_state
 (** Move the selected command by [delta], clamped to the command range. *)
 
-val command_palette_lines : selected:int -> command_entry list -> string list
+val set_palette_query :
+  command_count:int -> query:string -> palette_state -> palette_state
+(** Update palette query and clamp selection against the filtered command count
+    supplied by the caller. Closed palettes are unchanged. *)
+
+val command_palette_lines :
+  ?query:string -> selected:int option -> command_entry list -> string list
 (** Render the command palette as plain lines. *)
 
 type prompt_editor = { text : string; cursor : int }
