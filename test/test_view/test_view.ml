@@ -334,6 +334,7 @@ let test_plugin_inspector_lines () =
       id = "com.example.echo";
       name = "Echo Tools";
       version = "0.1.0";
+      sdk_version = 1;
       dir = "/tmp/echo";
       tools =
         [
@@ -364,6 +365,9 @@ let test_plugin_inspector_lines () =
   Alcotest.(check bool)
     "shows command" true
     (String.is_substring joined ~substring:"command: sh echo.sh");
+  Alcotest.(check bool)
+    "shows sdk version" true
+    (String.is_substring joined ~substring:"sdk_version: 1");
   Alcotest.(check bool)
     "shows timeout" true
     (String.is_substring joined ~substring:"timeout: 7s");

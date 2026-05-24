@@ -33,6 +33,7 @@ let write_plugin dir ~id ~tool_name ~kind =
   "id": "%s",
   "name": "Test Plugin",
   "version": "0.1.0",
+  "sdk_version": 1,
   "tools": [
     {
       "name": "%s",
@@ -308,6 +309,9 @@ let test_scaffold_creates_valid_plugin () =
           | Ok manifest ->
               Alcotest.(check string)
                 "scaffold id" "com.example.scaffold" manifest.id;
+              Alcotest.(check int)
+                "scaffold sdk version" Plugin.supported_sdk_version
+                manifest.sdk_version;
               Alcotest.(check int) "one tool" 1 (List.length manifest.tools)))
 
 let test_check_rejects_invalid_manifest () =
@@ -327,6 +331,33 @@ let test_check_rejects_invalid_manifest () =
       check_error "dotdot-id" {|{"id":"..","tools":[]}|} "plugin id cannot be";
       check_error "empty-tools" {|{"id":"com.example.empty","tools":[]}|}
         "at least one tool";
+      check_error "unsupported-sdk"
+        {|{
+  "id":"com.example.unsupported",
+  "sdk_version":999,
+  "tools":[
+    {"name":"echo","kind":"read","description":"Echo","command":"sh echo.sh"}
+  ]
+}|}
+        "unsupported sdk_version";
+      check_error "bad-sdk"
+        {|{
+  "id":"com.example.bad_sdk",
+  "sdk_version":0,
+  "tools":[
+    {"name":"echo","kind":"read","description":"Echo","command":"sh echo.sh"}
+  ]
+}|}
+        "sdk_version must be positive";
+      check_error "non-integer-sdk"
+        {|{
+  "id":"com.example.bad_sdk_type",
+  "sdk_version":"newest",
+  "tools":[
+    {"name":"echo","kind":"read","description":"Echo","command":"sh echo.sh"}
+  ]
+}|}
+        "sdk_version must be an integer";
       check_error "duplicate-tool"
         {|{
   "id":"com.example.duplicate",

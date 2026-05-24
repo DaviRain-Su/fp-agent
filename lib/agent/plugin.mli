@@ -11,11 +11,13 @@ type manifest = {
   id : string;
   name : string;
   version : string;
+  sdk_version : int;
   dir : string;
   tools : plugin_tool list;
 }
 
 val manifest_file : string
+val supported_sdk_version : int
 
 val load_manifest : string -> (manifest, string) result
 (** Load and validate [fp-agent-plugin.json] from a plugin directory. *)

@@ -63,7 +63,8 @@ let plugins_lines () =
   | [] -> [ "(no plugins discovered)" ]
   | manifests ->
       List.concat_map manifests ~f:(fun (plugin : Plugin.manifest) ->
-          Printf.sprintf "%s %s (%s)" plugin.id plugin.name plugin.version
+          Printf.sprintf "%s %s (%s, sdk %d)" plugin.id plugin.name
+            plugin.version plugin.sdk_version
           :: ("  " ^ plugin.dir)
           :: List.map plugin.tools ~f:(fun tool ->
               Printf.sprintf "  - %-18s %-5s %s" tool.tool_name

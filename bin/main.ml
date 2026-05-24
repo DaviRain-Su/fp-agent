@@ -853,8 +853,8 @@ let print_plugins () =
   | [] -> Stdlib.print_endline "(no plugins discovered)"
   | manifests ->
       List.iter manifests ~f:(fun (plugin : Plugin.manifest) ->
-          Stdlib.Printf.printf "%s %s (%s)\n  %s\n" plugin.id plugin.name
-            plugin.version plugin.dir;
+          Stdlib.Printf.printf "%s %s (%s, sdk %d)\n  %s\n" plugin.id
+            plugin.name plugin.version plugin.sdk_version plugin.dir;
           List.iter plugin.tools ~f:(fun tool ->
               Stdlib.Printf.printf "  - %-18s %-5s %s\n" tool.tool_name
                 (tool_kind_label tool.tool_kind)
@@ -1222,8 +1222,8 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
   0
 
 let print_plugin_summary (plugin : Plugin.manifest) =
-  Stdlib.Printf.printf "%s %s (%s)\n  %s\n" plugin.id plugin.name plugin.version
-    plugin.dir;
+  Stdlib.Printf.printf "%s %s (%s, sdk %d)\n  %s\n" plugin.id plugin.name
+    plugin.version plugin.sdk_version plugin.dir;
   List.iter plugin.tools ~f:(fun tool ->
       Stdlib.Printf.printf "  - %-18s %-5s %s\n" tool.tool_name
         (tool_kind_label tool.tool_kind)

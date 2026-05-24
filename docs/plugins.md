@@ -11,6 +11,7 @@ or binaries it needs.
   "id": "com.example.echo",
   "name": "Echo Tools",
   "version": "0.1.0",
+  "sdk_version": 1,
   "tools": [
     {
       "name": "echo_json",
@@ -34,6 +35,11 @@ Tool names must be unique within a manifest and use letters, digits, `_`, or
 `read`, `write`, or `exec` and drives approval policy in `--confirm` mode.
 Optional `timeout`, `timeoutSec`, or `timeout_sec` values must be positive
 seconds.
+
+`sdk_version` declares the fp-agent plugin manifest contract version. It
+defaults to `1` for older plugins, and `fp-agent --check-plugin` / install /
+local run commands reject versions newer than the current binary supports. The
+accepted aliases are `sdkVersion`, `api_version`, and `apiVersion`.
 
 ## Runtime Contract
 

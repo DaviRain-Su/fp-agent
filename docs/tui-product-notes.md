@@ -80,6 +80,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - Fullscreen TUI `/undo` now shares the REPL git checkpoint stack. Each
   submitted task captures the worktree before execution, and `/undo` restores
   that checkpoint without touching `.ocaml-agent` session logs.
+- Plugin manifests now expose `sdk_version` compatibility metadata. Scaffolded
+  plugins write it explicitly, while check/install/run reject unsupported future
+  SDK versions.
 - The command palette controller now distinguishes close from accept: Enter
   returns the highlighted command entry, giving the future fullscreen shell a
   tested command-dispatch point while preserving the current overlay behavior.

@@ -13,11 +13,13 @@ type manifest = {
   id : string;
   name : string;
   version : string;
+  sdk_version : int;
   dir : string;
   tools : plugin_tool list;
 }
 
 let manifest_file = "fp-agent-plugin.json"
+let supported_sdk_version = 1
 let default_timeout_sec = 60
 let max_output_bytes = 32 * 1024
 
@@ -199,6 +201,28 @@ let validate_plugin_id id =
       Error "plugin id cannot be '.' or '..'"
   | Ok () -> Ok ()
 
+let validate_sdk_version version =
+  if version <= 0 then Error "sdk_version must be positive"
+  else if version > supported_sdk_version then
+    Error
+      (Printf.sprintf
+         "unsupported sdk_version %d (this fp-agent supports sdk_version <= %d)"
+         version supported_sdk_version)
+  else Ok version
+
+let parse_sdk_version json =
+  match
+    json_member json
+      [ "sdk_version"; "sdkVersion"; "api_version"; "apiVersion" ]
+  with
+  | None -> Ok supported_sdk_version
+  | Some (`Int version) -> validate_sdk_version version
+  | Some (`String version) -> (
+      match Int.of_string (String.strip version) with
+      | version -> validate_sdk_version version
+      | exception _ -> Error "sdk_version must be an integer")
+  | Some _ -> Error "sdk_version must be an integer"
+
 let kind_of_string = function
   | "read" -> Ok Tool.Read
   | "write" -> Ok Tool.Write
@@ -266,9 +290,10 @@ let load_manifest dir =
         ( req_string json "id",
           json_string json [ "name" ],
           json_string json [ "version" ],
+          parse_sdk_version json,
           json_member json [ "tools" ] )
       with
-      | Ok id, name, version, Some (`List tool_jsons) -> (
+      | Ok id, name, version, Ok sdk_version, Some (`List tool_jsons) -> (
           match validate_plugin_id id with
           | Error e -> Error e
           | Ok () -> (
@@ -291,11 +316,13 @@ let load_manifest dir =
                           id;
                           name = Option.value name ~default:id;
                           version = Option.value version ~default:"0.0.0";
+                          sdk_version;
                           dir;
                           tools;
                         })))
-      | Error e, _, _, _ -> Error e
-      | _, _, _, _ -> Error "plugin manifest requires a tools array")
+      | Error e, _, _, _, _ -> Error e
+      | _, _, _, Error e, _ -> Error e
+      | _, _, _, _, _ -> Error "plugin manifest requires a tools array")
 
 let check = load_manifest
 
@@ -556,6 +583,7 @@ let scaffold ?id dir =
   "id": "%s",
   "name": "%s",
   "version": "0.1.0",
+  "sdk_version": %d,
   "tools": [
     {
       "name": "hello_world",
@@ -573,7 +601,7 @@ let scaffold ?id dir =
   ]
 }
 |}
-                   id id));
+                   id id supported_sdk_version));
           Stdlib.Out_channel.with_open_bin script_path (fun oc ->
               Stdlib.Out_channel.output_string oc
                 "#!/bin/sh\nprintf 'hello from fp-agent plugin: '\ncat\n");

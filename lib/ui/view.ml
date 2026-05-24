@@ -446,6 +446,7 @@ let plugin_inspector_lines (plugin : Plugin.manifest) =
     "id: " ^ plugin.id;
     "name: " ^ plugin.name;
     "version: " ^ plugin.version;
+    Printf.sprintf "sdk_version: %d" plugin.sdk_version;
     "dir: " ^ plugin.dir;
     Printf.sprintf "tools: %d" (List.length plugin.tools);
     "";
