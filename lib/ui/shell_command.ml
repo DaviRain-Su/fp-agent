@@ -14,6 +14,7 @@ type id =
   | Provider
   | Log
   | Inspect
+  | Usage
   | Fork
   | Diff
   | Undo
@@ -142,6 +143,14 @@ let specs =
       aliases = [];
       palette = true;
       acceptance = Execute "/inspect";
+    };
+    {
+      id = Usage;
+      command = "/usage";
+      description = "show token usage from the event log";
+      aliases = [];
+      palette = true;
+      acceptance = Execute "/usage";
     };
     {
       id = Fork;

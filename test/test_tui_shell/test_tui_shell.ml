@@ -257,7 +257,16 @@ let test_home_end_prompt_vs_events () =
 
 let test_tui_command_model_log_and_inspect () =
   with_temp_dir "fp_agent_tui_command_events" (fun root ->
-      let events = [ Event.User_message { content = "inspect README" } ] in
+      let events =
+        [
+          Event.User_message { content = "inspect README" };
+          Event.Assistant_message
+            {
+              content = [ Llm.Text "ok" ];
+              usage = { input_tokens = 21; output_tokens = 7 };
+            };
+        ]
+      in
       let context = tui_context ~events ~selected_event_index:0 root in
       let model = output "/model" context in
       Alcotest.(check bool)
@@ -284,6 +293,13 @@ let test_tui_command_model_log_and_inspect () =
       Alcotest.(check bool)
         "inspect includes event kind" true
         (String.is_substring inspect ~substring:"kind: user_message");
+      let usage = output "/usage" context in
+      Alcotest.(check bool)
+        "usage command shows input" true
+        (String.is_substring usage ~substring:"input_tokens: 21");
+      Alcotest.(check bool)
+        "usage command shows total" true
+        (String.is_substring usage ~substring:"total_tokens: 28");
       let inspect_by_index = output "/inspect 0" context in
       Alcotest.(check bool)
         "inspect accepts explicit index" true

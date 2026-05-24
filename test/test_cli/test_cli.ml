@@ -1,4 +1,5 @@
 open! Base
+open Fp_agent
 
 type run_result = { code : int; stdout : string; stderr : string }
 
@@ -315,13 +316,23 @@ let test_repl_inspects_session_events () =
   mkdir_p sessions_root;
   let session_dir = Stdlib.Filename.concat sessions_root "inspect-session" in
   mkdir_p session_dir;
-  write_file
-    (Stdlib.Filename.concat session_dir "events.jsonl")
-    {|{"schema_version":1,"ts":"2026-05-24T00:00:00Z","event":["Tool_call",{"name":"search","args":{"query":"Plugin","path":"lib"}}]}
-|};
+  let log = Event_log.create ~session_dir in
+  Event_log.append log
+    (Event.Tool_call
+       (Tool_call.make ~name:"search"
+          ~args:
+            (`Assoc [ ("query", `String "Plugin"); ("path", `String "lib") ])));
+  Event_log.append log
+    (Event.Assistant_message
+       {
+         content = [ Llm.Text "done" ];
+         usage = { input_tokens = 31; output_tokens = 9 };
+       });
+  Event_log.close log;
   let repl =
     run ~env
-      ~stdin:"/log\n/inspect 0\n/inspect\n/inspect 3\n/inspect nope\n/exit\n"
+      ~stdin:
+        "/log\n/usage\n/inspect 0\n/inspect\n/inspect 3\n/inspect nope\n/exit\n"
       [ fp_agent_bin (); "--resume"; session_dir ]
   in
   assert_success "repl inspect command" repl;
@@ -331,7 +342,9 @@ let test_repl_inspects_session_events () =
   assert_contains "inspect tool" repl.stdout "tool: search";
   assert_contains "inspect args" repl.stdout "\"query\": \"Plugin\"";
   assert_contains "inspect json" repl.stdout "JSON";
-  assert_contains "inspect range" repl.stdout "no event at index 3 (0..0)";
+  assert_contains "usage input" repl.stdout "input_tokens: 31";
+  assert_contains "usage total" repl.stdout "total_tokens: 40";
+  assert_contains "inspect range" repl.stdout "no event at index 3 (0..1)";
   assert_contains "inspect usage" repl.stdout "usage: /inspect [event-index]"
 
 let test_tui_confirm_conflict_fails_before_config () =

@@ -30,6 +30,7 @@ let test_parse () =
     (Shell_command.parse "/model qwen36-rtx");
   require_command "models" Shell_command.Models ""
     (Shell_command.parse "/models");
+  require_command "usage" Shell_command.Usage "" (Shell_command.parse "/usage");
   require_command "provider" Shell_command.Provider
     "local-llm qwen36-rtx http://127.0.0.1:8000/v1"
     (Shell_command.parse
@@ -52,6 +53,9 @@ let test_metadata () =
   Alcotest.(check bool)
     "palette has provider" true
     (List.mem palette "/provider <name> [model] [api-base]" ~equal:String.equal);
+  Alcotest.(check bool)
+    "palette has usage" true
+    (List.mem palette "/usage" ~equal:String.equal);
   let help = Shell_command.help_text () in
   Alcotest.(check bool)
     "help has alias" true
@@ -70,6 +74,8 @@ let test_acceptance () =
     (Shell_command.accept (entry "/tools"));
   require_acceptance "model execute" ("execute", "/model")
     (Shell_command.accept (entry "/model [id]"));
+  require_acceptance "usage execute" ("execute", "/usage")
+    (Shell_command.accept (entry "/usage"));
   require_acceptance "tool draft" ("draft", "/tool ")
     (Shell_command.accept (entry "/tool <name>"));
   require_acceptance "provider draft" ("draft", "/provider ")

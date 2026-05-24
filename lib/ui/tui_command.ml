@@ -236,6 +236,14 @@ let inspect_lines ctx arg =
       | Some event ->
           Printf.sprintf "event %d" index :: View.event_inspector_lines event)
 
+let usage_lines ctx =
+  let usage = View.token_usage_of_events ctx.events in
+  [
+    Printf.sprintf "input_tokens: %d" usage.input_tokens;
+    Printf.sprintf "output_tokens: %d" usage.output_tokens;
+    Printf.sprintf "total_tokens: %d" (View.token_usage_total usage);
+  ]
+
 let run ctx command =
   let open Shell_command in
   match parse command with
@@ -256,4 +264,5 @@ let run ctx command =
   | Command (Log, _) -> Some (command_section command (log_lines ctx))
   | Command (Inspect, arg) ->
       Some (command_section command (inspect_lines ctx arg))
+  | Command (Usage, _) -> Some (command_section command (usage_lines ctx))
   | Empty | Task _ | Unknown _ | Command _ -> None

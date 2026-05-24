@@ -48,20 +48,38 @@ let split_panes ~width =
     let timeline_cols = width - inspector_cols - 3 in
     if timeline_cols < 40 then None else Some { timeline_cols; inspector_cols }
 
+type token_usage = { input_tokens : int; output_tokens : int }
+
+let token_usage_zero = { input_tokens = 0; output_tokens = 0 }
+let token_usage_total usage = usage.input_tokens + usage.output_tokens
+
+let token_usage_of_events events =
+  List.fold events ~init:token_usage_zero ~f:(fun acc event ->
+      match event with
+      | Event.Assistant_message { usage; _ } ->
+          {
+            input_tokens = acc.input_tokens + usage.input_tokens;
+            output_tokens = acc.output_tokens + usage.output_tokens;
+          }
+      | _ -> acc)
+
 type status = {
   provider : string;
   model : string;
   session : string;
   phase : string option;
   events : int;
+  usage : token_usage;
   plugins : int;
   tools : int;
 }
 
 let status_line s =
   let phase = Option.value s.phase ~default:"idle" in
-  Printf.sprintf "%s/%s | %s | %s | events %d | plugins %d | tools %d"
-    s.provider s.model s.session phase s.events s.plugins s.tools
+  Printf.sprintf
+    "%s/%s | %s | %s | events %d | tokens %d/%d | plugins %d | tools %d"
+    s.provider s.model s.session phase s.events s.usage.input_tokens
+    s.usage.output_tokens s.plugins s.tools
 
 let inspector_lines ?(focus_label = "Last event") s ~last_event =
   [
@@ -71,6 +89,9 @@ let inspector_lines ?(focus_label = "Last event") s ~last_event =
     "session: " ^ s.session;
     "phase: " ^ Option.value s.phase ~default:"idle";
     Printf.sprintf "events: %d" s.events;
+    Printf.sprintf "tokens: input %d output %d total %d" s.usage.input_tokens
+      s.usage.output_tokens
+      (token_usage_total s.usage);
     Printf.sprintf "plugins: %d" s.plugins;
     Printf.sprintf "tools: %d" s.tools;
     "";

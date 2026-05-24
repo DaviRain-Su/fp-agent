@@ -306,6 +306,7 @@ let make_tui_view ~initial_events ~provider ~model ~api_base ~workspace_root
         session = Stdlib.Filename.basename !session_ref;
         phase = phase_text;
         events = event_count;
+        usage = View.token_usage_of_events !events;
         plugins = plugin_count;
         tools = tool_count;
       }
@@ -1024,6 +1025,15 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
                   (View.event_inspector_lines event)
                   ~f:Stdlib.print_endline))
   in
+  let print_usage () =
+    match Journal.read ~session_dir:!session with
+    | Error e -> Stdlib.print_endline e
+    | Ok events ->
+        let usage = View.token_usage_of_events events in
+        Stdlib.Printf.printf "input_tokens: %d\n" usage.input_tokens;
+        Stdlib.Printf.printf "output_tokens: %d\n" usage.output_tokens;
+        Stdlib.Printf.printf "total_tokens: %d\n" (View.token_usage_total usage)
+  in
   let print_tree () =
     match Stdlib.Sys.readdir sessions_root with
     | exception _ -> Stdlib.print_endline "(no sessions yet)"
@@ -1148,6 +1158,9 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
             loop ()
         | Command (Inspect, arg) ->
             print_inspect arg;
+            loop ()
+        | Command (Usage, _) ->
+            print_usage ();
             loop ()
         | Command (Tree, _) ->
             print_tree ();

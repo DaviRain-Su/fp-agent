@@ -12,6 +12,7 @@ type id =
   | Provider
   | Log
   | Inspect
+  | Usage
   | Fork
   | Diff
   | Undo

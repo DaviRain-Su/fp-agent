@@ -69,6 +69,7 @@ let test_status_and_inspector () =
       session = "2026-session";
       phase = Some "running read_file…";
       events = 12;
+      usage = { input_tokens = 1234; output_tokens = 567 };
       plugins = 2;
       tools = 11;
     }
@@ -80,6 +81,9 @@ let test_status_and_inspector () =
   Alcotest.(check bool)
     "status has plugins" true
     (String.is_substring line ~substring:"plugins 2");
+  Alcotest.(check bool)
+    "status has token usage" true
+    (String.is_substring line ~substring:"tokens 1234/567");
   Alcotest.(check (list string))
     "inspector lines"
     [
@@ -89,6 +93,7 @@ let test_status_and_inspector () =
       "session: 2026-session";
       "phase: running read_file…";
       "events: 12";
+      "tokens: input 1234 output 567 total 1801";
       "plugins: 2";
       "tools: 11";
       "";
@@ -96,6 +101,28 @@ let test_status_and_inspector () =
       "→ read_file README.md";
     ]
     (View.inspector_lines status ~last_event:"→ read_file README.md")
+
+let test_token_usage () =
+  let events =
+    [
+      Event.User_message { content = "hello" };
+      Event.Assistant_message
+        {
+          content = [ Llm.Text "thinking" ];
+          usage = { input_tokens = 10; output_tokens = 4 };
+        };
+      Event.Tool_result (Tool_result.Success { output = "ok" });
+      Event.Assistant_message
+        {
+          content = [ Llm.Text "done" ];
+          usage = { input_tokens = 12; output_tokens = 8 };
+        };
+    ]
+  in
+  let usage = View.token_usage_of_events events in
+  Alcotest.(check int) "input tokens" 22 usage.input_tokens;
+  Alcotest.(check int) "output tokens" 12 usage.output_tokens;
+  Alcotest.(check int) "total tokens" 34 (View.token_usage_total usage)
 
 let test_event_selection () =
   Alcotest.(check (option int))
@@ -379,6 +406,7 @@ let () =
           Alcotest.test_case "split_panes" `Quick test_split_panes;
           Alcotest.test_case "status_and_inspector" `Quick
             test_status_and_inspector;
+          Alcotest.test_case "token_usage" `Quick test_token_usage;
           Alcotest.test_case "event_selection" `Quick test_event_selection;
           Alcotest.test_case "command_palette" `Quick test_command_palette;
           Alcotest.test_case "prompt_editor" `Quick test_prompt_editor;

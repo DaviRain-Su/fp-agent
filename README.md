@@ -56,6 +56,7 @@ dune exec -- fp-agent
 > /diff              # show uncommitted changes (git)
 > /undo              # revert the last turn's changes (git)
 > /log               # list this session's events with indices
+> /usage             # show token usage from the event log
 > /fork 3            # fork a new branch at event index 3 (or /fork for the end)
 > /tree              # show the session fork tree
 > /sessions          # list sessions in this workspace
@@ -139,14 +140,14 @@ copy. Two consequences:
   by default, or pin a historical event with Up/Down, PageUp/PageDown, Home,
   and End.
 - **TUI command palette** (`/` or `?` in `--tui`) shows the core REPL commands
-  for models, providers, plugins, tools, sessions, event logs, forks, diffs,
-  and undo. The palette and REPL parser share the same command metadata, and
-  palette acceptance either dispatches safe no-arg commands or seeds the prompt
-  draft for commands that need arguments. Typing while the palette is open
+  for models, providers, plugins, tools, sessions, event logs, usage, forks,
+  diffs, and undo. The palette and REPL parser share the same command metadata,
+  and palette acceptance either dispatches safe no-arg commands or seeds the
+  prompt draft for commands that need arguments. Typing while the palette is open
   filters commands by name or description, and accepted commands/drafts are
   echoed into the TUI timeline. Read-only commands such as `/tools`, `/plugins`,
-  `/models`, `/model`, `/diff`, `/log`, and `/inspect` render their results
-  directly inside the fullscreen view.
+  `/models`, `/model`, `/usage`, `/diff`, `/log`, and `/inspect` render their
+  results directly inside the fullscreen view.
 - **TUI model/provider switching** lets `/model <id>` and `/provider <name>
   [model] [api-base]` change the runtime used by later TUI task submissions.
 - **TUI session navigation** lets `/resume <dir>` and `/fork [index]` switch

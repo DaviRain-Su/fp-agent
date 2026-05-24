@@ -28,12 +28,22 @@ val split_panes : width:int -> panes option
 (** Return a two-pane layout for wide terminals. Narrow terminals use the
     single-pane timeline. *)
 
+type token_usage = { input_tokens : int; output_tokens : int }
+(** Aggregate model token usage derived from assistant-message events. *)
+
+val token_usage_zero : token_usage
+val token_usage_total : token_usage -> int
+
+val token_usage_of_events : Event.t list -> token_usage
+(** Sum input/output token usage recorded in the event log. *)
+
 type status = {
   provider : string;
   model : string;
   session : string;
   phase : string option;
   events : int;
+  usage : token_usage;
   plugins : int;
   tools : int;
 }
