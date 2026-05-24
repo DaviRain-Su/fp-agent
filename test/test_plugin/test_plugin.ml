@@ -1132,6 +1132,36 @@ let test_scaffold_template_catalog () =
     "python sdk file" true
     (List.mem python.template_files "fp_agent_sdk.py" ~equal:String.equal)
 
+let test_manifest_schema_contract () =
+  let schema = Plugin.manifest_schema () in
+  let member = Yojson.Safe.Util.member in
+  let to_list = Yojson.Safe.Util.to_list in
+  let to_string = Yojson.Safe.Util.to_string in
+  Alcotest.(check string)
+    "schema title" "fp-agent plugin manifest"
+    (schema |> member "title" |> to_string);
+  Alcotest.(check bool)
+    "schema requires tools" true
+    (schema |> member "required" |> to_list
+    |> List.exists ~f:(function `String "tools" -> true | _ -> false));
+  let tool_schema =
+    schema |> member "properties" |> member "tools" |> member "items"
+  in
+  Alcotest.(check bool)
+    "tool requires command" true
+    (tool_schema |> member "required" |> to_list
+    |> List.exists ~f:(function `String "command" -> true | _ -> false));
+  Alcotest.(check bool)
+    "kind includes exec" true
+    (tool_schema |> member "properties" |> member "kind" |> member "enum"
+   |> to_list
+    |> List.exists ~f:(function `String "exec" -> true | _ -> false));
+  Alcotest.(check bool)
+    "input schema alias documented" true
+    (match tool_schema |> member "properties" |> member "inputSchema" with
+    | `Assoc _ -> true
+    | _ -> false)
+
 let test_check_rejects_invalid_manifest () =
   with_temp_dir "fp_agent_plugin_bad" (fun root ->
       let check_error name json substring =
@@ -1299,6 +1329,8 @@ let () =
             test_scaffold_creates_python_template;
           Alcotest.test_case "scaffold_template_catalog" `Quick
             test_scaffold_template_catalog;
+          Alcotest.test_case "manifest_schema_contract" `Quick
+            test_manifest_schema_contract;
           Alcotest.test_case "check_invalid_plugin" `Quick
             test_check_rejects_invalid_manifest;
           Alcotest.test_case "plugin_schema_request" `Quick

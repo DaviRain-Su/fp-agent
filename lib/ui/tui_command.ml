@@ -221,8 +221,12 @@ let plugin_sdk_lines () =
       "  /plugin-run my-plugin echo_json \
        @my-plugin/examples/echo_json.args.json";
       "next: /plugin-new --template python <dir>";
+      "next: /plugin-schema";
       "next: /plugin-doctor";
     ]
+
+let plugin_schema_lines () =
+  Yojson.Safe.pretty_to_string (Plugin.manifest_schema ()) |> String.split_lines
 
 let plugin_matches query (plugin : Plugin.manifest) =
   String.equal plugin.id query
@@ -878,6 +882,8 @@ let run ctx command =
       Some (command_section command (plugin_diagnostics_lines ()))
   | Command (PluginSdk, _) ->
       Some (command_section command (plugin_sdk_lines ()))
+  | Command (PluginSchema, _) ->
+      Some (command_section command (plugin_schema_lines ()))
   | Command (Sessions, _) -> Some (command_section command (sessions_lines ctx))
   | Command (Tree, _) -> Some (command_section command (tree_lines ctx))
   | Command (Model, "") ->

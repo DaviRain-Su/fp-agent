@@ -16,6 +16,7 @@ type id =
   | PluginRun
   | PluginDoctor
   | PluginSdk
+  | PluginSchema
   | Sessions
   | Tree
   | NewSession
@@ -188,6 +189,14 @@ let specs =
       aliases = [ "/plugin-templates" ];
       palette = true;
       acceptance = Execute "/plugin-sdk";
+    };
+    {
+      id = PluginSchema;
+      command = "/plugin-schema";
+      description = "print the plugin manifest JSON Schema";
+      aliases = [];
+      palette = true;
+      acceptance = Execute "/plugin-schema";
     };
     {
       id = Sessions;
@@ -442,7 +451,7 @@ let group_of_id = function
   | Tools | Tool -> "Tools"
   | Plugins | Plugin | PluginNew | PluginDev | PluginCheck | PluginInstall
   | PluginPackage | PluginRemove | PluginSmoke | PluginRun | PluginDoctor
-  | PluginSdk ->
+  | PluginSdk | PluginSchema ->
       "Plugins"
   | Sessions | Tree | NewSession | Resume -> "Sessions"
   | Model | ModelNext | Models | Providers | ProviderDoctor | Provider

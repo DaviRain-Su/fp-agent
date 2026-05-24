@@ -45,6 +45,9 @@ val plugin_diagnostics_lines : unit -> string list
 val plugin_sdk_lines : unit -> string list
 (** Render the plugin SDK contract and built-in scaffold templates. *)
 
+val plugin_schema_lines : unit -> string list
+(** Render the plugin manifest JSON Schema as pretty JSON lines. *)
+
 val plan_lines : Event.t list -> string list
 (** Render the latest session plan from an event list. *)
 

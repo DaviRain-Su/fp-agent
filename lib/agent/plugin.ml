@@ -1471,6 +1471,179 @@ let scaffold_templates () =
       ~description:"Python starter with fp_agent_sdk.py helper functions";
   ]
 
+let schema_string ?pattern ?description () =
+  let fields = [ ("type", `String "string") ] in
+  let fields =
+    match pattern with
+    | None -> fields
+    | Some pattern -> fields @ [ ("pattern", `String pattern) ]
+  in
+  let fields =
+    match description with
+    | None -> fields
+    | Some description -> fields @ [ ("description", `String description) ]
+  in
+  `Assoc fields
+
+let schema_integer ?minimum ?description () =
+  let fields = [ ("type", `String "integer") ] in
+  let fields =
+    match minimum with
+    | None -> fields
+    | Some minimum -> fields @ [ ("minimum", `Int minimum) ]
+  in
+  let fields =
+    match description with
+    | None -> fields
+    | Some description -> fields @ [ ("description", `String description) ]
+  in
+  `Assoc fields
+
+let manifest_schema () =
+  let sdk_version_field =
+    schema_integer ~minimum:1
+      ~description:
+        (Printf.sprintf
+           "fp-agent plugin SDK version. This binary supports sdk_version <= \
+            %d."
+           supported_sdk_version)
+      ()
+  in
+  let json_schema =
+    `Assoc
+      [
+        ("description", `String "JSON Schema object accepted by the tool");
+        ("type", `String "object");
+        ("additionalProperties", `Bool true);
+      ]
+  in
+  let permissions_schema =
+    `Assoc
+      [
+        ( "description",
+          `String
+            "Optional audit metadata surfaced in /plugins, /plugin, tool \
+             descriptions, approval prompts, and FP_AGENT_TOOL_PERMISSIONS." );
+        ( "oneOf",
+          `List
+            [
+              schema_string ();
+              `Assoc
+                [
+                  ("type", `String "array");
+                  ("items", schema_string ());
+                  ("minItems", `Int 1);
+                ];
+              `Assoc
+                [
+                  ("type", `String "object");
+                  ( "additionalProperties",
+                    `Assoc
+                      [
+                        ( "oneOf",
+                          `List
+                            [
+                              schema_string ();
+                              `Assoc [ ("type", `String "boolean") ];
+                              `Assoc
+                                [
+                                  ("type", `String "array");
+                                  ("items", schema_string ());
+                                ];
+                            ] );
+                      ] );
+                ];
+            ] );
+      ]
+  in
+  let tool_schema =
+    `Assoc
+      [
+        ("type", `String "object");
+        ("additionalProperties", `Bool true);
+        ( "required",
+          `List
+            [
+              `String "name";
+              `String "kind";
+              `String "description";
+              `String "command";
+            ] );
+        ( "properties",
+          `Assoc
+            [
+              ( "name",
+                schema_string ~pattern:"^[A-Za-z0-9_-]+$"
+                  ~description:
+                    "Tool name exposed to the model. Must not conflict with \
+                     built-in or earlier plugin tools."
+                  () );
+              ( "kind",
+                `Assoc
+                  [
+                    ("type", `String "string");
+                    ( "enum",
+                      `List
+                        [
+                          `String "read";
+                          `String "write";
+                          `String "exec";
+                          `String "execute";
+                        ] );
+                    ( "description",
+                      `String
+                        "Tool policy class. read/write are workspace-bounded; \
+                         exec may require confirmation." );
+                  ] );
+              ("description", schema_string ());
+              ( "command",
+                schema_string
+                  ~description:
+                    "Command run from the plugin directory. JSON args are sent \
+                     on stdin and via FP_AGENT_ARGS_FILE."
+                  () );
+              ("permissions", permissions_schema);
+              ("permission", permissions_schema);
+              ("input_schema", json_schema);
+              ("inputSchema", json_schema);
+              ("parameters", json_schema);
+              ("timeout", schema_integer ~minimum:1 ());
+              ("timeoutSec", schema_integer ~minimum:1 ());
+              ("timeout_sec", schema_integer ~minimum:1 ());
+            ] );
+      ]
+  in
+  `Assoc
+    [
+      ("$schema", `String "https://json-schema.org/draft/2020-12/schema");
+      ("$id", `String "https://fp-agent.local/schemas/fp-agent-plugin.json");
+      ("title", `String "fp-agent plugin manifest");
+      ("type", `String "object");
+      ("additionalProperties", `Bool true);
+      ( "required",
+        `List
+          [ `String "id"; `String "name"; `String "version"; `String "tools" ]
+      );
+      ( "properties",
+        `Assoc
+          [
+            ("id", schema_string ~pattern:"^[A-Za-z0-9_.-]+$" ());
+            ("name", schema_string ());
+            ("version", schema_string ());
+            ("sdk_version", sdk_version_field);
+            ("sdkVersion", sdk_version_field);
+            ("api_version", sdk_version_field);
+            ("apiVersion", sdk_version_field);
+            ( "tools",
+              `Assoc
+                [
+                  ("type", `String "array");
+                  ("minItems", `Int 1);
+                  ("items", tool_schema);
+                ] );
+          ] );
+    ]
+
 let scaffold_template_of_string template =
   match String.lowercase (String.strip template) with
   | "shell" | "sh" -> Ok shell_scaffold_template

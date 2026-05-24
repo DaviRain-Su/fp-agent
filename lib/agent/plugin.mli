@@ -66,6 +66,9 @@ val supported_sdk_version : int
 val scaffold_templates : unit -> scaffold_template_info list
 (** Return built-in starter templates accepted by [scaffold]. *)
 
+val manifest_schema : unit -> Yojson.Safe.t
+(** Return the machine-readable JSON Schema for [fp-agent-plugin.json]. *)
+
 val permissions_label : Yojson.Safe.t option -> string
 (** Render plugin tool permissions as a compact human-facing label. *)
 

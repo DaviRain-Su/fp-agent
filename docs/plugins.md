@@ -108,6 +108,7 @@ Use the REPL command:
 /plugins
 /plugin-doctor
 /plugin-sdk
+/plugin-schema
 /plugin echo_json
 /plugin-new --id com.example.echo --tool-name echo_json --kind read --template python my-plugin
 /plugin-dev --replace my-plugin
@@ -137,6 +138,10 @@ tool is missing from `/tools`.
 `/plugin-sdk` prints the supported manifest SDK version, built-in scaffold
 templates, generated files, runtime environment variables, and a short local
 development loop. `/plugin-templates` is an alias.
+
+`/plugin-schema` prints the machine-readable JSON Schema for
+`fp-agent-plugin.json`. The CLI form `--plugin-schema` emits the same schema as
+pretty JSON for editor integration, CI checks, or SDK wrapper generation.
 
 `/plugin <plugin-id|tool-name>` prints the manifest details for one plugin:
 directory, version, tool kind, permissions, approval reason, command, timeout,
@@ -205,6 +210,7 @@ List the current SDK contract and templates without opening the REPL:
 
 ```sh
 dune exec -- fp-agent --plugin-sdk
+dune exec -- fp-agent --plugin-schema
 ```
 
 The scaffold includes `fp-agent-plugin.json`, a README with the local
@@ -336,6 +342,7 @@ Inspect the SDK contract and built-in templates:
 
 ```sh
 dune exec -- fp-agent --plugin-sdk
+dune exec -- fp-agent --plugin-schema
 ```
 
 The list command also reports invalid installed manifests under

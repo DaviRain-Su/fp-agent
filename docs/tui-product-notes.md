@@ -24,10 +24,10 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - Right/secondary inspector: selected event JSON, tool args/result, usage, and
   policy decision.
 - Footer command palette: `/model`, `/provider`, `/provider-add`, `/plugins`,
-  `/providers`, `/plugin-sdk`, `/tools`, `/new`, `/resume`, `/fork`, `/retry`,
-  `/plan`, `/review`, `/plan-set`, `/plan-add`, `/plan-update`, `/plan-clear`,
-  `/compact`, `/status`, `/context`, `/handoff`, `/instructions`, `/undo`,
-  `/diff`.
+  `/providers`, `/plugin-sdk`, `/plugin-schema`, `/tools`, `/new`, `/resume`,
+  `/fork`, `/retry`, `/plan`, `/review`, `/plan-set`, `/plan-add`,
+  `/plan-update`, `/plan-clear`, `/compact`, `/status`, `/context`,
+  `/handoff`, `/instructions`, `/undo`, `/diff`.
 - Status strip: provider/model, session id, step count, token usage, current
   phase, and active plugin count.
 - Review mode: navigate prior events, fork from an event, and replay compacted
@@ -220,6 +220,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - Plugin developers can run `/plugin-sdk` or `--plugin-sdk` to see the manifest
   SDK version, built-in scaffold templates, runtime environment variables, and
   the shortest local development loop without opening the docs.
+- Plugin developers can run `/plugin-schema` or `--plugin-schema` to print the
+  machine-readable JSON Schema for `fp-agent-plugin.json`, giving SDK wrappers,
+  editors, and CI jobs the same manifest contract the loader validates.
 - Plugin tool-name conflicts are now reported in CLI/TUI tool and plugin
   surfaces. Built-ins and earlier discovered plugins keep precedence, while the
   skipped plugin/tool pair is shown to the developer.
@@ -243,10 +246,10 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   accepted commands and seeded command drafts to the timeline instead of
   silently dropping them.
 - The Notty TUI now executes safe read-only palette commands directly:
-  `/tools`, `/plugins`, `/models`, `/providers`, `/model`, `/sessions`, `/tree`,
-  `/diff`, `/status`, `/context`, `/handoff`, `/instructions`, `/log`, and
-  `/inspect` render their output into the timeline without leaving fullscreen
-  mode.
+  `/tools`, `/plugins`, `/plugin-schema`, `/models`, `/providers`, `/model`,
+  `/sessions`, `/tree`, `/diff`, `/status`, `/context`, `/handoff`,
+  `/instructions`, `/log`, and `/inspect` render their output into the timeline
+  without leaving fullscreen mode.
 - The REPL exposes the same inspector through `/inspect [index]`, so event-log
   review works even outside a full-screen TUI and can target historical events.
 - The REPL exposes plugin inspection through `/plugin <id|tool>`, showing

@@ -14,6 +14,7 @@ type id =
   | PluginRun
   | PluginDoctor
   | PluginSdk
+  | PluginSchema
   | Sessions
   | Tree
   | NewSession

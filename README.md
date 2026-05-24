@@ -90,6 +90,7 @@ dune exec -- fp-agent
 > /tool read_file    # inspect a tool's kind/schema/description
 > /plugin-doctor     # show plugin search paths and diagnostics
 > /plugin-sdk        # show SDK contract, env vars, and scaffold templates
+> /plugin-schema     # print the plugin manifest JSON Schema
 > /plugin echo_json  # inspect a plugin by id or tool name
 > /plugin-new --id local.my-plugin --tool-name my_tool --kind read --template python my-plugin
 > /plugin-dev --replace my-plugin
@@ -165,6 +166,7 @@ dune exec -- fp-agent
 > /plugins
 > /plugin-doctor
 > /plugin-sdk
+> /plugin-schema
 > /plugin echo_json
 > /plugin-new --id local.my-plugin --tool-name my_tool --kind read --template python my-plugin
 > /plugin-dev --replace my-plugin
@@ -212,9 +214,11 @@ Plugins are discovered from `FP_AGENT_PLUGIN_PATH`, `.fp-agent/plugins`, and
 `FP_AGENT_PLUGIN_HOME` / `~/.local/share/fp-agent/plugins`. See
 `docs/plugins.md` for the SDK contract. `/plugin-sdk` and `--plugin-sdk` print
 the manifest contract, supported SDK version, runtime environment variables,
-starter templates, and the shortest local development loop. `/plugin-doctor`
-and `--doctor-plugins` show the search roots, install home, invalid manifest
-diagnostics, and tool-name conflicts. `/plugins` and `--list-plugins` also
+starter templates, and the shortest local development loop. `/plugin-schema`
+and `--plugin-schema` print the machine-readable manifest JSON Schema.
+`/plugin-doctor` and `--doctor-plugins` show the search roots, install home,
+invalid manifest diagnostics, and tool-name conflicts. `/plugins` and
+`--list-plugins` also
 surface invalid manifest diagnostics instead of silently hiding broken plugin
 directories, and report tool-name conflicts when a plugin would shadow a built-in
 or earlier discovered plugin tool.
@@ -308,6 +312,8 @@ copy. Two consequences:
 - **Plugin SDK discovery** (`/plugin-sdk`, `--plugin-sdk`) lists the supported
   manifest SDK version, scaffold templates, runtime environment variables, and
   next commands for plugin authors.
+- **Plugin schema discovery** (`/plugin-schema`, `--plugin-schema`) prints the
+  machine-readable manifest JSON Schema for editor, SDK wrapper, and CI use.
 - **TUI model/provider switching** lets `/model <id>`, `/model-next`, and
   `/provider <name> [model] [api-base]` change the runtime used by later TUI
   task submissions.
@@ -400,6 +406,7 @@ Options:
   diagnostics, then exit
 - `--plugin-sdk` / `--plugin-templates` — show the plugin SDK contract,
   scaffold templates, runtime env vars, and workflow, then exit
+- `--plugin-schema` — print the plugin manifest JSON Schema, then exit
 - `--remove-plugin ID` / `--uninstall-plugin ID` — remove an installed plugin
   from the plugin home, then exit
 

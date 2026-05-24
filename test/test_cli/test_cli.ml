@@ -113,6 +113,12 @@ let test_plugin_lifecycle_cli () =
     "python (aliases: python3, py)";
   assert_contains "plugin sdk workflow" sdk.stdout
     "/plugin-dev --replace my-plugin";
+  let schema = run ~env [ bin; "--plugin-schema" ] in
+  assert_success "plugin schema" schema;
+  assert_contains "plugin schema title" schema.stdout
+    {|"title": "fp-agent plugin manifest"|};
+  assert_contains "plugin schema command" schema.stdout {|"command"|};
+  assert_contains "plugin schema input alias" schema.stdout {|"inputSchema"|};
   let created = run ~env [ bin; "--new-plugin"; plugin_dir ] in
   assert_success "new plugin" created;
   assert_contains "new plugin output" created.stdout "created plugin scaffold";

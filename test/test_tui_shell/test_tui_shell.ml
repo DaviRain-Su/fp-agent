@@ -818,7 +818,18 @@ let test_tui_command_plugins_and_tools () =
         (String.is_substring sdk ~substring:"python (aliases: python3, py)");
       Alcotest.(check bool)
         "sdk shows env" true
-        (String.is_substring sdk ~substring:"FP_AGENT_TOOL_PERMISSIONS"))
+        (String.is_substring sdk ~substring:"FP_AGENT_TOOL_PERMISSIONS");
+      let schema = output "/plugin-schema" context in
+      Alcotest.(check bool)
+        "schema command header" true
+        (String.is_substring schema ~substring:"[tui] /plugin-schema");
+      Alcotest.(check bool)
+        "schema shows title" true
+        (String.is_substring schema
+           ~substring:{|"title": "fp-agent plugin manifest"|});
+      Alcotest.(check bool)
+        "schema shows input alias" true
+        (String.is_substring schema ~substring:{|"inputSchema"|}))
 
 let () =
   Alcotest.run "tui_shell"
