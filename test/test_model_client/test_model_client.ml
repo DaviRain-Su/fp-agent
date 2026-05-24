@@ -41,6 +41,18 @@ let test_parse_bare_tool_field () =
       Alcotest.(check string) "path" "lib" path
   | _ -> Alcotest.fail "expected list_files from bare tool field"
 
+let test_parse_array_wrapped () =
+  match parse {|[{"action":"read_file","path":"a.ml"}]|} with
+  | Ok (Model_action.Tool_call (Tool_call.Read_file { path })) ->
+      Alcotest.(check string) "path" "a.ml" path
+  | _ -> Alcotest.fail "expected read_file from array-wrapped action"
+
+let test_parse_non_object_errors () =
+  (* a bare array of non-objects must not crash; it returns an error *)
+  Alcotest.(check bool)
+    "non-object json errors cleanly" true
+    (Result.is_error (parse {|[1,2,3]|}))
+
 let test_parse_final_answer () =
   match
     parse {|{"action":"final_answer","summary":"done","details":"more"}|}
@@ -124,6 +136,8 @@ let () =
           Alcotest.test_case "edit_wire_names" `Quick test_parse_edit_wire_names;
           Alcotest.test_case "flat_tool" `Quick test_parse_flat_tool;
           Alcotest.test_case "bare_tool_field" `Quick test_parse_bare_tool_field;
+          Alcotest.test_case "array_wrapped" `Quick test_parse_array_wrapped;
+          Alcotest.test_case "non_object" `Quick test_parse_non_object_errors;
           Alcotest.test_case "final_answer" `Quick test_parse_final_answer;
           Alcotest.test_case "fences" `Quick test_parse_with_fences;
           Alcotest.test_case "invalid_json" `Quick test_parse_invalid_json;

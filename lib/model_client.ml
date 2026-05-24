@@ -82,51 +82,55 @@ let is_tool_name n = List.mem tool_names n ~equal:String.equal
    nested form ({"action":"tool_call","tool":..,"args":{..}}) and the common
    flat form ({"action":"write_file","path":..}), and read tool args from
    "args"/"arguments" or, failing that, the top-level object. *)
+let parse_object json : (Model_action.t, string) Result.t =
+  let member = Yojson.Safe.Util.member in
+  let args_obj =
+    match member "args" json with
+    | `Null -> ( match member "arguments" json with `Null -> json | a -> a)
+    | a -> a
+  in
+  let as_tool tool =
+    Result.map (build_tool tool args_obj) ~f:(fun tc ->
+        Model_action.Tool_call tc)
+  in
+  let final () =
+    let summary = Option.value (get_string_opt json "summary") ~default:"" in
+    let details =
+      match get_string_opt json "details" with
+      | Some d when not (String.is_empty d) -> "\n\n" ^ d
+      | _ -> ""
+    in
+    Ok (Model_action.Final_answer { answer = summary ^ details })
+  in
+  match member "action" json with
+  | `String "tool_call" -> (
+      match get_string json "tool" with
+      | Error e -> Error e
+      | Ok tool -> as_tool tool)
+  | `String "final_answer" -> final ()
+  | `String a when is_tool_name a -> as_tool a
+  | `String other -> Error ("unknown action: " ^ other)
+  | _ -> (
+      (* no usable "action": try a bare "tool" field, else treat a
+             "summary" as a final answer. *)
+      match member "tool" json with
+      | `String tool -> as_tool tool
+      | _ -> (
+          match get_string_opt json "summary" with
+          | Some _ -> final ()
+          | None -> Error "missing or invalid 'action' field"))
+
 let parse_action content : (Model_action.t, string) Result.t =
   let content = strip_fences content in
   match Yojson.Safe.from_string content with
   | exception exn ->
       Error ("model output is not valid JSON: " ^ Exn.to_string exn)
-  | json -> (
-      let member = Yojson.Safe.Util.member in
-      let args_obj =
-        match member "args" json with
-        | `Null -> (
-            match member "arguments" json with `Null -> json | a -> a)
-        | a -> a
-      in
-      let as_tool tool =
-        Result.map (build_tool tool args_obj) ~f:(fun tc ->
-            Model_action.Tool_call tc)
-      in
-      let final () =
-        let summary =
-          Option.value (get_string_opt json "summary") ~default:""
-        in
-        let details =
-          match get_string_opt json "details" with
-          | Some d when not (String.is_empty d) -> "\n\n" ^ d
-          | _ -> ""
-        in
-        Ok (Model_action.Final_answer { answer = summary ^ details })
-      in
-      match member "action" json with
-      | `String "tool_call" -> (
-          match get_string json "tool" with
-          | Error e -> Error e
-          | Ok tool -> as_tool tool)
-      | `String "final_answer" -> final ()
-      | `String a when is_tool_name a -> as_tool a
-      | `String other -> Error ("unknown action: " ^ other)
-      | _ -> (
-          (* no usable "action": try a bare "tool" field, else treat a
-             "summary" as a final answer. *)
-          match member "tool" json with
-          | `String tool -> as_tool tool
-          | _ -> (
-              match get_string_opt json "summary" with
-              | Some _ -> final ()
-              | None -> Error "missing or invalid 'action' field")))
+  | raw -> (
+      (* Some models wrap a single action in an array; take the first object. *)
+      let json = match raw with `List (x :: _) -> x | other -> other in
+      try parse_object json
+      with Yojson.Safe.Util.Type_error (msg, _) ->
+        Error ("unexpected JSON shape from model: " ^ msg))
 
 (* --- OpenAI chat completions (zhipu, deepseek) --- *)
 
