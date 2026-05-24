@@ -210,7 +210,7 @@ copy. Two consequences:
   <dir>`, `/plugin-check <dir>`, `/plugin-install [--replace] <dir>`,
   `/plugin-remove <id>`) scaffolds, validates, installs, and removes plugins
   from the REPL or fullscreen TUI, then reloads the in-process tool registry so
-  `/tools` and later model calls see the updated plugin set.
+  `/tools`, the status strip, and later model calls see the updated plugin set.
 - **TUI model/provider switching** lets `/model <id>` and `/provider <name>
   [model] [api-base]` change the runtime used by later TUI task submissions.
 - **TUI session navigation** lets `/new`, `/resume <dir>`, and `/fork [index]`

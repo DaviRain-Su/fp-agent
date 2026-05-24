@@ -39,6 +39,7 @@ type tui_view = {
   take_submitted : unit -> string option;
   set_runtime : provider:string -> model:string -> api_base:string -> unit;
   set_session : session_dir:string -> events:Event.t list -> unit;
+  refresh_tooling : unit -> unit;
   request_approval : Tool_call.t -> string -> bool Lwt.t;
 }
 
@@ -138,10 +139,14 @@ let make_tui_view ~initial_events ~provider ~model ~api_base ~workspace_root
   let model_ref = ref model in
   let api_base_ref = ref api_base in
   let session_ref = ref session_dir in
-  let manifests = Plugin.manifests () in
-  Tool_loader.register_all ();
-  let plugin_count = List.length manifests in
-  let tool_count = List.length (Tool.all ()) in
+  let plugin_count = ref 0 in
+  let tool_count = ref 0 in
+  let refresh_tooling () =
+    let counts = Tool_loader.refresh_counts () in
+    plugin_count := counts.plugins;
+    tool_count := counts.tools
+  in
+  refresh_tooling ();
   let lines = ref (event_display_lines initial_events) in
   let current_delta = ref "" in
   let phase = make_phase () in
@@ -365,8 +370,8 @@ let make_tui_view ~initial_events ~provider ~model ~api_base ~workspace_root
         phase = phase_text;
         events = event_count;
         usage = View.token_usage_of_events !events;
-        plugins = plugin_count;
-        tools = tool_count;
+        plugins = !plugin_count;
+        tools = !tool_count;
       }
     in
     let colored ~cols s =
@@ -496,6 +501,7 @@ let make_tui_view ~initial_events ~provider ~model ~api_base ~workspace_root
     take_submitted;
     set_runtime;
     set_session;
+    refresh_tooling;
     request_approval;
   }
 
@@ -923,7 +929,8 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
     view.append_lines ("[tui] /undo" :: Git_snapshot.undo snapshots)
   in
   let new_plugin arg =
-    view.append_lines ("[tui] /plugin-new" :: plugin_new_lines arg)
+    view.append_lines ("[tui] /plugin-new" :: plugin_new_lines arg);
+    view.refresh_tooling ()
   in
   let smoke_plugin arg =
     view.append_lines
@@ -933,10 +940,12 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
     view.append_lines ("[tui] /plugin-check" :: plugin_check_lines arg)
   in
   let install_plugin arg =
-    view.append_lines ("[tui] /plugin-install" :: plugin_install_lines arg)
+    view.append_lines ("[tui] /plugin-install" :: plugin_install_lines arg);
+    view.refresh_tooling ()
   in
   let remove_plugin arg =
-    view.append_lines ("[tui] /plugin-remove" :: plugin_remove_lines arg)
+    view.append_lines ("[tui] /plugin-remove" :: plugin_remove_lines arg);
+    view.refresh_tooling ()
   in
   let stop = ref false in
   let handle_submission raw =

@@ -446,14 +446,16 @@ let test_tool_loader_refreshes_removed_plugins () =
       (match Plugin.install src with
       | Error e -> Alcotest.failf "install failed: %s" e
       | Ok _ -> ());
-      Tool_loader.register_all ();
+      let counts = Tool_loader.refresh_counts () in
+      Alcotest.(check int) "installed plugin count" 1 counts.plugins;
       Alcotest.(check bool)
         "installed plugin registered" true
         (Option.is_some (Tool.find "plugin_reload_echo"));
       (match Plugin.remove "com.example.reload" with
       | Error e -> Alcotest.failf "remove failed: %s" e
       | Ok _ -> ());
-      Tool_loader.register_all ();
+      let counts = Tool_loader.refresh_counts () in
+      Alcotest.(check int) "removed plugin count" 0 counts.plugins;
       Alcotest.(check bool)
         "removed plugin unregistered" true
         (Option.is_none (Tool.find "plugin_reload_echo")))
