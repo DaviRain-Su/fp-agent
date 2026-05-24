@@ -78,7 +78,8 @@ Use `--tui` without a task to start the fullscreen interactive shell. It uses
 the same session log and command palette as one-shot TUI runs; Ctrl+Enter
 submits the current draft as either a slash command or an agent task. `/model
 <id>` and `/provider <name> [model] [api-base]` update the active runtime for
-later turns inside the TUI.
+later turns inside the TUI; `/resume <dir>` and `/fork [index]` switch the
+active event-sourced session.
 
 Code review requests get a review-specific system instruction: the agent starts
 from `git status --short` and `git diff --stat`, inspects changed files and
@@ -148,6 +149,8 @@ copy. Two consequences:
   directly inside the fullscreen view.
 - **TUI model/provider switching** lets `/model <id>` and `/provider <name>
   [model] [api-base]` change the runtime used by later TUI task submissions.
+- **TUI session navigation** lets `/resume <dir>` and `/fork [index]` switch
+  the active fullscreen session and continue writing to the selected event log.
 - **TUI prompt editor** keeps multiline draft editing pure and testable:
   inserted text, seeded palette drafts, newline, delete/backspace, cursor
   movement, and rendering with a visible cursor all show inside the fullscreen

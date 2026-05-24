@@ -296,6 +296,12 @@ let test_tui_command_sessions_and_diff () =
       Alcotest.(check bool)
         "sessions marks current" true
         (String.is_substring sessions ~substring:"  *");
+      Alcotest.(check bool)
+        "resume is stateful" true
+        (Option.is_none (Tui_command.run context "/resume child-session"));
+      Alcotest.(check bool)
+        "fork is stateful" true
+        (Option.is_none (Tui_command.run context "/fork 0"));
       let diff = output "/diff" context in
       Alcotest.(check bool)
         "non-git diff message" true

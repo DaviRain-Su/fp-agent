@@ -68,6 +68,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - The fullscreen shell now treats `/model <id>` and `/provider <name> [model]
   [api-base]` as stateful commands. They rebuild the model client, update the
   status strip, and subsequent task submissions use the switched runtime.
+- The fullscreen shell now treats `/resume <dir>` and `/fork [index]` as
+  stateful commands. They switch the active session directory, reopen the event
+  log, reload inspector context, and continue later turns from that session.
 - The command palette controller now distinguishes close from accept: Enter
   returns the highlighted command entry, giving the future fullscreen shell a
   tested command-dispatch point while preserving the current overlay behavior.

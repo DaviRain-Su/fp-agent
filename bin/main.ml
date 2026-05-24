@@ -38,6 +38,7 @@ type tui_view = {
   append_lines : string list -> unit;
   take_submitted : unit -> string option;
   set_runtime : provider:string -> model:string -> api_base:string -> unit;
+  set_session : session_dir:string -> events:Event.t list -> unit;
 }
 
 let spinner_frames = [| "⠋"; "⠙"; "⠹"; "⠸"; "⠼"; "⠴"; "⠦"; "⠧"; "⠇"; "⠏" |]
@@ -72,6 +73,8 @@ let phase_label = function
   | `Idle -> None
   | `Thinking -> Some "thinking…"
   | `Running tool -> Some (Printf.sprintf "running %s…" tool)
+
+let event_display_lines events = List.filter_map events ~f:Event.to_display
 
 (* Plain reporter: step lines + an animated spinner line on stderr. The spinner
    line is rewritten in place with CR + clear-to-EOL. *)
@@ -127,12 +130,12 @@ let make_tui_view ~initial_events ~provider ~model ~api_base ~workspace_root
   let provider_ref = ref provider in
   let model_ref = ref model in
   let api_base_ref = ref api_base in
+  let session_ref = ref session_dir in
   let manifests = Plugin.manifests () in
-  let session = Stdlib.Filename.basename session_dir in
   Tool_loader.register_all ();
   let plugin_count = List.length manifests in
   let tool_count = List.length (Tool.all ()) in
-  let lines = ref [] in
+  let lines = ref (event_display_lines initial_events) in
   let current_delta = ref "" in
   let phase = make_phase () in
   let events = ref initial_events in
@@ -164,6 +167,13 @@ let make_tui_view ~initial_events ~provider ~model ~api_base ~workspace_root
     provider_ref := provider;
     model_ref := model;
     api_base_ref := api_base
+  in
+  let set_session ~session_dir ~events:new_events =
+    session_ref := session_dir;
+    events := new_events;
+    lines := event_display_lines new_events;
+    current_delta := "";
+    shell := Tui_shell.set_event_count (List.length new_events) !shell
   in
   let has_key_modifier mods modifier =
     List.mem mods modifier ~equal:Poly.equal
@@ -238,7 +248,7 @@ let make_tui_view ~initial_events ~provider ~model ~api_base ~workspace_root
                 api_base = !api_base_ref;
                 workspace_root;
                 sessions_root;
-                session_dir;
+                session_dir = !session_ref;
                 events = !events;
                 selected_event_index =
                   Tui_shell.selected_event_index result.state;
@@ -293,7 +303,7 @@ let make_tui_view ~initial_events ~provider ~model ~api_base ~workspace_root
       {
         provider = !provider_ref;
         model = !model_ref;
-        session;
+        session = Stdlib.Filename.basename !session_ref;
         phase = phase_text;
         events = event_count;
         plugins = plugin_count;
@@ -419,6 +429,7 @@ let make_tui_view ~initial_events ~provider ~model ~api_base ~workspace_root
     append_lines;
     take_submitted;
     set_runtime;
+    set_session;
   }
 
 let make_tui_reporter ~initial_events ~provider ~model ~api_base ~workspace_root
@@ -545,19 +556,21 @@ let run_tui_repl config workspace ~resume_opt ~yolo =
     Stdlib.Filename.concat root
       (Stdlib.Filename.concat ".ocaml-agent" "sessions")
   in
-  let session_dir =
-    Option.value resume_opt ~default:(Session.create ~base_dir:root)
+  let session =
+    ref (Option.value resume_opt ~default:(Session.create ~base_dir:root))
   in
-  let event_log = Event_log.create ~session_dir in
+  let log = ref (Event_log.create ~session_dir:!session) in
   let config_ref = ref config in
   let model_client = ref (Model_client.create ~config) in
   let policy = policy_of ~confirm:false in
   let events () =
-    match Journal.read ~session_dir with Ok events -> events | Error _ -> []
+    match Journal.read ~session_dir:!session with
+    | Ok events -> events
+    | Error _ -> []
   in
   let view =
     make_tui_view ~provider:!config_ref.provider ~model:!config_ref.model
-      ~api_base:!config_ref.api_base ~workspace_root:root ~session_dir
+      ~api_base:!config_ref.api_base ~workspace_root:root ~session_dir:!session
       ~sessions_root ~initial_events:(events ())
       ~header:
         (Printf.sprintf "fp-agent TUI  %s  Ctrl+Enter submit  / palette"
@@ -574,7 +587,7 @@ let run_tui_repl config workspace ~resume_opt ~yolo =
       api_base = !config_ref.api_base;
       workspace_root = root;
       sessions_root;
-      session_dir;
+      session_dir = !session;
       events;
       selected_event_index = latest_event_index events;
     }
@@ -591,7 +604,7 @@ let run_tui_repl config workspace ~resume_opt ~yolo =
   in
   let run_task task =
     let initial_history =
-      match Transcript.of_session ~session_dir with
+      match Transcript.of_session ~session_dir:!session with
       | Ok history -> history
       | Error _ -> []
     in
@@ -600,7 +613,7 @@ let run_tui_repl config workspace ~resume_opt ~yolo =
         (run_with_reporter view.reporter
            (Agent_loop.run ~on_event:view.reporter.on_event ~policy
               ~on_approval:prompt_approval ~initial_history ~yolo
-              ~config:!config_ref ~model_client:!model_client ~event_log
+              ~config:!config_ref ~model_client:!model_client ~event_log:!log
               ~workspace ~task ()))
     in
     append_summary outcome
@@ -654,6 +667,45 @@ let run_tui_repl config workspace ~resume_opt ~yolo =
               ~model:!config_ref.model ~api_base:!config_ref.api_base;
             view.append_lines (current_model_lines ("/provider " ^ args)))
   in
+  let switch_session dir =
+    Event_log.close !log;
+    session := dir;
+    log := Event_log.create ~session_dir:dir;
+    let events = events () in
+    view.set_session ~session_dir:dir ~events;
+    view.append_lines [ "[tui] switched session: " ^ dir ]
+  in
+  let resume_session arg =
+    let arg = String.strip arg in
+    if String.is_empty arg then
+      view.append_lines [ "[tui] /resume"; "usage: /resume <dir>" ]
+    else
+      let dir =
+        if Stdlib.Filename.is_relative arg then
+          Stdlib.Filename.concat sessions_root arg
+        else arg
+      in
+      if Stdlib.Sys.file_exists (Stdlib.Filename.concat dir "events.jsonl") then
+        switch_session dir
+      else view.append_lines [ "[tui] /resume"; "no such session: " ^ dir ]
+  in
+  let fork_session arg =
+    let at =
+      let arg = String.strip arg in
+      if String.is_empty arg then Ok None
+      else
+        try Ok (Some (Int.of_string arg))
+        with _ -> Error "usage: /fork [<event-index>]  (see /log)"
+    in
+    match at with
+    | Error e -> view.append_lines [ "[tui] /fork"; e ]
+    | Ok at -> (
+        match Session.fork ~base_dir:root ~parent_session_dir:!session ~at with
+        | Error e -> view.append_lines [ "[tui] /fork"; "fork failed: " ^ e ]
+        | Ok child ->
+            switch_session child;
+            view.append_lines [ "[tui] forked session: " ^ child ])
+  in
   let stop = ref false in
   let handle_submission raw =
     match Shell_command.parse raw with
@@ -668,6 +720,8 @@ let run_tui_repl config workspace ~resume_opt ~yolo =
     | Command (Model, "") -> view.append_lines (current_model_lines "/model")
     | Command (Model, model) -> switch_model model
     | Command (Provider, args) -> switch_provider args
+    | Command (Resume, arg) -> resume_session arg
+    | Command (Fork, arg) -> fork_session arg
     | Command _ -> (
         match Tui_command.run (command_context ()) raw with
         | Some lines -> view.append_lines lines
@@ -688,7 +742,7 @@ let run_tui_repl config workspace ~resume_opt ~yolo =
             ]
           else [])
         @ [
-            Printf.sprintf "[tui] session: %s" session_dir;
+            Printf.sprintf "[tui] session: %s" !session;
             "[tui] Ctrl+Enter submits the prompt; type /exit then Ctrl+Enter \
              to quit.";
           ]);
@@ -702,7 +756,7 @@ let run_tui_repl config workspace ~resume_opt ~yolo =
       0)
     ~finally:(fun () ->
       view.reporter.close ();
-      Event_log.close event_log)
+      Event_log.close !log)
 
 let tool_kind_label = function
   | Tool.Read -> "read"
