@@ -1035,6 +1035,7 @@ let test_repl_inspects_session_events () =
     run ~env
       ~stdin:
         "/log\n\
+         /sessions\n\
          /plan\n\
          /plan-set todo inspect code; doing implement plan; done write tests\n\
          /plan\n\
@@ -1062,6 +1063,9 @@ let test_repl_inspects_session_events () =
   in
   assert_success "repl inspect command" repl;
   assert_contains "log includes event" repl.stdout "tool_call search";
+  assert_contains "sessions include resumed session" repl.stdout
+    "inspect-session events=2";
+  assert_contains "sessions show no last task" repl.stdout "last=(none)";
   assert_contains "plan initially empty" repl.stdout "(no session plan)";
   assert_contains "plan update" repl.stdout "plan updated: 3 item(s)";
   assert_contains "plan item" repl.stdout "2. [doing] implement plan";

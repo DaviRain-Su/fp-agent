@@ -1655,16 +1655,6 @@ let print_plugin_detail query =
     | Some plugin ->
         List.iter (View.plugin_inspector_lines plugin) ~f:Stdlib.print_endline
 
-let print_sessions sessions_root current =
-  match Stdlib.Sys.readdir sessions_root with
-  | exception _ -> Stdlib.print_endline "(no sessions yet)"
-  | entries ->
-      Array.sort entries ~compare:String.compare;
-      Array.iter entries ~f:(fun e ->
-          let full = Stdlib.Filename.concat sessions_root e in
-          let mark = if String.equal full current then "  *" else "" in
-          Stdlib.Printf.printf "  %s%s\n" e mark)
-
 let run_repl config workspace ~confirm ~resume_opt ~yolo =
   let root = Workspace.root workspace in
   let sessions_root =
@@ -2114,7 +2104,9 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
             List.iter (Tui_command.plugin_sdk_lines ()) ~f:Stdlib.print_endline;
             loop ()
         | Command (Sessions, _) ->
-            print_sessions sessions_root !session;
+            List.iter
+              (Tui_command.sessions_lines (command_context ()))
+              ~f:Stdlib.print_endline;
             loop ()
         | Command (Model, "") ->
             show_current_model ();

@@ -432,6 +432,14 @@ let test_tui_command_model_log_and_inspect () =
         "last user task skips empty retry target" (Some "inspect README")
         (Tui_command.last_user_message
            (events @ [ Event.User_message { content = "  " } ]));
+      Alcotest.(check (option string))
+        "last user task skips internal prompt" (Some "inspect README")
+        (Tui_command.last_user_message
+           (events
+           @ [
+               Event.User_message
+                 { content = "[Code review preflight]\nstatus" };
+             ]));
       let log = output "/log" context in
       Alcotest.(check bool)
         "log includes event summary" true
@@ -589,10 +597,50 @@ let test_tui_command_project_instructions () =
 let test_tui_command_sessions_and_diff () =
   with_temp_dir "fp_agent_tui_command_sessions" (fun root ->
       let context = tui_context root in
+      let log = Event_log.create ~session_dir:context.session_dir in
+      Event_log.append log (Event.User_message { content = "inspect README" });
+      Event_log.append log
+        (Event.Plan_updated
+           {
+             items =
+               [
+                 { Event.status = Event.Done; text = "inspect README" };
+                 { Event.status = Event.Todo; text = "write tests" };
+               ];
+           });
+      Event_log.close log;
+      let child =
+        match
+          Session.fork ~base_dir:root ~parent_session_dir:context.session_dir
+            ~at:(Some 1)
+        with
+        | Ok child -> child
+        | Error e -> Alcotest.failf "fork session fixture: %s" e
+      in
       let sessions = output "/sessions" context in
       Alcotest.(check bool)
         "sessions marks current" true
         (String.is_substring sessions ~substring:"  *");
+      Alcotest.(check bool)
+        "sessions show event count" true
+        (String.is_substring sessions ~substring:"events=2");
+      Alcotest.(check bool)
+        "sessions show plan progress" true
+        (String.is_substring sessions ~substring:"plan=1/2 done");
+      Alcotest.(check bool)
+        "sessions show last task" true
+        (String.is_substring sessions ~substring:"last=inspect README");
+      Alcotest.(check bool)
+        "sessions show fork parent" true
+        (String.is_substring sessions
+           ~substring:("parent=" ^ Stdlib.Filename.basename context.session_dir));
+      Alcotest.(check bool)
+        "sessions show fork point" true
+        (String.is_substring sessions ~substring:"fork@1");
+      Alcotest.(check bool)
+        "sessions include child" true
+        (String.is_substring sessions
+           ~substring:(Stdlib.Filename.basename child));
       Alcotest.(check bool)
         "resume is stateful" true
         (Option.is_none (Tui_command.run context "/resume child-session"));

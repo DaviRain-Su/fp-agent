@@ -25,6 +25,9 @@ val context_lines : context -> string list
 val providers_lines : context -> string list
 (** Render configured provider profiles without a command header. *)
 
+val sessions_lines : context -> string list
+(** Render resumable sessions with event-log metadata. *)
+
 val handoff_lines : context -> string list
 (** Render a copyable session handoff summary without a command header. *)
 

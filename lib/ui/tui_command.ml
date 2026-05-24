@@ -228,6 +228,30 @@ let current_model_lines ctx =
     "api_base: " ^ ctx.api_base;
   ]
 
+let preview_text ?(cols = 180) text =
+  let flat = String.substr_replace_all text ~pattern:"\n" ~with_:" " in
+  View.truncate ~cols (String.strip flat)
+
+let flatten_line text = preview_text ~cols:10_000 text
+
+let internal_user_message content =
+  let content = String.strip content in
+  List.exists
+    [
+      "[Code review preflight]";
+      "Tool budget exhausted.";
+      "Review budget exhausted.";
+      "Your previous reply could not be processed";
+      "That response is not a code review.";
+    ] ~f:(fun prefix -> String.is_prefix content ~prefix)
+
+let last_user_message events =
+  List.find_map (List.rev events) ~f:(function
+    | Event.User_message { content }
+      when not (String.is_empty (String.strip content)) ->
+        if internal_user_message content then None else Some content
+    | _ -> None)
+
 let protocol_label = function
   | Provider.Openai -> "openai"
   | Provider.Anthropic -> "anthropic"
@@ -318,16 +342,59 @@ let models_lines ctx =
            current provider, or /provider <name> [model] to switch provider.";
         ]
 
+let is_directory path =
+  Stdlib.Sys.file_exists path
+  &&
+  match Stdlib.Sys.is_directory path with
+  | true -> true
+  | false -> false
+  | exception _ -> false
+
+let plan_label events =
+  let line = View.plan_progress_line (View.plan_progress_of_events events) in
+  Option.value (String.chop_prefix line ~prefix:"plan: ") ~default:line
+
+let session_fork_label dir =
+  match Session.read_meta dir with
+  | None, None -> ""
+  | parent, fork_at ->
+      let parent =
+        Option.value_map parent ~default:"" ~f:(fun p -> " parent=" ^ p)
+      in
+      let fork =
+        Option.value_map fork_at ~default:"" ~f:(fun n ->
+            Printf.sprintf " fork@%d" n)
+      in
+      parent ^ fork
+
+let session_line ctx entry =
+  let full = Stdlib.Filename.concat ctx.sessions_root entry in
+  if not (is_directory full) then None
+  else
+    let mark = if String.equal full ctx.session_dir then "*" else " " in
+    let fork = session_fork_label full in
+    match Journal.read ~session_dir:full with
+    | Error e ->
+        Some
+          (Printf.sprintf "  %s %s events=? read_error=%s%s" mark entry
+             (preview_text ~cols:80 e) fork)
+    | Ok events ->
+        let last =
+          last_user_message events
+          |> Option.value_map ~default:"(none)" ~f:(preview_text ~cols:80)
+        in
+        Some
+          (Printf.sprintf "  %s %s events=%d plan=%s last=%s%s" mark entry
+             (List.length events) (plan_label events) last fork)
+
 let sessions_lines ctx =
   match Stdlib.Sys.readdir ctx.sessions_root with
   | exception _ -> [ "(no sessions yet)" ]
   | entries ->
       Array.sort entries ~compare:String.compare;
-      Array.to_list entries
-      |> List.map ~f:(fun entry ->
-          let full = Stdlib.Filename.concat ctx.sessions_root entry in
-          let mark = if String.equal full ctx.session_dir then "  *" else "" in
-          "  " ^ entry ^ mark)
+      Array.to_list entries |> List.filter_map ~f:(session_line ctx)
+      |> fun lines ->
+      if List.is_empty lines then [ "(no sessions yet)" ] else lines
 
 let tree_lines ctx =
   match Stdlib.Sys.readdir ctx.sessions_root with
@@ -456,10 +523,6 @@ let usage_lines ctx =
     Printf.sprintf "output_tokens: %d" usage.output_tokens;
     Printf.sprintf "total_tokens: %d" (View.token_usage_total usage);
   ]
-
-let preview_text ?(cols = 180) text =
-  let flat = String.substr_replace_all text ~pattern:"\n" ~with_:" " in
-  View.truncate ~cols (String.strip flat)
 
 let content_kind = function
   | Llm.Text _ -> "text"
@@ -596,16 +659,6 @@ let status_lines ctx =
     "project_instructions: " ^ project_instructions;
     Printf.sprintf "tools: %d" (List.length (Tool.all ()));
   ]
-
-let flatten_line text =
-  String.substr_replace_all text ~pattern:"\n" ~with_:" " |> String.strip
-
-let last_user_message events =
-  List.find_map (List.rev events) ~f:(function
-    | Event.User_message { content }
-      when not (String.is_empty (String.strip content)) ->
-        Some content
-    | _ -> None)
 
 let handoff_lines ctx =
   let usage = View.token_usage_of_events ctx.events in
