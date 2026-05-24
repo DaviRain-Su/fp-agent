@@ -18,6 +18,29 @@ let test_display_lines () =
     (View.display_lines "one\ntwo\n\nfour");
   Alcotest.(check (list string)) "empty text" [] (View.display_lines "")
 
+let test_wrap_line () =
+  Alcotest.(check (list string))
+    "wraps long line" [ "abcd"; "efgh"; "ij" ]
+    (View.wrap_line ~cols:4 "abcdefghij");
+  Alcotest.(check (list string))
+    "keeps short line" [ "abc" ]
+    (View.wrap_line ~cols:4 "abc");
+  Alcotest.(check (list string))
+    "preserves empty line" [ "" ]
+    (View.wrap_line ~cols:4 "");
+  Alcotest.(check (list string)) "zero cols" [] (View.wrap_line ~cols:0 "abc")
+
+let test_viewport () =
+  Alcotest.(check (list string))
+    "wraps before windowing" [ "ef"; "12"; "34" ]
+    (View.viewport ~rows:3 ~cols:2 [ "abcdef"; "1234" ]);
+  Alcotest.(check (list string))
+    "zero rows" []
+    (View.viewport ~rows:0 ~cols:2 [ "abcdef" ]);
+  Alcotest.(check (list string))
+    "zero cols" []
+    (View.viewport ~rows:3 ~cols:0 [ "abcdef" ])
+
 let kind_str = function
   | `Ok -> "ok"
   | `Err -> "err"
@@ -39,6 +62,8 @@ let () =
         [
           Alcotest.test_case "window" `Quick test_window;
           Alcotest.test_case "display_lines" `Quick test_display_lines;
+          Alcotest.test_case "wrap_line" `Quick test_wrap_line;
+          Alcotest.test_case "viewport" `Quick test_viewport;
           Alcotest.test_case "classify" `Quick test_classify;
         ] );
     ]

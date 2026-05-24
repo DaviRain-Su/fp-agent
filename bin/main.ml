@@ -133,7 +133,7 @@ let make_tui_reporter ~header =
   let redraw () =
     let w, h = Notty_unix.Term.size term in
     let body_rows = Int.max 1 (h - 4) in
-    let shown = View.window ~rows:body_rows (visible_lines ()) in
+    let shown = View.viewport ~rows:body_rows ~cols:w (visible_lines ()) in
     let colored s =
       let attr =
         match View.classify s with

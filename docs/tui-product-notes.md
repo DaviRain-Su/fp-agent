@@ -27,5 +27,13 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - Review mode: navigate prior events, fork from an event, and replay compacted
   context summaries.
 
+## Implemented Guardrails
+
+- Timeline viewport helpers are pure and unit-tested: long event lines wrap to
+  terminal width before the newest visible rows are selected.
+- CLI regression tests cover plugin lifecycle commands, REPL plugin/tool
+  discovery, custom provider model listing/switching, and `--confirm --tui`
+  rejection.
+
 The web/product-reference pass still needs to be done with gstack `/browse`
 once that browser tool is available in this repo.

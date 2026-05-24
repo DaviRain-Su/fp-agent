@@ -13,6 +13,21 @@ let window ~rows lines =
 let display_lines text =
   if String.is_empty text then [] else String.split_lines text
 
+let wrap_line ~cols line =
+  if cols <= 0 then []
+  else if String.is_empty line then [ "" ]
+  else
+    let rec loop acc start =
+      if start >= String.length line then List.rev acc
+      else
+        let len = Int.min cols (String.length line - start) in
+        loop (String.sub line ~pos:start ~len :: acc) (start + len)
+    in
+    loop [] 0
+
+let viewport ~rows ~cols lines =
+  lines |> List.concat_map ~f:(wrap_line ~cols) |> window ~rows
+
 (* Classify a display line so the renderer can pick a color. Mirrors the icons
    produced by {!Event.to_display}. *)
 let classify s : [ `Ok | `Err | `Action | `Plain ] =
