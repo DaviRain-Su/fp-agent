@@ -616,6 +616,7 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
   let config_ref = ref config in
   let model_client = ref (Model_client.create ~config) in
   let policy = policy_of ~confirm in
+  let snapshots = Git_snapshot.create ~root in
   let events () =
     match Journal.read ~session_dir:!session with
     | Ok events -> events
@@ -656,6 +657,7 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
       ]
   in
   let run_task task =
+    Git_snapshot.checkpoint snapshots;
     let initial_history =
       match Transcript.of_session ~session_dir:!session with
       | Ok history -> history
@@ -759,6 +761,9 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
             switch_session child;
             view.append_lines [ "[tui] forked session: " ^ child ])
   in
+  let undo () =
+    view.append_lines ("[tui] /undo" :: Git_snapshot.undo snapshots)
+  in
   let stop = ref false in
   let handle_submission raw =
     match Shell_command.parse raw with
@@ -775,6 +780,7 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
     | Command (Provider, args) -> switch_provider args
     | Command (Resume, arg) -> resume_session arg
     | Command (Fork, arg) -> fork_session arg
+    | Command (Undo, _) -> undo ()
     | Command _ -> (
         match Tui_command.run (command_context ()) raw with
         | Some lines -> view.append_lines lines
@@ -898,6 +904,7 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
     log := Event_log.create ~session_dir:dir;
     Stdlib.Printf.printf "switched to %s\n%!" dir
   in
+  let snapshots = Git_snapshot.create ~root in
   let is_git = Stdlib.Sys.file_exists (Stdlib.Filename.concat root ".git") in
   let git args =
     Shell.run
@@ -907,39 +914,8 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
   (* Keep the agent's own session log out of git operations so /undo never
      touches the event log we are actively writing. *)
   let exclude = "':(exclude).ocaml-agent'" in
-  (* One git snapshot per task turn, so /undo reverts just the last turn. *)
-  let checkpoints = ref [] in
-  let checkpoint () =
-    if is_git then (
-      ignore (git ("add -A -- . " ^ exclude) : (Shell.result, string) Result.t);
-      let sha =
-        match git "stash create" with
-        | Ok { stdout; _ } -> String.strip stdout
-        | Error _ -> ""
-      in
-      let sha =
-        if String.is_empty sha then
-          match git "rev-parse HEAD" with
-          | Ok { stdout; _ } -> String.strip stdout
-          | Error _ -> ""
-        else sha
-      in
-      checkpoints := sha :: !checkpoints)
-  in
   let undo () =
-    match !checkpoints with
-    | [] -> Stdlib.print_endline "nothing to undo"
-    | sha :: rest ->
-        checkpoints := rest;
-        if (not is_git) || String.is_empty sha then
-          Stdlib.print_endline "no snapshot to restore"
-        else (
-          ignore
-            (git (Printf.sprintf "checkout %s -- . %s" sha exclude)
-              : (Shell.result, string) Result.t);
-          ignore
-            (git "clean -fd -e .ocaml-agent" : (Shell.result, string) Result.t);
-          Stdlib.print_endline "reverted the last turn's changes")
+    List.iter (Git_snapshot.undo snapshots) ~f:Stdlib.print_endline
   in
   let show_diff () =
     if not is_git then Stdlib.print_endline "(workspace is not a git repo)"
@@ -1141,7 +1117,7 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
     !config_ref.Config.model !session;
   warn_yolo yolo;
   let run_task task =
-    checkpoint ();
+    Git_snapshot.checkpoint snapshots;
     let initial_history =
       match Transcript.of_session ~session_dir:!session with
       | Ok h -> h

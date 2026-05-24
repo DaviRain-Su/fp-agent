@@ -77,6 +77,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - Fullscreen TUI confirm mode now renders approval prompts in the active view.
   `Y` approves a pending tool call, while `N`, Enter, or Esc deny it; normal
   prompt and palette input is paused until the approval is resolved.
+- Fullscreen TUI `/undo` now shares the REPL git checkpoint stack. Each
+  submitted task captures the worktree before execution, and `/undo` restores
+  that checkpoint without touching `.ocaml-agent` session logs.
 - The command palette controller now distinguishes close from accept: Enter
   returns the highlighted command entry, giving the future fullscreen shell a
   tested command-dispatch point while preserving the current overlay behavior.

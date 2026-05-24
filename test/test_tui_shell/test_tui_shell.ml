@@ -344,6 +344,9 @@ let test_tui_command_sessions_and_diff () =
       Alcotest.(check bool)
         "fork is stateful" true
         (Option.is_none (Tui_command.run context "/fork 0"));
+      Alcotest.(check bool)
+        "undo is stateful" true
+        (Option.is_none (Tui_command.run context "/undo"));
       let diff = output "/diff" context in
       Alcotest.(check bool)
         "non-git diff message" true

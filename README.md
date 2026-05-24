@@ -152,6 +152,9 @@ copy. Two consequences:
   [model] [api-base]` change the runtime used by later TUI task submissions.
 - **TUI session navigation** lets `/resume <dir>` and `/fork [index]` switch
   the active fullscreen session and continue writing to the selected event log.
+- **TUI undo** lets `/undo` restore the git worktree to the checkpoint captured
+  before the previous submitted TUI task, while leaving `.ocaml-agent` session
+  logs alone.
 - **TUI prompt editor** keeps multiline draft editing pure and testable:
   inserted text, seeded palette drafts, newline, delete/backspace, cursor
   movement, and rendering with a visible cursor all show inside the fullscreen
