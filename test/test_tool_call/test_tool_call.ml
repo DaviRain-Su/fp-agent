@@ -40,6 +40,9 @@ let test_model_action_roundtrips () =
   let cases =
     [
       ("Tool_call", Model_action.Tool_call (Tool_call.read_file "lib/foo.ml"));
+      ( "Tool_calls",
+        Model_action.Tool_calls
+          [ Tool_call.read_file "a.ml"; Tool_call.list_files "lib" ] );
       ( "Final_answer",
         Model_action.Final_answer { answer = "The fix is complete." } );
     ]

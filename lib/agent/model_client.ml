@@ -3,12 +3,16 @@ open! Base
 type t = { send : Message.t list -> (Model_action.t, string) Result.t Lwt.t }
 
 let system_prompt =
-  {|You are a coding agent operating inside a bounded workspace. You work toward the user's task by issuing one tool call at a time and observing the result.
+  {|You are a coding agent operating inside a bounded workspace. You work toward the user's task by issuing tool calls and observing the results.
 
 On every turn you MUST reply with a SINGLE JSON object and nothing else. Do not wrap it in markdown code fences. Do not add prose before or after.
 
 To call a tool:
 {"action":"tool_call","tool":"<name>","args":{...}}
+
+To call several independent tools in one turn:
+{"action":"tool_calls","calls":[{"tool":"<name>","args":{...}}, ...]}
+Only batch tools that can safely run in the same turn.
 
 Available tools and their args:
 - read_file   {"path": string}
@@ -73,22 +77,56 @@ let is_tool_name n =
   Builtin_tools.register_all ();
   Option.is_some (Tool.find n)
 
+let args_object json =
+  match Yojson.Safe.Util.member "args" json with
+  | `Assoc _ as a -> a
+  | `Null -> (
+      match Yojson.Safe.Util.member "arguments" json with
+      | `Assoc _ as a -> a
+      | _ -> json)
+  | _ -> json
+
+let parse_tool_object json : (Tool_call.t, string) Result.t =
+  let member = Yojson.Safe.Util.member in
+  let as_tool tool = build_tool tool (args_object json) in
+  match member "action" json with
+  | `String "tool_call" -> (
+      match get_string json "tool" with
+      | Error e -> Error e
+      | Ok tool -> as_tool tool)
+  | `String a when is_tool_name a -> as_tool a
+  | `String other -> Error ("unknown tool action in batch: " ^ other)
+  | _ -> (
+      match member "tool" json with
+      | `String tool -> as_tool tool
+      | _ -> Error "batch item is missing a tool name")
+
+let parse_tool_list = function
+  | [] -> Error "tool_calls requires at least one call"
+  | items ->
+      List.fold items ~init:(Ok []) ~f:(fun acc json ->
+          match acc with
+          | Error _ as e -> e
+          | Ok calls ->
+              Result.map (parse_tool_object json) ~f:(fun tc -> tc :: calls))
+      |> Result.map ~f:List.rev
+
 (* Models vary in how strictly they follow the contract. Accept both the
    nested form ({"action":"tool_call","tool":..,"args":{..}}) and the common
    flat form ({"action":"write_file","path":..}), and read tool args from
    "args"/"arguments" or, failing that, the top-level object. *)
 let parse_object json : (Model_action.t, string) Result.t =
   let member = Yojson.Safe.Util.member in
-  let args_obj =
-    match member "args" json with
-    | `Assoc _ as a -> a
-    | `Null -> (
-        match member "arguments" json with `Assoc _ as a -> a | _ -> json)
-    | _ -> json
-  in
   let as_tool tool =
-    Result.map (build_tool tool args_obj) ~f:(fun tc ->
-        Model_action.Tool_call tc)
+    Result.map
+      (build_tool tool (args_object json))
+      ~f:(fun tc -> Model_action.Tool_call tc)
+  in
+  let as_tools calls =
+    Result.map (parse_tool_list calls) ~f:(fun calls ->
+        match calls with
+        | [ tc ] -> Model_action.Tool_call tc
+        | calls -> Model_action.Tool_calls calls)
   in
   let final () =
     let summary = Option.value (get_string_opt json "summary") ~default:"" in
@@ -104,6 +142,13 @@ let parse_object json : (Model_action.t, string) Result.t =
       match get_string json "tool" with
       | Error e -> Error e
       | Ok tool -> as_tool tool)
+  | `String "tool_calls" | `String "parallel_tool_calls" -> (
+      match member "calls" json with
+      | `List calls -> as_tools calls
+      | _ -> (
+          match member "tool_calls" json with
+          | `List calls -> as_tools calls
+          | _ -> Error "tool_calls requires a 'calls' array"))
   | `String "final_answer" -> final ()
   | `String a when is_tool_name a -> as_tool a
   | `String other -> Error ("unknown action: " ^ other)
@@ -123,9 +168,18 @@ let parse_action content : (Model_action.t, string) Result.t =
   | exception exn ->
       Error ("model output is not valid JSON: " ^ Exn.to_string exn)
   | raw -> (
-      (* Some models wrap a single action in an array; take the first object. *)
-      let json = match raw with `List (x :: _) -> x | other -> other in
-      try parse_object json
+      (* Some models wrap a single action in an array. A multi-item array is
+         treated as a batch of tool calls. *)
+      try
+        match raw with
+        | `List [] -> Error "empty JSON array from model"
+        | `List [ x ] -> parse_object x
+        | `List xs ->
+            Result.map (parse_tool_list xs) ~f:(fun calls ->
+                match calls with
+                | [ tc ] -> Model_action.Tool_call tc
+                | calls -> Model_action.Tool_calls calls)
+        | json -> parse_object json
       with Yojson.Safe.Util.Type_error (msg, _) ->
         Error ("unexpected JSON shape from model: " ^ msg))
 

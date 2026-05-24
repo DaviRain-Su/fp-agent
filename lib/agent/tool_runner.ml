@@ -14,3 +14,6 @@ let run ?(yolo = false) ~workspace ~tool_call () =
   | Permission.Ask_user reason ->
       err ("requires user approval (not supported in MVP): " ^ reason)
   | Permission.Allow -> execute workspace tool_call
+
+let run_lwt ?(yolo = false) ~workspace ~tool_call () =
+  Lwt_preemptive.detach (fun () -> run ~yolo ~workspace ~tool_call ()) ()

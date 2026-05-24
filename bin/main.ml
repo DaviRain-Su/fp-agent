@@ -49,6 +49,9 @@ let update_phase (phase, t0) (e : Event.t) =
   | Tool_call tc ->
       phase := `Running (Event.describe_tool tc);
       t0 := now ()
+  | Model_response { action = Model_action.Tool_calls calls } ->
+      phase := `Running (Printf.sprintf "%d tools" (List.length calls));
+      t0 := now ()
   | Model_response { action = Model_action.Final_answer _ } -> phase := `Idle
   | _ -> ()
 
@@ -440,6 +443,8 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
     | User_message { content } -> "user: " ^ oneline content
     | Model_response { action = Tool_call tc } ->
         "model → " ^ Event.describe_tool tc
+    | Model_response { action = Tool_calls calls } ->
+        Printf.sprintf "model → %d tool calls" (List.length calls)
     | Model_response { action = Final_answer _ } -> "model: final answer"
     | Tool_call tc -> "tool_call " ^ Event.describe_tool tc
     | Tool_result (Success _) -> "result ok"

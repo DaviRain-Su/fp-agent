@@ -179,10 +179,12 @@ Initializing -> Waiting_for_model -> Executing_tool -> Observing_result
                  Completed / Failed
 ```
 
-Each turn the model returns a single JSON action (see the system prompt in
-`lib/model_client.ml`): either a `tool_call` or a `final_answer`. Tool calls are
-checked by the policy layer, executed by the tool runner, and the result is fed
-back as an observation.
+Each turn the model returns a JSON action (see the system prompt in
+`lib/model_client.ml`): a `tool_call`, a batch `tool_calls`, or a
+`final_answer`. Tool calls are checked by the policy layer, executed by the tool
+runner, and the results are fed back as observations. Batch calls are logged in
+request order; execution is detached through Lwt so independent calls can run
+concurrently while replay still sees a stable event sequence.
 
 Tools: `read_file`, `write_file`, `edit_file`, `list_files`, `run_command`,
 `search` (substring search across workspace files), `make_dir`,

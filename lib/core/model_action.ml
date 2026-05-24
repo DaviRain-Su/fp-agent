@@ -1,7 +1,10 @@
 open! Base
 open Ppx_yojson_conv_lib.Yojson_conv.Primitives
 
-type t = Tool_call of Tool_call.t | Final_answer of { answer : string }
+type t =
+  | Tool_call of Tool_call.t
+  | Tool_calls of Tool_call.t list
+  | Final_answer of { answer : string }
 [@@deriving yojson_of, of_yojson]
 
 let to_yojson = yojson_of_t

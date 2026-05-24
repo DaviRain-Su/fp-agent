@@ -58,6 +58,32 @@ let test_prefix_is_earlier_state () =
     "prefix has fewer messages" 2
     (List.length (Session_state.messages st))
 
+let test_batch_tool_results_reduce_to_observations () =
+  let events =
+    [
+      Event.User_message { content = "batch" };
+      Event.Model_response
+        {
+          action =
+            Model_action.Tool_calls
+              [ Tool_call.read_file "a"; Tool_call.read_file "b" ];
+        };
+      Event.Tool_call (Tool_call.read_file "a");
+      Event.Tool_result (Tool_result.Success { output = "a" });
+      Event.Tool_call (Tool_call.read_file "b");
+      Event.Tool_result (Tool_result.Success { output = "b" });
+    ]
+  in
+  let st = Session_state.replay events in
+  Alcotest.(check int) "one model step" 1 (Session_state.steps st);
+  let roles =
+    List.map (Session_state.messages st) ~f:(fun m -> m.Message.role)
+  in
+  Alcotest.(check (list string))
+    "messages: user, assistant, observations"
+    [ "user"; "assistant"; "user"; "user" ]
+    roles
+
 let () =
   Alcotest.run "session_state"
     [
@@ -67,5 +93,7 @@ let () =
           Alcotest.test_case "incremental" `Quick
             test_incremental_matches_replay;
           Alcotest.test_case "prefix" `Quick test_prefix_is_earlier_state;
+          Alcotest.test_case "batch_results" `Quick
+            test_batch_tool_results_reduce_to_observations;
         ] );
     ]

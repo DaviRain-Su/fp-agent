@@ -104,6 +104,32 @@ let test_parse_flat_new_tools () =
       | _ -> Alcotest.fail "expected one multi_edit item")
   | _ -> Alcotest.fail "expected flat multi_edit"
 
+let test_parse_tool_calls_batch () =
+  match
+    parse
+      {|{"action":"tool_calls","calls":[{"tool":"read_file","args":{"path":"a.ml"}},{"tool":"list_files","args":{"path":"lib"}}]}|}
+  with
+  | Ok (Model_action.Tool_calls [ read; list ]) ->
+      check_tool read ~name:"read_file";
+      check_arg read "path" "a.ml";
+      check_tool list ~name:"list_files";
+      check_arg list "path" "lib"
+  | Ok _ -> Alcotest.fail "expected two tool calls"
+  | Error e -> Alcotest.failf "unexpected batch parse error: %s" e
+
+let test_parse_array_tool_batch () =
+  match
+    parse
+      {|[{"action":"read_file","path":"a.ml"},{"action":"search","query":"needle"}]|}
+  with
+  | Ok (Model_action.Tool_calls [ read; search ]) ->
+      check_tool read ~name:"read_file";
+      check_arg read "path" "a.ml";
+      check_tool search ~name:"search";
+      check_arg search "query" "needle"
+  | Ok _ -> Alcotest.fail "expected array batch"
+  | Error e -> Alcotest.failf "unexpected array batch parse error: %s" e
+
 let test_parse_final_answer () =
   match
     parse {|{"action":"final_answer","summary":"done","details":"more"}|}
@@ -278,6 +304,10 @@ let () =
           Alcotest.test_case "bare_tool_field" `Quick test_parse_bare_tool_field;
           Alcotest.test_case "search" `Quick test_parse_search;
           Alcotest.test_case "flat_new_tools" `Quick test_parse_flat_new_tools;
+          Alcotest.test_case "tool_calls_batch" `Quick
+            test_parse_tool_calls_batch;
+          Alcotest.test_case "array_tool_batch" `Quick
+            test_parse_array_tool_batch;
           Alcotest.test_case "array_wrapped" `Quick test_parse_array_wrapped;
           Alcotest.test_case "non_object" `Quick test_parse_non_object_errors;
           Alcotest.test_case "final_answer" `Quick test_parse_final_answer;

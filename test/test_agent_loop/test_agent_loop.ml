@@ -115,6 +115,43 @@ let test_tool_then_final () =
         "log has tool result" true
         (String.is_substring contents ~substring:"Tool_result"))
 
+let test_parallel_tool_batch_then_final () =
+  with_env (fun config workspace event_log session_dir ->
+      let client =
+        scripted
+          [
+            Model_action.Tool_calls
+              [
+                Tool_call.write_file ~path:"a.txt" ~content:"one";
+                Tool_call.write_file ~path:"b.txt" ~content:"two";
+              ];
+            Model_action.Final_answer { answer = "done" };
+          ]
+      in
+      let outcome = run config workspace event_log client "make two files" in
+      Alcotest.(check string)
+        "status completed" "completed"
+        (Agent_loop.status_to_string outcome.status);
+      Alcotest.(check int) "two model turns" 2 outcome.steps;
+      Alcotest.(check bool)
+        "a written" true
+        (Stdlib.Sys.file_exists
+           (Stdlib.Filename.concat (Workspace.root workspace) "a.txt"));
+      Alcotest.(check bool)
+        "b written" true
+        (Stdlib.Sys.file_exists
+           (Stdlib.Filename.concat (Workspace.root workspace) "b.txt"));
+      let log_path = Stdlib.Filename.concat session_dir "events.jsonl" in
+      let contents =
+        Stdlib.In_channel.with_open_bin log_path Stdlib.In_channel.input_all
+      in
+      let count substring =
+        String.substr_index_all contents ~may_overlap:false ~pattern:substring
+        |> List.length
+      in
+      Alcotest.(check int) "two tool call events" 2 (count "\"Tool_call\"");
+      Alcotest.(check int) "two tool result events" 2 (count "\"Tool_result\""))
+
 let test_max_steps () =
   with_env (fun config workspace event_log _ ->
       let config = { config with Config.max_steps = 3 } in
@@ -143,6 +180,8 @@ let () =
       ( "loop",
         [
           Alcotest.test_case "tool_then_final" `Quick test_tool_then_final;
+          Alcotest.test_case "parallel_tool_batch" `Quick
+            test_parallel_tool_batch_then_final;
           Alcotest.test_case "max_steps" `Quick test_max_steps;
           Alcotest.test_case "model_error" `Quick test_model_error;
           Alcotest.test_case "approval_denied" `Quick test_approval_denied;

@@ -81,37 +81,63 @@ let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
             emit (Event.Model_response { action });
             handle_action action n)
   and handle_action action n =
+    let denied_result permission =
+      match permission with
+      | Permission.Deny reason ->
+          Tool_result.Error { message = "policy denied: " ^ reason }
+      | Permission.Ask_user reason ->
+          Tool_result.Error
+            { message = "requires user approval (not supported): " ^ reason }
+      | Permission.Allow ->
+          Tool_result.Error { message = "internal error: expected denial" }
+    in
+    let prepare_tool_call tc =
+      emit (Event.Tool_call tc);
+      let permission = Policy.check ~yolo ~workspace ~tool_call:tc () in
+      emit (Event.Policy_decision { tool_call = tc; permission });
+      if not (Permission.is_allow permission) then
+        Lwt.return (fun () -> Lwt.return (denied_result permission))
+      else
+        match Policy.approval_reason policy tc with
+        | None ->
+            Lwt.return (fun () ->
+                Tool_runner.run_lwt ~yolo ~workspace ~tool_call:tc ())
+        | Some reason ->
+            Lwt.bind (on_approval tc reason) (fun approved ->
+                if approved then
+                  Lwt.return (fun () ->
+                      Tool_runner.run_lwt ~yolo ~workspace ~tool_call:tc ())
+                else
+                  Lwt.return (fun () ->
+                      Lwt.return
+                        (Tool_result.Error
+                           { message = "user did not approve: " ^ reason })))
+    in
+    let after_results results =
+      (* reduce derives observation messages from these events. Results are
+         emitted in request order even if execution completed out of order. *)
+      List.iter results ~f:(fun result -> emit (Event.Tool_result result));
+      goto Agent_state.Observing_result;
+      goto Agent_state.Waiting_for_model;
+      step (n + 1)
+    in
+    let execute_batch calls =
+      match calls with
+      | [] ->
+          goto Agent_state.Failed;
+          finish Failed "model returned an empty tool call batch" n
+      | calls ->
+          goto Agent_state.Executing_tool;
+          Lwt.bind (Lwt_list.map_s prepare_tool_call calls) (fun runners ->
+              Lwt.bind
+                (Lwt.all (List.map runners ~f:(fun run -> run ())))
+                after_results)
+    in
     match (action : Model_action.t) with
     | Final_answer { answer } ->
         goto Agent_state.Completed;
         finish Completed answer n
-    | Tool_call tc -> (
-        goto Agent_state.Executing_tool;
-        emit (Event.Tool_call tc);
-        let permission = Policy.check ~yolo ~workspace ~tool_call:tc () in
-        emit (Event.Policy_decision { tool_call = tc; permission });
-        let after_result result =
-          (* reduce derives the observation message from this event *)
-          emit (Event.Tool_result result);
-          goto Agent_state.Observing_result;
-          goto Agent_state.Waiting_for_model;
-          step (n + 1)
-        in
-        let execute () =
-          after_result (Tool_runner.run ~yolo ~workspace ~tool_call:tc ())
-        in
-        (* Deny is enforced by the runner; for allowed calls, gate risky ones
-           on human approval when the policy asks for it. *)
-        if not (Permission.is_allow permission) then execute ()
-        else
-          match Policy.approval_reason policy tc with
-          | None -> execute ()
-          | Some reason ->
-              Lwt.bind (on_approval tc reason) (fun approved ->
-                  if approved then execute ()
-                  else
-                    after_result
-                      (Tool_result.Error
-                         { message = "user did not approve: " ^ reason })))
+    | Tool_call tc -> execute_batch [ tc ]
+    | Tool_calls calls -> execute_batch calls
   in
   step 1

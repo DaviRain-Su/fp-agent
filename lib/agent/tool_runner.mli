@@ -8,3 +8,12 @@ val run :
     allowed, executes it. Policy denials and execution failures are returned as
     {!Tool_result.Error}; a non-zero command exit is still a
     {!Tool_result.Success} carrying the exit code and captured output. *)
+
+val run_lwt :
+  ?yolo:bool ->
+  workspace:Workspace.t ->
+  tool_call:Tool_call.t ->
+  unit ->
+  Tool_result.t Lwt.t
+(** Lwt wrapper around {!run}. The blocking tool runner is detached so batches
+    of tool calls can execute concurrently. *)
