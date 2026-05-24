@@ -1,11 +1,24 @@
 open! Base
 
+(* The public client keeps the agent loop small, but internally this file now
+   follows the ocaml-agent Llm shape: provider protocols stream into normalized
+   content blocks, and only then do we lower those blocks into Model_action.t. *)
 type t = {
   send :
     on_delta:(string -> unit) ->
     Message.t list ->
     (Model_action.t, string) Result.t Lwt.t;
 }
+
+type role = User | Assistant
+
+type content =
+  | Text of string
+  | Thinking of string
+  | Tool_use of { id : string; name : string; input : Yojson.Safe.t }
+  | Tool_result of { id : string; content : string }
+
+type turn = { role : role; content : content list }
 
 let system_prompt =
   {|You are a coding agent operating inside a bounded workspace. You work toward the user's task by issuing tool calls and observing the results.
@@ -40,8 +53,8 @@ Rules:
 - For codebase tasks, you MUST inspect relevant files with tools before giving a final answer. Do not answer "Hello" or ask how to help after the user has already given a task.
 - If the provider offers native tool calling, use native tool calls; otherwise use the JSON action format above.|}
 
-(* Lenient stripping of accidental ``` fences the model may add despite the
-   contract. *)
+(* --- JSON action compatibility parser (legacy/fallback) --- *)
+
 let strip_fences s =
   let s = String.strip s in
   if String.is_prefix s ~prefix:"```" then
@@ -70,7 +83,7 @@ let strip_control_fields = function
         (List.filter fields ~f:(fun (name, _) ->
              not
                (List.mem
-                  [ "action"; "tool"; "args"; "arguments" ]
+                  [ "action"; "tool"; "args"; "arguments"; "type"; "name" ]
                   name ~equal:String.equal)))
   | json -> json
 
@@ -90,6 +103,11 @@ let args_object json =
   | `Null -> (
       match Yojson.Safe.Util.member "arguments" json with
       | `Assoc _ as a -> a
+      | `String s -> (
+          match Yojson.Safe.from_string s with
+          | (`Assoc _ as a) -> a
+          | _ -> `Assoc []
+          | exception _ -> `Assoc [])
       | _ -> (
           match Yojson.Safe.Util.member "input" json with
           | `Assoc _ as a -> a
@@ -110,7 +128,7 @@ let parse_tool_object json : (Tool_call.t, string) Result.t =
       match (member "tool" json, member "type" json, member "name" json) with
       | `String tool, _, _ -> as_tool tool
       | _, `String "tool_use", `String tool -> as_tool tool
-      | _, _, `String tool -> as_tool tool
+      | _, _, `String tool when is_tool_name tool -> as_tool tool
       | _ -> Error "batch item is missing a tool name")
 
 let is_tool_like json =
@@ -134,45 +152,35 @@ let text_block_text json =
   | `String "text", `String s -> Some s
   | _ -> None
 
-let parse_tool_list = function
-  | [] -> Error "tool_calls requires at least one call"
+let parse_tool_list items =
+  match List.filter items ~f:is_tool_like with
+  | [] -> Error "tool_calls requires at least one tool-like item"
   | items ->
-      let items = List.filter items ~f:is_tool_like in
-      if List.is_empty items then
-        Error "tool_calls requires at least one tool-like item"
-      else
-        List.fold items ~init:(Ok []) ~f:(fun acc json ->
-            match acc with
-            | Error _ as e -> e
-            | Ok calls ->
-                Result.map (parse_tool_object json) ~f:(fun tc -> tc :: calls))
-        |> Result.map ~f:List.rev
+      List.fold items ~init:(Ok []) ~f:(fun acc json ->
+          match acc with
+          | Error _ as e -> e
+          | Ok calls ->
+              Result.map (parse_tool_object json) ~f:(fun tc -> tc :: calls))
+      |> Result.map ~f:List.rev
 
-(* Models vary in how strictly they follow the contract. Accept both the
-   nested form ({"action":"tool_call","tool":..,"args":{..}}) and the common
-   flat form ({"action":"write_file","path":..}), and read tool args from
-   "args"/"arguments" or, failing that, the top-level object. *)
+let action_of_tool_calls_json items =
+  match List.filter items ~f:is_tool_like with
+  | tool_items when not (List.is_empty tool_items) ->
+      Result.map (parse_tool_list tool_items) ~f:(fun calls ->
+          match calls with
+          | [ tc ] -> Model_action.Tool_call tc
+          | calls -> Model_action.Tool_calls calls)
+  | _ ->
+      let texts = List.filter_map items ~f:text_block_text in
+      if not (List.is_empty texts) then
+        Ok (Model_action.Final_answer { answer = String.concat ~sep:"" texts })
+      else Error "JSON array did not contain tool_use or text blocks"
+
 let parse_object json : (Model_action.t, string) Result.t =
   let member = Yojson.Safe.Util.member in
   let as_tool tool =
-    Result.map
-      (build_tool tool (args_object json))
-      ~f:(fun tc -> Model_action.Tool_call tc)
-  in
-  let action_of_tool_calls calls =
-    match List.filter calls ~f:is_tool_like with
-    | tool_items when not (List.is_empty tool_items) ->
-        Result.map (parse_tool_list tool_items) ~f:(fun calls ->
-            match calls with
-            | [ tc ] -> Model_action.Tool_call tc
-            | calls -> Model_action.Tool_calls calls)
-    | _ ->
-        let texts = List.filter_map calls ~f:text_block_text in
-        if not (List.is_empty texts) then
-          Ok
-            (Model_action.Final_answer
-               { answer = String.concat ~sep:"" texts })
-        else Error "tool_calls did not contain tool_use/function items"
+    Result.map (build_tool tool (args_object json)) ~f:(fun tc ->
+        Model_action.Tool_call tc)
   in
   let final () =
     let summary = Option.value (get_string_opt json "summary") ~default:"" in
@@ -190,25 +198,33 @@ let parse_object json : (Model_action.t, string) Result.t =
       | Ok tool -> as_tool tool)
   | `String "tool_calls" | `String "parallel_tool_calls" -> (
       match member "calls" json with
-      | `List calls -> action_of_tool_calls calls
+      | `List calls -> action_of_tool_calls_json calls
       | _ -> (
           match member "tool_calls" json with
-          | `List calls -> action_of_tool_calls calls
+          | `List calls -> action_of_tool_calls_json calls
           | _ -> Error "tool_calls requires a 'calls' array"))
   | `String "final_answer" -> final ()
   | `String a when is_tool_name a -> as_tool a
   | `String other -> Error ("unknown action: " ^ other)
   | _ -> (
-      (* no usable "action": try a bare "tool" field, else treat a
-             "summary" as a final answer. *)
       match (member "tool" json, member "type" json, member "name" json) with
       | `String tool, _, _ -> as_tool tool
       | _, `String "tool_use", `String tool -> as_tool tool
-      | _, _, `String tool -> as_tool tool
+      | _, _, `String tool when is_tool_name tool -> as_tool tool
       | _ -> (
           match get_string_opt json "summary" with
           | Some _ -> final ()
           | None -> Error "missing or invalid 'action' field"))
+
+let parse_ppx_variant = function
+  | `List [ `String "Tool_call"; json ] ->
+      Result.map (parse_tool_object json) ~f:(fun tc -> Model_action.Tool_call tc)
+  | `List [ `String "Tool_calls"; `List items ] -> action_of_tool_calls_json items
+  | `List [ `String "Final_answer"; obj ] -> (
+      match get_string_opt obj "answer" with
+      | Some answer -> Ok (Model_action.Final_answer { answer })
+      | None -> Error "Final_answer variant missing answer")
+  | _ -> Error "not a ppx variant action"
 
 let parse_action content : (Model_action.t, string) Result.t =
   let content = strip_fences content in
@@ -216,35 +232,24 @@ let parse_action content : (Model_action.t, string) Result.t =
   | exception exn ->
       Error ("model output is not valid JSON: " ^ Exn.to_string exn)
   | raw -> (
-      (* Some models wrap a single action in an array. A multi-item array is
-         treated as a batch of tool calls. *)
-      try
-        match raw with
-        | `List [] -> Error "empty JSON array from model"
-        | `List [ x ] -> (
-            match (is_tool_like x, text_block_text x) with
-            | true, _ -> parse_object x
-            | false, Some text ->
-                Ok (Model_action.Final_answer { answer = text })
-            | false, None -> parse_object x)
-        | `List xs ->
-            let tool_items = List.filter xs ~f:is_tool_like in
-            if not (List.is_empty tool_items) then
-              Result.map (parse_tool_list tool_items) ~f:(fun calls ->
-                  match calls with
-                  | [ tc ] -> Model_action.Tool_call tc
-                  | calls -> Model_action.Tool_calls calls)
-            else
-              let texts = List.filter_map xs ~f:text_block_text in
-              if not (List.is_empty texts) then
-                Ok
-                  (Model_action.Final_answer
-                     { answer = String.concat ~sep:"" texts })
-              else Error "JSON array did not contain tool_use or text blocks"
-        | `String s -> Ok (Model_action.Final_answer { answer = s })
-        | json -> parse_object json
-      with Yojson.Safe.Util.Type_error (msg, _) ->
-        Error ("unexpected JSON shape from model: " ^ msg))
+      match parse_ppx_variant raw with
+      | Ok _ as ok -> ok
+      | Error _ -> (
+          try
+            match raw with
+            | `List [] -> Error "empty JSON array from model"
+            | `List [ `String s ] -> Ok (Model_action.Final_answer { answer = s })
+            | `List [ x ] -> (
+                match (is_tool_like x, text_block_text x) with
+                | true, _ -> parse_object x
+                | false, Some text ->
+                    Ok (Model_action.Final_answer { answer = text })
+                | false, None -> Error "single-item JSON array is not an action")
+            | `List xs -> action_of_tool_calls_json xs
+            | `String s -> Ok (Model_action.Final_answer { answer = s })
+            | json -> parse_object json
+          with Yojson.Safe.Util.Type_error (msg, _) ->
+            Error ("unexpected JSON shape from model: " ^ msg)))
 
 (* --- Native tool schemas --- *)
 
@@ -323,173 +328,171 @@ let anthropic_tools () =
           ("input_schema", tool_parameters tool.name);
         ])
 
-(* --- OpenAI chat completions (zhipu, deepseek) --- *)
+(* --- History: Message.t <-> normalized turns --- *)
 
-let openai_request (config : Config.t) messages =
-  let uri = Uri.of_string (config.api_base ^ "/chat/completions") in
-  let auth =
-    if String.is_empty config.api_key then []
-    else [ ("Authorization", "Bearer " ^ config.api_key) ]
-  in
-  let headers =
-    Cohttp.Header.of_list (auth @ [ ("Content-Type", "application/json") ])
-  in
-  let body_json =
-    `Assoc
-      [
-        ("model", `String config.model);
-        ( "messages",
-          `List
-            (List.map messages ~f:(fun (m : Message.t) ->
-                 `Assoc
-                   [ ("role", `String m.role); ("content", `String m.content) ]))
-        );
-        ("temperature", `Float 0.0);
-        ("stream", `Bool true);
-        ("tools", `List (openai_tools ()));
-        ("tool_choice", `String "auto");
-      ]
-  in
-  (uri, headers, body_json)
+let action_of_assistant_content content =
+  match Yojson.Safe.from_string content with
+  | json -> Model_action.of_yojson json
+  | exception _ -> Error "assistant content is not action JSON"
 
-let openai_extract body_str =
-  match Yojson.Safe.from_string body_str with
-  | exception exn ->
-      Error ("invalid JSON in model response: " ^ Exn.to_string exn)
-  | json -> (
-      try
-        let open Yojson.Safe.Util in
-        let message = json |> member "choices" |> index 0 |> member "message" in
-        match message |> member "tool_calls" with
-        | `List calls when not (List.is_empty calls) ->
-            let tool_blocks =
-              List.filter_map calls ~f:(fun call ->
-                  let fn = call |> member "function" in
-                  match fn |> member "name" with
-                  | `String name ->
-                      let input =
-                        match fn |> member "arguments" with
-                        | `String s -> (
-                            match Yojson.Safe.from_string s with
-                            | `Assoc _ as obj -> obj
-                            | _ -> `Assoc []
-                            | exception _ -> `Assoc [])
-                        | `Assoc _ as obj -> obj
-                        | _ -> `Assoc []
-                      in
-                      Some
-                        (`Assoc
-                           [
-                             ("type", `String "tool_use");
-                             ("name", `String name);
-                             ("input", input);
-                           ])
-                  | _ -> None)
-            in
-            Ok (Yojson.Safe.to_string (`List tool_blocks))
-        | _ -> (
-            match message |> member "content" with
-            | `String s -> Ok s
-            | `Null -> Error "model response had neither content nor tool_calls"
-            | other -> Ok (Yojson.Safe.to_string other))
-      with exn -> Error ("unexpected completion shape: " ^ Exn.to_string exn))
+let tool_calls_of_action = function
+  | Model_action.Tool_call tc -> [ tc ]
+  | Model_action.Tool_calls calls -> calls
+  | Final_answer _ -> []
 
-(* --- Anthropic Messages (Kimi for coding) --- *)
+let final_answer_of_action = function
+  | Model_action.Final_answer { answer } -> Some answer
+  | Tool_call _ | Tool_calls _ -> None
 
-let anthropic_request (config : Config.t) messages =
-  let uri = Uri.of_string (config.api_base ^ "/v1/messages") in
-  let headers =
-    Cohttp.Header.of_list
-      [
-        ("Authorization", "Bearer " ^ config.api_key);
-        ("anthropic-version", "2023-06-01");
-        ("Content-Type", "application/json");
-      ]
-  in
-  let system =
-    List.filter_map messages ~f:(fun (m : Message.t) ->
-        if String.equal m.role "system" then Some m.content else None)
-    |> String.concat ~sep:"\n\n"
-  in
-  let turns =
-    List.filter messages ~f:(fun (m : Message.t) ->
-        not (String.equal m.role "system"))
-  in
-  let body_json =
-    `Assoc
-      [
-        ("model", `String config.model);
-        ("max_tokens", `Int 4096);
-        ("system", `String system);
-        ("stream", `Bool true);
-        ( "messages",
-          `List
-            (List.map turns ~f:(fun (m : Message.t) ->
-                 `Assoc
-                   [ ("role", `String m.role); ("content", `String m.content) ]))
-        );
-        ("tools", `List (anthropic_tools ()));
-      ]
-  in
-  (uri, headers, body_json)
+let is_tool_observation content = String.is_prefix content ~prefix:"TOOL_RESULT"
 
-let anthropic_extract body_str =
-  match Yojson.Safe.from_string body_str with
-  | exception exn ->
-      Error ("invalid JSON in model response: " ^ Exn.to_string exn)
-  | json -> (
-      try
-        let open Yojson.Safe.Util in
-        let blocks = json |> member "content" |> to_list in
-        let tool_blocks =
-          List.filter blocks ~f:(fun b ->
-              match member "type" b with
-              | `String "tool_use" -> true
-              | _ -> false)
+let next_tool_id counter =
+  let id = Printf.sprintf "fp_call_%d" !counter in
+  Int.incr counter;
+  id
+
+let queue_push q x = q := !q @ [ x ]
+let queue_pop q = match !q with x :: xs -> q := xs; Some x | [] -> None
+
+let split_system messages =
+  let system, rest =
+    List.partition_tf messages ~f:(fun (m : Message.t) -> String.equal m.role "system")
+  in
+  (List.map system ~f:(fun (m : Message.t) -> m.content) |> String.concat ~sep:"\n\n", rest)
+
+let turns_of_messages messages =
+  let _system, messages = split_system messages in
+  let id_counter = ref 0 in
+  let pending_ids = ref [] in
+  List.map messages ~f:(fun (m : Message.t) ->
+      match m.role with
+      | "assistant" -> (
+          match action_of_assistant_content m.content with
+          | Ok action -> (
+              match tool_calls_of_action action with
+              | [] ->
+                  let text = Option.value (final_answer_of_action action) ~default:m.content in
+                  { role = Assistant; content = [ Text text ] }
+              | calls ->
+                  let content =
+                    List.map calls ~f:(fun (tc : Tool_call.t) ->
+                        let id = next_tool_id id_counter in
+                        queue_push pending_ids id;
+                        Tool_use { id; name = tc.name; input = tc.args })
+                  in
+                  { role = Assistant; content })
+          | Error _ -> { role = Assistant; content = [ Text m.content ] })
+      | "user" when is_tool_observation m.content -> (
+          match queue_pop pending_ids with
+          | Some id -> { role = User; content = [ Tool_result { id; content = m.content } ] }
+          | None -> { role = User; content = [] })
+      | _ -> { role = User; content = [ Text m.content ] })
+
+let anthropic_block = function
+  | Text s -> `Assoc [ ("type", `String "text"); ("text", `String s) ]
+  | Thinking s -> `Assoc [ ("type", `String "thinking"); ("thinking", `String s) ]
+  | Tool_use { id; name; input } ->
+      `Assoc
+        [
+          ("type", `String "tool_use");
+          ("id", `String id);
+          ("name", `String name);
+          ("input", input);
+        ]
+  | Tool_result { id; content } ->
+      `Assoc
+        [
+          ("type", `String "tool_result");
+          ("tool_use_id", `String id);
+          ("content", `String content);
+        ]
+
+let anthropic_role = function User -> "user" | Assistant -> "assistant"
+
+let anthropic_messages turns =
+  turns
+  |> List.filter ~f:(fun t -> not (List.is_empty t.content))
+  |> List.map ~f:(fun t ->
+      `Assoc
+        [
+          ("role", `String (anthropic_role t.role));
+          ("content", `List (List.map t.content ~f:anthropic_block));
+        ])
+
+let openai_messages ~system turns =
+  let sys_msg = `Assoc [ ("role", `String "system"); ("content", `String system) ] in
+  let turn_to_messages t =
+    match t.role with
+    | User ->
+        let user_texts =
+          List.filter_map t.content ~f:(function Text s -> Some s | _ -> None)
         in
-        if not (List.is_empty tool_blocks) then
-          Ok (Yojson.Safe.to_string (`List tool_blocks))
-        else
-          match
-            List.find_map blocks ~f:(fun b ->
-                match member "text" b with `String s -> Some s | _ -> None)
-          with
-          | Some text -> Ok text
-          | None -> Error "no text or tool_use block in model response"
-      with exn -> Error ("unexpected messages shape: " ^ Exn.to_string exn))
+        let user_messages =
+          match String.concat ~sep:"\n" user_texts with
+          | "" -> []
+          | text -> [ `Assoc [ ("role", `String "user"); ("content", `String text) ] ]
+        in
+        let tool_messages =
+          List.filter_map t.content ~f:(function
+            | Tool_result { id; content } ->
+                Some
+                  (`Assoc
+                    [
+                      ("role", `String "tool");
+                      ("tool_call_id", `String id);
+                      ("content", `String content);
+                    ])
+            | _ -> None)
+        in
+        user_messages @ tool_messages
+    | Assistant ->
+        let text =
+          List.filter_map t.content ~f:(function Text s -> Some s | _ -> None)
+          |> String.concat ~sep:"\n"
+        in
+        let tool_calls =
+          List.filter_map t.content ~f:(function
+            | Tool_use { id; name; input } ->
+                Some
+                  (`Assoc
+                    [
+                      ("id", `String id);
+                      ("type", `String "function");
+                      ( "function",
+                        `Assoc
+                          [
+                            ("name", `String name);
+                            ("arguments", `String (Yojson.Safe.to_string input));
+                          ] );
+                    ])
+            | _ -> None)
+        in
+        let fields =
+          [ ("role", `String "assistant"); ("content", if String.is_empty text then `Null else `String text) ]
+        in
+        let fields = if List.is_empty tool_calls then fields else fields @ [ ("tool_calls", `List tool_calls) ] in
+        [ `Assoc fields ]
+  in
+  sys_msg :: List.concat_map turns ~f:turn_to_messages
 
-(* --- Streaming SSE extraction --- *)
+(* --- Streaming helpers --- *)
 
-let sse_payloads body_str =
-  body_str |> String.split_lines
-  |> List.filter_map ~f:(fun line ->
-      let line = String.strip line in
-      if String.is_prefix line ~prefix:"data: " then
-        Some (String.drop_prefix line 6 |> String.strip)
-      else if String.is_prefix line ~prefix:"data:" then
-        Some (String.drop_prefix line 5 |> String.strip)
-      else None)
-  |> List.filter ~f:(fun data -> not (String.equal data "[DONE]"))
+let sse_data line =
+  let line = String.strip line in
+  if String.is_prefix line ~prefix:"data: " then Some (String.drop_prefix line 6)
+  else if String.is_prefix line ~prefix:"data:" then Some (String.drop_prefix line 5)
+  else None
 
-let parse_json_opt s =
-  match Yojson.Safe.from_string s with j -> Some j | exception _ -> None
+type delta_visibility = Unknown | Visible | Hidden
 
-type anthropic_builder =
-  | AText of Buffer.t
-  | AThinking of Buffer.t
-  | ATool of { id : string; name : string; args : Buffer.t }
+type delta_filter = {
+  on_delta : string -> unit;
+  pending : Buffer.t;
+  mutable visibility : delta_visibility;
+}
 
-let assoc_set r key data =
-  r := (key, data) :: List.Assoc.remove !r key ~equal:Int.equal
-
-let assoc_find r key = List.Assoc.find !r key ~equal:Int.equal
-let json_string_or_empty = function `String s -> s | _ -> ""
-
-let parse_json_object_or_empty s =
-  match Yojson.Safe.from_string (if String.is_empty s then "{}" else s) with
-  | `Assoc _ as obj -> obj
-  | _ -> `Assoc []
-  | exception _ -> `Assoc []
+let create_delta_filter on_delta =
+  { on_delta; pending = Buffer.create 64; visibility = Unknown }
 
 let looks_like_internal_action_text s =
   let s = String.strip s in
@@ -501,41 +504,134 @@ let looks_like_internal_action_text s =
   || String.is_substring s ~substring:"\"tool_use\""
   || String.is_substring s ~substring:"\"tool_calls\""
 
-let emit_visible_text ~on_delta text =
-  if not (looks_like_internal_action_text text) then on_delta text
+let feed_delta filter chunk =
+  match filter.visibility with
+  | Visible -> filter.on_delta chunk
+  | Hidden -> ()
+  | Unknown ->
+      Buffer.add_string filter.pending chunk;
+      let pending = Buffer.contents filter.pending in
+      let stripped = String.strip pending in
+      if String.is_empty stripped then ()
+      else if looks_like_internal_action_text stripped then filter.visibility <- Hidden
+      else (
+        filter.visibility <- Visible;
+        Buffer.clear filter.pending;
+        filter.on_delta pending)
 
-let tool_action_from_blocks blocks =
-  let calls =
-    List.filter_map blocks ~f:(fun block ->
-        match parse_tool_object block with
-        | Ok tc -> Some tc
-        | Error _ -> None)
+let flush_delta filter final_text =
+  match filter.visibility with
+  | Visible | Hidden -> ()
+  | Unknown ->
+      if not (looks_like_internal_action_text final_text) then filter.on_delta final_text
+
+let split_sse_lines chunks ~on_line =
+  let buf = Buffer.create 256 in
+  let rec drain () =
+    let s = Buffer.contents buf in
+    match String.index s '\n' with
+    | None -> ()
+    | Some i ->
+        let line = String.prefix s i |> String.rstrip in
+        let rest = String.drop_prefix s (i + 1) in
+        Buffer.clear buf;
+        Buffer.add_string buf rest;
+        on_line line;
+        drain ()
   in
-  match calls with
-  | [] -> Error "no valid tool_use/function blocks in provider response"
-  | [ tc ] -> Ok (Model_action.Tool_call tc)
-  | calls -> Ok (Model_action.Tool_calls calls)
+  List.iter chunks ~f:(fun chunk ->
+      Buffer.add_string buf chunk;
+      drain ());
+  let rest = Buffer.contents buf |> String.strip in
+  if not (String.is_empty rest) then on_line rest
 
-let anthropic_stream_extract ~on_delta body_str =
+let parse_json_opt s =
+  match Yojson.Safe.from_string s with j -> Some j | exception _ -> None
+
+let json_string_or_empty = function `String s -> s | _ -> ""
+
+let parse_json_object_or_empty s =
+  match Yojson.Safe.from_string (if String.is_empty s then "{}" else s) with
+  | `Assoc _ as obj -> obj
+  | _ -> `Assoc []
+  | exception _ -> `Assoc []
+
+let action_of_content_blocks blocks =
+  let tool_calls =
+    List.filter_map blocks ~f:(function
+      | Tool_use { name; input; _ } -> (
+          match build_tool name input with Ok tc -> Some tc | Error _ -> None)
+      | _ -> None)
+  in
+  match tool_calls with
+  | [ tc ] -> Ok (Model_action.Tool_call tc)
+  | _ :: _ -> Ok (Model_action.Tool_calls tool_calls)
+  | [] ->
+      let text =
+        List.filter_map blocks ~f:(function Text s -> Some s | _ -> None)
+        |> String.concat ~sep:""
+      in
+      if String.is_empty text then Error "provider returned no text or tool_use blocks"
+      else if looks_like_internal_action_text text then parse_action text
+      else Ok (Model_action.Final_answer { answer = text })
+
+(* --- Anthropic protocol --- *)
+
+type anthropic_builder =
+  | BText of Buffer.t
+  | BThinking of Buffer.t
+  | BTool of { id : string; name : string; json : Buffer.t }
+
+let assoc_set r key data =
+  r := (key, data) :: List.Assoc.remove !r key ~equal:Int.equal
+
+let assoc_find r key = List.Assoc.find !r key ~equal:Int.equal
+
+let anthropic_request (config : Config.t) messages =
+  let system, history = split_system messages in
+  let turns = turns_of_messages history in
+  let uri = Uri.of_string (config.api_base ^ "/v1/messages") in
+  let headers =
+    Cohttp.Header.of_list
+      [
+        ("Authorization", "Bearer " ^ config.api_key);
+        ("anthropic-version", "2023-06-01");
+        ("Content-Type", "application/json");
+      ]
+  in
+  let body_json =
+    `Assoc
+      [
+        ("model", `String config.model);
+        ("max_tokens", `Int 4096);
+        ("system", `String system);
+        ("stream", `Bool true);
+        ("messages", `List (anthropic_messages turns));
+        ("tools", `List (anthropic_tools ())); 
+      ]
+  in
+  (uri, headers, body_json)
+
+let anthropic_complete ~on_delta payloads =
   let builders = ref [] in
-  let texts = ref [] in
-  let tool_blocks = ref [] in
+  let blocks = ref [] in
+  let delta_filter = create_delta_filter on_delta in
   let finish idx =
     match assoc_find builders idx with
-    | Some (AText b) -> texts := Buffer.contents b :: !texts
-    | Some (AThinking _) -> ()
-    | Some (ATool { name; args; _ }) ->
-        tool_blocks :=
-          `Assoc
-            [
-              ("type", `String "tool_use");
-              ("name", `String name);
-              ("input", parse_json_object_or_empty (Buffer.contents args));
-            ]
-          :: !tool_blocks
+    | Some (BText b) -> blocks := Text (Buffer.contents b) :: !blocks
+    | Some (BThinking b) -> blocks := Thinking (Buffer.contents b) :: !blocks
+    | Some (BTool { id; name; json }) ->
+        blocks :=
+          Tool_use
+            {
+              id;
+              name;
+              input = parse_json_object_or_empty (Buffer.contents json);
+            }
+          :: !blocks
     | None -> ()
   in
-  List.iter (sse_payloads body_str) ~f:(fun data ->
+  List.iter payloads ~f:(fun data ->
       match parse_json_opt data with
       | None -> ()
       | Some json -> (
@@ -544,49 +640,66 @@ let anthropic_stream_extract ~on_delta body_str =
           | `String "content_block_start" -> (
               let idx = json |> member "index" |> to_int in
               let block = json |> member "content_block" in
-              match block |> member "type" with
-              | `String "text" ->
-                  assoc_set builders idx (AText (Buffer.create 256))
-              | `String "thinking" ->
-                  assoc_set builders idx (AThinking (Buffer.create 256))
+              match member "type" block with
+              | `String "text" -> assoc_set builders idx (BText (Buffer.create 256))
+              | `String "thinking" -> assoc_set builders idx (BThinking (Buffer.create 256))
               | `String "tool_use" ->
                   assoc_set builders idx
-                    (ATool
+                    (BTool
                        {
                          id = json_string_or_empty (member "id" block);
                          name = json_string_or_empty (member "name" block);
-                         args = Buffer.create 256;
+                         json = Buffer.create 256;
                        })
               | _ -> ())
           | `String "content_block_delta" -> (
               let idx = json |> member "index" |> to_int in
               let delta = json |> member "delta" in
               match (member "type" delta, assoc_find builders idx) with
-              | `String "text_delta", Some (AText b) ->
+              | `String "text_delta", Some (BText b) ->
                   let s = json_string_or_empty (member "text" delta) in
-                  Buffer.add_string b s
-              | `String "thinking_delta", Some (AThinking b) ->
-                  Buffer.add_string b
-                    (json_string_or_empty (member "thinking" delta))
-              | `String "input_json_delta", Some (ATool t) ->
-                  Buffer.add_string t.args
-                    (json_string_or_empty (member "partial_json" delta))
+                  Buffer.add_string b s;
+                  feed_delta delta_filter s
+              | `String "thinking_delta", Some (BThinking b) ->
+                  Buffer.add_string b (json_string_or_empty (member "thinking" delta))
+              | `String "input_json_delta", Some (BTool t) ->
+                  Buffer.add_string t.json (json_string_or_empty (member "partial_json" delta))
               | _ -> ())
-          | `String "content_block_stop" ->
-              finish (json |> member "index" |> to_int)
-          | `String "error" ->
-              texts := ("model stream error: " ^ data) :: !texts
-          | _ -> ()));
-  match List.rev !tool_blocks with
-  | _ :: _ as tools -> tool_action_from_blocks tools
-  | [] ->
-      let text = String.concat ~sep:"" (List.rev !texts) in
-      if String.is_empty text then
-        Result.bind (anthropic_extract body_str) ~f:parse_action
-      else if looks_like_internal_action_text text then parse_action text
-      else (
-        emit_visible_text ~on_delta text;
-        Ok (Model_action.Final_answer { answer = text }))
+          | `String "content_block_stop" -> finish (json |> member "index" |> to_int)
+          | _ -> ()))
+  ;
+  let blocks = List.rev !blocks in
+  let final_text =
+    List.filter_map blocks ~f:(function Text s -> Some s | _ -> None)
+    |> String.concat ~sep:""
+  in
+  flush_delta delta_filter final_text;
+  action_of_content_blocks blocks
+
+(* --- OpenAI chat completions protocol --- *)
+
+let openai_request (config : Config.t) messages =
+  let system, history = split_system messages in
+  let turns = turns_of_messages history in
+  let uri = Uri.of_string (config.api_base ^ "/chat/completions") in
+  let auth =
+    if String.is_empty config.api_key then []
+    else [ ("Authorization", "Bearer " ^ config.api_key) ]
+  in
+  let headers = Cohttp.Header.of_list (auth @ [ ("Content-Type", "application/json") ]) in
+  let body_json =
+    `Assoc
+      [
+        ("model", `String config.model);
+        ("messages", `List (openai_messages ~system turns));
+        ("temperature", `Float 0.0);
+        ("stream", `Bool true);
+        ("stream_options", `Assoc [ ("include_usage", `Bool true) ]);
+        ("tools", `List (openai_tools ()));
+        ("tool_choice", `String "auto");
+      ]
+  in
+  (uri, headers, body_json)
 
 type openai_tool_builder = {
   id : string ref;
@@ -594,9 +707,11 @@ type openai_tool_builder = {
   args : Buffer.t;
 }
 
-let openai_stream_extract ~on_delta body_str =
+let openai_complete ~on_delta payloads =
   let text = Buffer.create 256 in
+  let reasoning = Buffer.create 256 in
   let tools = ref [] in
+  let delta_filter = create_delta_filter on_delta in
   let get_tool idx =
     match assoc_find tools idx with
     | Some t -> t
@@ -605,7 +720,7 @@ let openai_stream_extract ~on_delta body_str =
         assoc_set tools idx t;
         t
   in
-  List.iter (sse_payloads body_str) ~f:(fun data ->
+  List.iter payloads ~f:(fun data ->
       match parse_json_opt data with
       | None -> ()
       | Some json -> (
@@ -614,14 +729,17 @@ let openai_stream_extract ~on_delta body_str =
           | `List (choice :: _) -> (
               let delta = member "delta" choice in
               (match member "content" delta with
-              | `String s -> Buffer.add_string text s
+              | `String s when not (String.is_empty s) ->
+                  Buffer.add_string text s;
+                  feed_delta delta_filter s
+              | _ -> ());
+              (match member "reasoning_content" delta with
+              | `String s when not (String.is_empty s) -> Buffer.add_string reasoning s
               | _ -> ());
               match member "tool_calls" delta with
               | `List calls ->
                   List.iter calls ~f:(fun call ->
-                      let idx =
-                        match member "index" call with `Int i -> i | _ -> 0
-                      in
+                      let idx = match member "index" call with `Int i -> i | _ -> 0 in
                       let tool = get_tool idx in
                       (match member "id" call with
                       | `String s when not (String.is_empty s) -> tool.id := s
@@ -634,7 +752,14 @@ let openai_stream_extract ~on_delta body_str =
                       | `String s -> Buffer.add_string tool.args s
                       | _ -> ())
               | _ -> ())
-          | _ -> ()));
+          | _ -> ()))
+  ;
+  let text_blocks =
+    if Buffer.length text > 0 then [ Text (Buffer.contents text) ] else []
+  in
+  let reasoning_blocks =
+    if Buffer.length reasoning > 0 then [ Thinking (Buffer.contents reasoning) ] else []
+  in
   let tool_blocks =
     !tools
     |> List.sort ~compare:(fun (a, _) (b, _) -> Int.compare a b)
@@ -642,67 +767,62 @@ let openai_stream_extract ~on_delta body_str =
         if String.is_empty !(t.name) then None
         else
           Some
-            (`Assoc
-               [
-                 ("type", `String "tool_use");
-                 ("name", `String !(t.name));
-                 ("input", parse_json_object_or_empty (Buffer.contents t.args));
-               ]))
+            (Tool_use
+               {
+                 id = !(t.id);
+                 name = !(t.name);
+                 input = parse_json_object_or_empty (Buffer.contents t.args);
+               }))
   in
-  match tool_blocks with
-  | _ :: _ -> tool_action_from_blocks tool_blocks
-  | [] ->
-      let text = Buffer.contents text in
-      if String.is_empty text then Result.bind (openai_extract body_str) ~f:parse_action
-      else if looks_like_internal_action_text text then parse_action text
-      else (
-        emit_visible_text ~on_delta text;
-        Ok (Model_action.Final_answer { answer = text }))
+  let blocks = reasoning_blocks @ text_blocks @ tool_blocks in
+  flush_delta delta_filter (Buffer.contents text);
+  action_of_content_blocks blocks
 
-(* --- shared HTTP plumbing --- *)
+(* --- shared HTTP streaming plumbing --- *)
 
-let post_and_parse ?(on_delta = fun _ -> ()) (uri, headers, body_json) ~extract
-    =
+let collect_sse_payloads body =
+  let payloads = ref [] in
+  let on_line line =
+    match sse_data line with
+    | Some data when not (String.equal (String.strip data) "[DONE]") ->
+        payloads := String.strip data :: !payloads
+    | _ -> ()
+  in
+  Lwt.map
+    (fun chunks ->
+      split_sse_lines chunks ~on_line;
+      List.rev !payloads)
+    (Lwt_stream.to_list (Cohttp_lwt.Body.to_stream body))
+
+let post_and_complete ?(on_delta = fun _ -> ()) (uri, headers, body_json) ~complete =
   let body = Cohttp_lwt.Body.of_string (Yojson.Safe.to_string body_json) in
   Lwt.bind
     (Lwt.catch
        (fun () ->
-         Lwt.map
-           (fun x -> Ok x)
-           (Cohttp_lwt_unix.Client.post ~headers ~body uri))
-       (fun exn ->
-         Lwt.return (Error ("HTTP request failed: " ^ Exn.to_string exn))))
+         Lwt.map (fun x -> Ok x) (Cohttp_lwt_unix.Client.post ~headers ~body uri))
+       (fun exn -> Lwt.return (Error ("HTTP request failed: " ^ Exn.to_string exn))))
     (function
       | Error e -> Lwt.return (Error e)
       | Ok (resp, rbody) ->
-          let stream = Cohttp_lwt.Body.to_stream rbody in
-          Lwt.bind (Lwt_stream.to_list stream) (fun chunks ->
-              let body_str = String.concat chunks in
-              let code =
-                Cohttp.Code.code_of_status (Cohttp.Response.status resp)
-              in
-              if code >= 400 then
+          let code = Cohttp.Code.code_of_status (Cohttp.Response.status resp) in
+          if code >= 400 then
+            Lwt.bind (Cohttp_lwt.Body.to_string rbody) (fun body_str ->
                 let snippet =
                   let s = String.strip body_str in
                   if String.length s > 400 then String.prefix s 400 ^ "…" else s
                 in
-                Lwt.return
-                  (Error (Printf.sprintf "model API HTTP %d: %s" code snippet))
-              else
-                match extract ~on_delta body_str with
-                | Error e -> Lwt.return (Error e)
-                | Ok action -> Lwt.return (Ok action)))
+                Lwt.return (Error (Printf.sprintf "model API HTTP %d: %s" code snippet)))
+          else
+            Lwt.map
+              (fun payloads -> complete ~on_delta payloads)
+              (collect_sse_payloads rbody))
 
 let real_send (config : Config.t) ~on_delta messages =
   match config.protocol with
   | Provider.Openai ->
-      post_and_parse ~on_delta
-        (openai_request config messages)
-        ~extract:openai_stream_extract
+      post_and_complete ~on_delta (openai_request config messages) ~complete:openai_complete
   | Provider.Anthropic ->
-      post_and_parse ~on_delta
-        (anthropic_request config messages)
-        ~extract:anthropic_stream_extract
+      post_and_complete ~on_delta (anthropic_request config messages) ~complete:anthropic_complete
 
 let create ~config =
   { send = (fun ~on_delta messages -> real_send config ~on_delta messages) }
