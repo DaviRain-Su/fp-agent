@@ -119,11 +119,28 @@ let test_plugin_lifecycle_cli () =
     "sample args created" true
     (Stdlib.Sys.file_exists
        (Stdlib.Filename.concat plugin_dir
-          (Stdlib.Filename.concat "examples" "hello.args.json")));
+          (Stdlib.Filename.concat "examples" "hello_world.args.json")));
   let checked = run ~env [ bin; "--check-plugin"; plugin_dir ] in
   assert_success "check plugin" checked;
   assert_contains "check output" checked.stdout "plugin manifest ok";
   assert_contains "check tool output" checked.stdout "hello_world";
+  let smoked = run ~env [ bin; "--smoke-plugin"; plugin_dir ] in
+  assert_success "smoke plugin" smoked;
+  assert_contains "smoke output" smoked.stdout "smoke ok: hello_world";
+  assert_contains "smoke tool output" smoked.stdout
+    "hello from fp-agent plugin:";
+  let missing_smoke_dir = Stdlib.Filename.concat root "missing-smoke" in
+  assert_success "new plugin missing smoke"
+    (run ~env [ bin; "--new-plugin"; missing_smoke_dir ]);
+  let missing_args =
+    Stdlib.Filename.concat missing_smoke_dir
+      (Stdlib.Filename.concat "examples" "hello_world.args.json")
+  in
+  Stdlib.Sys.remove missing_args;
+  let missing_smoke = run ~env [ bin; "--smoke-plugin"; missing_smoke_dir ] in
+  assert_failure "smoke missing args" missing_smoke;
+  assert_contains "smoke missing args stderr" missing_smoke.stderr
+    "missing smoke args for tool hello_world";
   let check_conflict_dir = Stdlib.Filename.concat root "conflict-check" in
   mkdir_p check_conflict_dir;
   write_file
@@ -198,7 +215,8 @@ let test_plugin_lifecycle_cli () =
   assert_failure "replace without install" replace_without_install;
   assert_contains "replace without install stderr"
     replace_without_install.stderr
-    "--replace-plugin requires --install-plugin DIR or --check-plugin DIR";
+    "--replace-plugin requires --install-plugin DIR or --check-plugin DIR or \
+     --smoke-plugin DIR";
   let invalid_installed = Stdlib.Filename.concat home "invalid-plugin" in
   mkdir_p invalid_installed;
   write_file
@@ -313,7 +331,7 @@ let test_plugin_tool_debug_cli () =
   assert_contains "plugin output args" ok.stdout {|"message":"hi"|};
   let args_file =
     Stdlib.Filename.concat plugin_dir
-      (Stdlib.Filename.concat "examples" "hello.args.json")
+      (Stdlib.Filename.concat "examples" "hello_world.args.json")
   in
   let ok_file =
     run ~env

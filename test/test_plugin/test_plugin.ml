@@ -559,7 +559,7 @@ let test_scaffold_creates_valid_plugin () =
             "sample args exists" true
             (Stdlib.Sys.file_exists
                (Stdlib.Filename.concat dir
-                  (Stdlib.Filename.concat "examples" "hello.args.json")));
+                  (Stdlib.Filename.concat "examples" "hello_world.args.json")));
           let readme =
             Stdlib.In_channel.with_open_bin
               (Stdlib.Filename.concat dir "README.md")

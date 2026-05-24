@@ -128,10 +128,11 @@ Create, test, and install a plugin into the user plugin home:
 dune exec -- fp-agent --new-plugin my-plugin
 dune exec -- fp-agent --new-plugin my-plugin --plugin-id com.example.my_plugin
 dune exec -- fp-agent --check-plugin my-plugin
+dune exec -- fp-agent --smoke-plugin my-plugin
 dune exec -- fp-agent --check-plugin my-plugin --replace-plugin
 dune exec -- fp-agent --run-plugin-tool my-plugin \
   --plugin-tool hello_world \
-  --plugin-args-file my-plugin/examples/hello.args.json
+  --plugin-args-file my-plugin/examples/hello_world.args.json
 dune exec -- fp-agent --install-plugin my-plugin
 dune exec -- fp-agent --install-plugin my-plugin --replace-plugin
 dune exec -- fp-agent --list-plugins
@@ -225,6 +226,8 @@ Options:
 - `--new-plugin DIR` — create a starter plugin directory, then exit
 - `--plugin-id ID` — manifest id to use with `--new-plugin`
 - `--check-plugin DIR` — validate a plugin directory, then exit
+- `--smoke-plugin DIR` — validate a plugin directory and run each tool with
+  `examples/<tool>.args.json`
 - `--replace-plugin` with `--check-plugin` — validate replacement
   compatibility against the currently installed plugin with the same id
 - `--run-plugin-tool DIR --plugin-tool NAME --plugin-args JSON` — run a plugin

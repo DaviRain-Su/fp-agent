@@ -686,7 +686,9 @@ let scaffold ?id dir =
       let script_path = Stdlib.Filename.concat dir "hello.sh" in
       let readme_path = Stdlib.Filename.concat dir "README.md" in
       let examples_dir = Stdlib.Filename.concat dir "examples" in
-      let args_path = Stdlib.Filename.concat examples_dir "hello.args.json" in
+      let args_path =
+        Stdlib.Filename.concat examples_dir "hello_world.args.json"
+      in
       if Stdlib.Sys.file_exists manifest_path then
         Error ("plugin manifest already exists: " ^ manifest_path)
       else
@@ -742,7 +744,7 @@ dune exec -- fp-agent --check-plugin .
 ```sh
 dune exec -- fp-agent --run-plugin-tool . \
   --plugin-tool hello_world \
-  --plugin-args-file examples/hello.args.json
+  --plugin-args-file examples/hello_world.args.json
 ```
 
 The tool receives JSON args on stdin and can use:

@@ -122,7 +122,7 @@ dune exec -- fp-agent --new-plugin my-plugin --plugin-id com.example.my_plugin
 ```
 
 The scaffold includes `fp-agent-plugin.json`, `hello.sh`, a README with the
-local development commands, and `examples/hello.args.json` for a first
+local development commands, and `examples/hello_world.args.json` for a first
 `--run-plugin-tool` smoke test.
 
 Validate it before installing:
@@ -147,12 +147,16 @@ dune exec -- fp-agent --run-plugin-tool my-plugin \
   --plugin-args '{"message":"hi"}'
 ```
 
-You can also keep reusable smoke-test inputs in files:
+You can also keep reusable smoke-test inputs in files. The convention is
+`examples/<tool>.args.json`, and `--smoke-plugin` runs every tool with its
+matching file:
 
 ```sh
+dune exec -- fp-agent --smoke-plugin my-plugin
+
 dune exec -- fp-agent --run-plugin-tool my-plugin \
   --plugin-tool hello_world \
-  --plugin-args-file my-plugin/examples/hello.args.json
+  --plugin-args-file my-plugin/examples/hello_world.args.json
 ```
 
 The command loads the manifest, validates the JSON args, runs the tool from the

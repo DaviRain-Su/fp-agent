@@ -104,6 +104,8 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - Plugin scaffolding now accepts `--plugin-id`, letting developers create a
   starter manifest with the final package id instead of the directory-derived
   `local.*` default.
+- Plugin local development now has `--smoke-plugin`, which validates a plugin
+  and runs each tool against `examples/<tool>.args.json` before install.
 - Plugin installation now supports `--replace-plugin` for iterative SDK
   development. Replacement validates and stages the new plugin before removing
   the old installed copy, so reinstalling a local plugin is one command without
