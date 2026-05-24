@@ -623,6 +623,19 @@ let test_scaffold_creates_valid_plugin () =
           Alcotest.(check bool)
             "readme documents args file env" true
             (String.is_substring readme ~substring:"FP_AGENT_ARGS_FILE");
+          Alcotest.(check bool)
+            "readme documents interactive check" true
+            (String.is_substring readme ~substring:"/plugin-check .");
+          Alcotest.(check bool)
+            "readme documents interactive smoke" true
+            (String.is_substring readme ~substring:"/plugin-smoke .");
+          Alcotest.(check bool)
+            "readme documents replace install" true
+            (String.is_substring readme ~substring:"/plugin-install --replace .");
+          Alcotest.(check bool)
+            "readme documents remove" true
+            (String.is_substring readme
+               ~substring:"/plugin-remove com.example.scaffold");
           match Plugin.check dir with
           | Error e -> Alcotest.failf "scaffold check failed: %s" e
           | Ok manifest ->
