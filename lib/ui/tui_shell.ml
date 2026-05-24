@@ -280,3 +280,17 @@ let handle_input ~page_size t input =
   match action_of_input ~page_size t input with
   | None -> no_submit t
   | Some action -> handle t action
+
+let feedback_lines result =
+  match
+    (result.submitted, result.dispatched_command, result.accepted_command)
+  with
+  | Some prompt, _, _ ->
+      [ "[tui] prompt submitted: " ^ View.truncate ~cols:80 prompt ]
+  | None, Some command, _ -> [ "[tui] accepted command: " ^ command ]
+  | None, None, Some command ->
+      [
+        "[tui] draft command: " ^ command.command;
+        "[tui] draft text: " ^ View.truncate ~cols:80 result.state.draft.text;
+      ]
+  | None, None, None -> []

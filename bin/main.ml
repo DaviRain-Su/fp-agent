@@ -166,7 +166,12 @@ let make_tui_reporter ~provider ~model ~session ~header =
   let drain_input ~page_size =
     let apply input =
       let result = Tui_shell.handle_input ~page_size !shell input in
-      shell := result.state
+      shell := result.state;
+      match Tui_shell.feedback_lines result with
+      | [] -> ()
+      | feedback ->
+          flush_delta ();
+          lines := !lines @ feedback
     in
     let rec loop () =
       if Notty_unix.Term.pending term then (

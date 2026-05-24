@@ -69,6 +69,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - The command palette now carries a search query in pure state. Typing while the
   palette is open filters commands case-insensitively, supports empty-result
   rendering, and keeps selection clamped to the filtered list.
+- Palette accept results now emit tested feedback lines. The Notty TUI appends
+  accepted commands and seeded command drafts to the timeline instead of
+  silently dropping them.
 - The REPL exposes the same inspector through `/inspect [index]`, so event-log
   review works even outside a full-screen TUI and can target historical events.
 - The REPL exposes plugin inspection through `/plugin <id|tool>`, showing

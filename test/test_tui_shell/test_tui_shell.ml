@@ -43,6 +43,11 @@ let test_prompt_input_mapping () =
   Alcotest.(check (option string))
     "ctrl enter submits" (Some "inspect README\nsummarize risks")
     result.submitted;
+  Alcotest.(check bool)
+    "submit feedback" true
+    (String.is_substring
+       (String.concat ~sep:"\n" (Tui_shell.feedback_lines result))
+       ~substring:"[tui] prompt submitted: inspect README");
   Alcotest.(check string) "submit clears draft" "" result.state.draft.text
 
 let test_palette_state () =
@@ -96,6 +101,10 @@ let test_palette_input_mapping () =
   Alcotest.(check (option string))
     "enter dispatches no-arg command" (Some "/sessions")
     result.dispatched_command;
+  Alcotest.(check (list string))
+    "dispatch feedback"
+    [ "[tui] accepted command: /sessions" ]
+    (Tui_shell.feedback_lines result);
   Alcotest.(check string)
     "direct command leaves draft empty" "" result.state.draft.text
 
@@ -110,7 +119,11 @@ let test_palette_accept_draft_mapping () =
   Alcotest.(check (option string))
     "draft command does not dispatch" None result.dispatched_command;
   Alcotest.(check string) "seeds draft" "/tool " result.state.draft.text;
-  Alcotest.(check int) "draft cursor at end" 6 result.state.draft.cursor
+  Alcotest.(check int) "draft cursor at end" 6 result.state.draft.cursor;
+  Alcotest.(check (list string))
+    "draft feedback"
+    [ "[tui] draft command: /tool <name>"; "[tui] draft text: /tool " ]
+    (Tui_shell.feedback_lines result)
 
 let test_palette_filter_input_mapping () =
   let state =

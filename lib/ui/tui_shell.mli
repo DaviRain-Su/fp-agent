@@ -105,3 +105,7 @@ val action_of_input : page_size:int -> t -> input -> action option
 val handle_input : page_size:int -> t -> input -> result
 (** Translate and apply one abstract terminal input. Unknown or context-invalid
     input leaves the state unchanged. *)
+
+val feedback_lines : result -> string list
+(** Human-readable feedback for shell results that should be visible in the TUI
+    timeline, such as accepted palette commands or prompt submissions. *)
