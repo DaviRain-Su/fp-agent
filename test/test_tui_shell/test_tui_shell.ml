@@ -446,6 +446,22 @@ let test_tui_command_model_log_and_inspect () =
       Alcotest.(check bool)
         "status shows plan progress" true
         (String.is_substring plan_status ~substring:"plan: 1/3 done");
+      let handoff = output "/handoff" plan_context in
+      Alcotest.(check bool)
+        "handoff command header" true
+        (String.is_substring handoff ~substring:"[tui] /handoff");
+      Alcotest.(check bool)
+        "handoff includes resume command" true
+        (String.is_substring handoff ~substring:"resume: dune exec -- fp-agent");
+      Alcotest.(check bool)
+        "handoff includes last user task" true
+        (String.is_substring handoff ~substring:"last_user_task: inspect README");
+      Alcotest.(check bool)
+        "handoff includes plan progress" true
+        (String.is_substring handoff ~substring:"plan: 1/3 done");
+      Alcotest.(check bool)
+        "handoff includes recent events" true
+        (String.is_substring handoff ~substring:"Recent events:");
       let status = output "/status" context in
       Alcotest.(check bool)
         "status command header" true

@@ -19,6 +19,9 @@ val run : context -> string -> string list option
 val status_lines : context -> string list
 (** Render runtime/session/plugin status without a command header. *)
 
+val handoff_lines : context -> string list
+(** Render a copyable session handoff summary without a command header. *)
+
 val instruction_lines : context -> string list
 (** Render workspace project instructions without a command header. *)
 

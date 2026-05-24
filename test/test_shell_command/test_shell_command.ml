@@ -39,6 +39,8 @@ let test_parse () =
   require_command "usage" Shell_command.Usage "" (Shell_command.parse "/usage");
   require_command "status" Shell_command.Status ""
     (Shell_command.parse "/status");
+  require_command "handoff" Shell_command.Handoff ""
+    (Shell_command.parse "/handoff");
   require_command "instructions" Shell_command.Instructions ""
     (Shell_command.parse "/instructions");
   require_command "compact" Shell_command.Compact ""
@@ -160,6 +162,10 @@ let test_metadata () =
     "palette has status" true
     (List.mem palette "/status" ~equal:String.equal);
   Alcotest.(check bool)
+    "palette has handoff" true
+    (List.mem palette "/handoff" ~equal:String.equal);
+  Alcotest.(check string) "handoff group" "Context" (entry "/handoff").group;
+  Alcotest.(check bool)
     "palette has plugin new" true
     (List.mem palette
        "/plugin-new [--id ID] [--tool-name NAME] [--kind KIND] [--template \
@@ -247,6 +253,8 @@ let test_acceptance () =
     (Shell_command.accept (entry "/plan"));
   require_acceptance "status execute" ("execute", "/status")
     (Shell_command.accept (entry "/status"));
+  require_acceptance "handoff execute" ("execute", "/handoff")
+    (Shell_command.accept (entry "/handoff"));
   require_acceptance "instructions execute"
     ("execute", "/instructions")
     (Shell_command.accept (entry "/instructions"));

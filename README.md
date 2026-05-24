@@ -69,6 +69,7 @@ dune exec -- fp-agent
 > /log               # list this session's events with indices
 > /usage             # show token usage from the event log
 > /status            # show runtime/session/plugin status
+> /handoff           # print a copyable session handoff summary
 > /instructions      # show project instructions loaded for the model
 > /compact           # summarize older session history
 > /fork 3            # fork a new branch at event index 3 (or /fork for the end)
@@ -233,6 +234,9 @@ copy. Two consequences:
 - **Status** (`/status`) summarizes workspace, session, provider/model,
   event count, token usage, plan progress, plugin diagnostics, and registered
   tool count.
+- **Handoff** (`/handoff`) prints a copyable continuation summary with the
+  resume commands, runtime, token usage, current plan, last user task, recent
+  events, and workspace diff summary.
 - **Project instructions** (`/instructions`) shows the workspace instruction
   files that will be appended to the model system prompt.
 - **Session plan** (`/plan`, `/plan-set`, `/plan-add`, `/plan-update`,
@@ -252,9 +256,9 @@ copy. Two consequences:
   prompt draft for commands that need arguments. Typing while the palette is open
   filters commands by name or description, and accepted commands/drafts are
   echoed into the TUI timeline. Read-only commands such as `/tools`, `/plugins`,
-  `/models`, `/model`, `/usage`, `/status`, `/instructions`, `/plan`, `/diff`,
-  `/log`, and `/inspect` render their results directly inside the fullscreen
-  view.
+  `/models`, `/model`, `/usage`, `/status`, `/handoff`, `/instructions`,
+  `/plan`, `/diff`, `/log`, and `/inspect` render their results directly inside
+  the fullscreen view.
 - **Plugin local runs** (`/plugin-run <dir> <tool> <json|@file>`) execute one
   plugin tool with inline JSON or a JSON args file from inside the REPL or
   fullscreen TUI, using the same validation and workspace guard as

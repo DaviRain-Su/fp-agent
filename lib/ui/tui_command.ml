@@ -340,6 +340,29 @@ let diff_lines ctx =
     | [] -> tracked
     | files -> tracked @ ("untracked:" :: files)
 
+let diff_summary_lines ctx =
+  let git_dir = Stdlib.Filename.concat ctx.workspace_root ".git" in
+  if not (Stdlib.Sys.file_exists git_dir) then
+    [ "(workspace is not a git repo)" ]
+  else
+    let quote = Stdlib.Filename.quote in
+    let root = quote ctx.workspace_root in
+    let exclude = "':(exclude).ocaml-agent'" in
+    let status =
+      shell_lines
+        ~command:
+          (Printf.sprintf "git -C %s status --short -- . %s" root exclude)
+    in
+    let stat =
+      shell_lines
+        ~command:(Printf.sprintf "git -C %s diff --stat -- . %s" root exclude)
+    in
+    match (status, stat) with
+    | [], [] -> [ "(clean)" ]
+    | status, [] -> status
+    | [], stat -> stat
+    | status, stat -> status @ [ ""; "diff --stat:" ] @ stat
+
 let log_lines ctx =
   match ctx.events with
   | [] -> [ "(no events yet)" ]
@@ -436,6 +459,65 @@ let status_lines ctx =
     Printf.sprintf "tools: %d" (List.length (Tool.all ()));
   ]
 
+let flatten_line text =
+  String.substr_replace_all text ~pattern:"\n" ~with_:" " |> String.strip
+
+let last_user_message events =
+  List.find_map (List.rev events) ~f:(function
+    | Event.User_message { content }
+      when not (String.is_empty (String.strip content)) ->
+        Some content
+    | _ -> None)
+
+let handoff_lines ctx =
+  let usage = View.token_usage_of_events ctx.events in
+  let plan = View.plan_progress_of_events ctx.events in
+  let quoted_session = Stdlib.Filename.quote ctx.session_dir in
+  let last_task =
+    last_user_message ctx.events
+    |> Option.value_map ~default:"(none)" ~f:(fun task ->
+        View.truncate ~cols:160 (flatten_line task))
+  in
+  let current_plan =
+    match latest_plan ctx.events with
+    | None -> [ "  (no session plan)" ]
+    | Some [] -> [ "  (plan is empty)" ]
+    | Some items ->
+        List.mapi items ~f:(fun index item ->
+            Printf.sprintf "  %d. %s" (index + 1) (Event.plan_item_line item))
+  in
+  let recent_events =
+    match ctx.events with
+    | [] -> [ "  (no events yet)" ]
+    | events ->
+        List.mapi events ~f:(fun index event ->
+            Printf.sprintf "  %3d  %s" index (View.event_summary event))
+        |> View.window ~rows:8
+  in
+  let diff = List.map (diff_summary_lines ctx) ~f:(( ^ ) "  ") in
+  [
+    "Session handoff";
+    "workspace: " ^ ctx.workspace_root;
+    "session: " ^ Stdlib.Filename.basename ctx.session_dir;
+    "session_dir: " ^ ctx.session_dir;
+    "resume: dune exec -- fp-agent --resume " ^ quoted_session;
+    "tui_resume: dune exec -- fp-agent --tui --resume " ^ quoted_session;
+    "provider: " ^ ctx.provider;
+    "model: " ^ ctx.model;
+    "api_base: " ^ ctx.api_base;
+    Printf.sprintf "events: %d" (List.length ctx.events);
+    Printf.sprintf "tokens: input %d output %d total %d" usage.input_tokens
+      usage.output_tokens
+      (View.token_usage_total usage);
+    View.plan_progress_line plan;
+    "last_user_task: " ^ last_task;
+    "";
+    "Current plan:";
+  ]
+  @ current_plan
+  @ ("" :: "Recent events:" :: recent_events)
+  @ [ ""; "Workspace diff:" ] @ diff
+
 let instruction_lines ctx =
   match Workspace.create ~root:ctx.workspace_root with
   | Error e -> [ "workspace error: " ^ e ]
@@ -447,13 +529,6 @@ let instruction_lines ctx =
             "Checked AGENTS.md, CLAUDE.md, and .fp-agent/instructions.md.";
           ]
       | Some instructions -> lines_of_text instructions)
-
-let last_user_message events =
-  List.find_map (List.rev events) ~f:(function
-    | Event.User_message { content }
-      when not (String.is_empty (String.strip content)) ->
-        Some content
-    | _ -> None)
 
 let run ctx command =
   let open Shell_command in
@@ -482,6 +557,7 @@ let run ctx command =
   | Command (Plan, _) -> Some (command_section command (plan_lines ctx.events))
   | Command (Usage, _) -> Some (command_section command (usage_lines ctx))
   | Command (Status, _) -> Some (command_section command (status_lines ctx))
+  | Command (Handoff, _) -> Some (command_section command (handoff_lines ctx))
   | Command (Instructions, _) ->
       Some (command_section command (instruction_lines ctx))
   | Empty | Task _ | Unknown _ | Command _ -> None

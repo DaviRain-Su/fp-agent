@@ -1042,6 +1042,7 @@ let test_repl_inspects_session_events () =
          /plan-update 2 done implement plan\n\
          /plan\n\
          /status\n\
+         /handoff\n\
          /plan-clear\n\
          /plan\n\
          /log\n\
@@ -1062,6 +1063,11 @@ let test_repl_inspects_session_events () =
     "2. [done] implement plan";
   assert_contains "plan add item" repl.stdout "4. [todo] verify status";
   assert_contains "status updated plan" repl.stdout "plan: 2/4 done";
+  assert_contains "handoff header" repl.stdout "Session handoff";
+  assert_contains "handoff resume" repl.stdout
+    "resume: dune exec -- fp-agent --resume";
+  assert_contains "handoff last task" repl.stdout "last_user_task: (none)";
+  assert_contains "handoff recent events" repl.stdout "Recent events:";
   assert_contains "plan clear" repl.stdout "plan updated: 0 item(s)";
   assert_contains "plan empty after clear" repl.stdout "(plan is empty)";
   assert_contains "inspect prints index" repl.stdout "event 0";

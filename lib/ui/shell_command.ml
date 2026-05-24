@@ -33,6 +33,7 @@ type id =
   | PlanClear
   | Usage
   | Status
+  | Handoff
   | Instructions
   | Compact
   | Fork
@@ -322,6 +323,14 @@ let specs =
       acceptance = Execute "/status";
     };
     {
+      id = Handoff;
+      command = "/handoff";
+      description = "show a session handoff summary";
+      aliases = [];
+      palette = true;
+      acceptance = Execute "/handoff";
+    };
+    {
       id = Instructions;
       command = "/instructions";
       description = "show workspace project instructions";
@@ -392,7 +401,7 @@ let group_of_id = function
   | Sessions | Tree | NewSession | Resume -> "Sessions"
   | Model | ModelNext | Models | Provider | ProviderAdd -> "Models"
   | Log | Inspect | Plan | PlanSet | PlanAdd | PlanUpdate | PlanClear | Usage
-  | Status | Instructions ->
+  | Status | Handoff | Instructions ->
       "Context"
   | Compact | Fork | Diff | Retry | Undo -> "Run Control"
   | Help | Exit -> "Shell"
