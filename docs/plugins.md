@@ -62,8 +62,12 @@ Use the REPL command:
 
 ```text
 /plugins
+/plugin echo_json
 /tools
 ```
+
+`/plugin <plugin-id|tool-name>` prints the manifest details for one plugin:
+directory, version, tool kind, command, timeout, and input schema.
 
 ## Install
 

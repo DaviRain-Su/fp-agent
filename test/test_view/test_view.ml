@@ -127,6 +127,49 @@ let test_event_inspector_lines () =
     "shows json preview" true
     (String.is_substring joined ~substring:"JSON")
 
+let test_plugin_inspector_lines () =
+  let plugin : Plugin.manifest =
+    {
+      id = "com.example.echo";
+      name = "Echo Tools";
+      version = "0.1.0";
+      dir = "/tmp/echo";
+      tools =
+        [
+          {
+            tool_name = "echo_json";
+            tool_kind = Tool.Read;
+            tool_description = "Echoes JSON";
+            tool_command = "sh echo.sh";
+            tool_input_schema =
+              Some
+                (`Assoc
+                   [
+                     ("type", `String "object");
+                     ( "properties",
+                       `Assoc
+                         [ ("message", `Assoc [ ("type", `String "string") ]) ]
+                     );
+                   ]);
+            tool_timeout_sec = 7;
+          };
+        ];
+    }
+  in
+  let joined = String.concat (View.plugin_inspector_lines plugin) ~sep:"\n" in
+  Alcotest.(check bool)
+    "shows plugin id" true
+    (String.is_substring joined ~substring:"id: com.example.echo");
+  Alcotest.(check bool)
+    "shows command" true
+    (String.is_substring joined ~substring:"command: sh echo.sh");
+  Alcotest.(check bool)
+    "shows timeout" true
+    (String.is_substring joined ~substring:"timeout: 7s");
+  Alcotest.(check bool)
+    "shows schema" true
+    (String.is_substring joined ~substring:"input_schema:")
+
 let kind_str = function
   | `Ok -> "ok"
   | `Err -> "err"
@@ -157,6 +200,8 @@ let () =
           Alcotest.test_case "event_summary" `Quick test_event_summary;
           Alcotest.test_case "event_inspector_lines" `Quick
             test_event_inspector_lines;
+          Alcotest.test_case "plugin_inspector_lines" `Quick
+            test_plugin_inspector_lines;
           Alcotest.test_case "classify" `Quick test_classify;
         ] );
     ]

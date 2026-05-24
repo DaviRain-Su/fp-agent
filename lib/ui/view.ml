@@ -180,6 +180,39 @@ let event_inspector_lines e =
   @ event_detail_lines e
   @ ("" :: "JSON" :: json_preview_lines (Event.to_yojson e))
 
+let tool_kind_label = function
+  | Tool.Read -> "read"
+  | Tool.Write -> "write"
+  | Tool.Exec -> "exec"
+
+let plugin_tool_lines (tool : Plugin.plugin_tool) =
+  [
+    "- " ^ tool.tool_name;
+    "  kind: " ^ tool_kind_label tool.tool_kind;
+    "  description: " ^ tool.tool_description;
+    "  command: " ^ tool.tool_command;
+    Printf.sprintf "  timeout: %ds" tool.tool_timeout_sec;
+  ]
+  @
+  match tool.tool_input_schema with
+  | None -> [ "  input_schema: <none>" ]
+  | Some schema ->
+      "  input_schema:"
+      :: List.map (json_preview_lines schema) ~f:(( ^ ) "    ")
+
+let plugin_inspector_lines (plugin : Plugin.manifest) =
+  [
+    "Plugin";
+    "id: " ^ plugin.id;
+    "name: " ^ plugin.name;
+    "version: " ^ plugin.version;
+    "dir: " ^ plugin.dir;
+    Printf.sprintf "tools: %d" (List.length plugin.tools);
+    "";
+    "Tools";
+  ]
+  @ List.concat_map plugin.tools ~f:plugin_tool_lines
+
 (* Classify a display line so the renderer can pick a color. Mirrors the icons
    produced by {!Event.to_display}. *)
 let classify s : [ `Ok | `Err | `Action | `Plain ] =

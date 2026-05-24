@@ -361,6 +361,7 @@ let print_help () =
     \  /help              show this help\n\
     \  /tools             list available tools\n\
     \  /plugins           list discovered plugins\n\
+    \  /plugin <id|tool>  show plugin manifest/tool details\n\
     \  /sessions          list sessions in this workspace\n\
     \  /tree              show the session fork tree\n\
     \  /resume <dir>      switch to a session (name under sessions/ or a path)\n\
@@ -396,6 +397,21 @@ let print_plugins () =
               Stdlib.Printf.printf "  - %-18s %-5s %s\n" tool.tool_name
                 (tool_kind_label tool.tool_kind)
                 tool.tool_description))
+
+let plugin_matches query (plugin : Plugin.manifest) =
+  String.equal plugin.id query
+  || String.equal plugin.name query
+  || List.exists plugin.tools ~f:(fun tool -> String.equal tool.tool_name query)
+
+let print_plugin_detail query =
+  let query = String.strip query in
+  if String.is_empty query then
+    Stdlib.print_endline "usage: /plugin <plugin-id|tool-name>"
+  else
+    match List.find (Plugin.manifests ()) ~f:(plugin_matches query) with
+    | None -> Stdlib.Printf.printf "no plugin or tool matching: %s\n" query
+    | Some plugin ->
+        List.iter (View.plugin_inspector_lines plugin) ~f:Stdlib.print_endline
 
 let print_sessions sessions_root current =
   match Stdlib.Sys.readdir sessions_root with
@@ -695,6 +711,12 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
           loop ())
         else if String.equal line "/plugins" then (
           print_plugins ();
+          loop ())
+        else if String.equal line "/plugin" then (
+          print_plugin_detail "";
+          loop ())
+        else if String.is_prefix line ~prefix:"/plugin " then (
+          print_plugin_detail (String.drop_prefix line 8);
           loop ())
         else if String.equal line "/sessions" then (
           print_sessions sessions_root !session;

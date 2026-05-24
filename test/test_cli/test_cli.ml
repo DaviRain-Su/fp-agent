@@ -175,9 +175,25 @@ let test_repl_lists_dynamic_plugin_tools () =
   let bin = fp_agent_bin () in
   let env = isolated_env root @ [ ("FP_AGENT_PLUGIN_PATH", plugin_dir) ] in
   assert_success "new plugin" (run ~env [ bin; "--new-plugin"; plugin_dir ]);
-  let repl = run ~env ~stdin:"/plugins\n/tools\n/exit\n" [ bin ] in
+  let repl =
+    run ~env
+      ~stdin:
+        "/plugins\n\
+         /plugin local.my-plugin\n\
+         /plugin hello_world\n\
+         /plugin missing\n\
+         /tools\n\
+         /exit\n"
+      [ bin ]
+  in
   assert_success "repl plugin commands" repl;
   assert_contains "plugins lists scaffold" repl.stdout "local.my-plugin";
+  assert_contains "plugin detail id" repl.stdout "id: local.my-plugin";
+  assert_contains "plugin detail tool" repl.stdout "- hello_world";
+  assert_contains "plugin detail command" repl.stdout "command: sh hello.sh";
+  assert_contains "plugin detail schema" repl.stdout "input_schema:";
+  assert_contains "plugin missing" repl.stdout
+    "no plugin or tool matching: missing";
   assert_contains "tools lists plugin tool" repl.stdout "hello_world";
   assert_contains "tools marks plugin" repl.stdout "plugin local.my-plugin"
 
