@@ -668,7 +668,20 @@ let plugin_new_lines args =
             "created plugin scaffold: " ^ dst;
             "next: /plugin-check " ^ dst;
             "next: /plugin-smoke " ^ dst;
+            "next: /plugin-install --replace " ^ dst;
           ])
+
+let plugin_next_lines (manifest : Plugin.manifest) =
+  let tools =
+    List.map manifest.tools ~f:(fun (tool : Plugin.plugin_tool) ->
+        tool.tool_name)
+  in
+  [
+    "plugin id: " ^ manifest.id;
+    "tools: " ^ String.concat tools ~sep:", ";
+    "next: /plugin " ^ manifest.id;
+  ]
+  @ List.map tools ~f:(fun tool -> "next: /tool " ^ tool)
 
 let parse_plugin_dir_arg ~usage raw =
   let arg = String.strip raw in
@@ -710,7 +723,12 @@ let plugin_install_lines args =
       | Error e -> [ "plugin install error: " ^ e ]
       | Ok dst ->
           let counts = Tool_loader.refresh_counts () in
-          [ "installed plugin: " ^ dst; tools_reloaded_line counts ])
+          let next =
+            match Plugin.check dst with
+            | Ok manifest -> plugin_next_lines manifest
+            | Error e -> [ "plugin detail error after install: " ^ e ]
+          in
+          [ "installed plugin: " ^ dst; tools_reloaded_line counts ] @ next)
 
 let plugin_remove_lines arg =
   let id = String.strip arg in
@@ -720,7 +738,9 @@ let plugin_remove_lines arg =
     | Error e -> [ "plugin remove error: " ^ e ]
     | Ok dst ->
         let counts = Tool_loader.refresh_counts () in
-        [ "removed plugin: " ^ dst; tools_reloaded_line counts ]
+        [
+          "removed plugin: " ^ dst; tools_reloaded_line counts; "next: /plugins";
+        ]
 
 let plugin_smoke_lines ~workspace args =
   match
