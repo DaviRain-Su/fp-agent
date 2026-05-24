@@ -165,8 +165,8 @@ let models_lines ctx =
       in
       provider_lines
       @ [
-          "Use /provider <name> [model] to switch provider, or /model <id> \
-           within the current provider.";
+          "Use /model <id> to switch by model id, /model-next to cycle the \
+           current provider, or /provider <name> [model] to switch provider.";
         ]
 
 let sessions_lines ctx =

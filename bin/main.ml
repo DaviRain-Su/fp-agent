@@ -103,6 +103,24 @@ let next_model_id ~current models =
           let next_index = (index + 1) % List.length models in
           `Next_model (Option.value_exn (List.nth models next_index)))
 
+let model_provider_matches model =
+  Config.available_providers ()
+  |> List.filter ~f:(fun (entry : Config.provider_catalog_entry) ->
+      List.mem entry.provider_models model ~equal:String.equal)
+
+let resolve_model_provider ~current_provider model =
+  let matches = model_provider_matches model in
+  if
+    List.exists matches ~f:(fun entry ->
+        String.equal entry.provider_name current_provider)
+  then `Current_provider
+  else
+    match matches with
+    | [] -> `Current_provider
+    | [ entry ] -> `Provider entry.provider_name
+    | entries ->
+        `Ambiguous (List.map entries ~f:(fun entry -> entry.provider_name))
+
 (* Plain reporter: step lines + an animated spinner line on stderr. The spinner
    line is rewritten in place with CR + clear-to-EOL. *)
 let make_plain_reporter () =
@@ -917,7 +935,45 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
           "api_base: " ^ !config_ref.api_base;
         ]
   in
+  let apply_config next =
+    let workspace_root = !config_ref.workspace_root in
+    let max_steps = !config_ref.max_steps in
+    config_ref := { next with workspace_root; max_steps };
+    model_client := Model_client.create ~config:!config_ref;
+    view.set_runtime ~provider:!config_ref.provider ~model:!config_ref.model
+      ~api_base:!config_ref.api_base
+  in
   let switch_model ?command model =
+    match
+      resolve_model_provider ~current_provider:!config_ref.provider model
+    with
+    | `Current_provider ->
+        config_ref := { !config_ref with model };
+        model_client := Model_client.create ~config:!config_ref;
+        view.set_runtime ~provider:!config_ref.provider ~model:!config_ref.model
+          ~api_base:!config_ref.api_base;
+        view.append_lines
+          (current_model_lines
+             (Option.value command ~default:("/model " ^ model)))
+    | `Provider provider -> (
+        match Config.load ?provider:(Some provider) ?model:(Some model) () with
+        | Error e ->
+            view.append_lines [ "[tui] /model " ^ model; "model error: " ^ e ]
+        | Ok next ->
+            apply_config next;
+            view.append_lines
+              (current_model_lines
+                 (Option.value command ~default:("/model " ^ model))))
+    | `Ambiguous providers ->
+        view.append_lines
+          [
+            "[tui] /model " ^ model;
+            "model id appears in multiple providers: "
+            ^ String.concat providers ~sep:", ";
+            "use /provider <name> " ^ model;
+          ]
+  in
+  let switch_model_direct ?command model =
     config_ref := { !config_ref with model };
     model_client := Model_client.create ~config:!config_ref;
     view.set_runtime ~provider:!config_ref.provider ~model:!config_ref.model
@@ -942,7 +998,7 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
             "model: " ^ !config_ref.model;
             "api_base: " ^ !config_ref.api_base;
           ]
-    | `Next_model model -> switch_model ~command:"/model-next" model
+    | `Next_model model -> switch_model_direct ~command:"/model-next" model
   in
   let switch_provider args =
     let parts =
@@ -964,15 +1020,7 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
         | Error e ->
             view.append_lines [ "[tui] /provider"; "provider error: " ^ e ]
         | Ok next ->
-            config_ref :=
-              {
-                next with
-                workspace_root = !config_ref.workspace_root;
-                max_steps = !config_ref.max_steps;
-              };
-            model_client := Model_client.create ~config:!config_ref;
-            view.set_runtime ~provider:!config_ref.provider
-              ~model:!config_ref.model ~api_base:!config_ref.api_base;
+            apply_config next;
             view.append_lines (current_model_lines ("/provider " ^ args)))
   in
   let switch_session ?message dir =
@@ -1259,10 +1307,35 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
     Stdlib.Printf.printf "provider: %s\nmodel: %s\napi_base: %s\n%!"
       !config_ref.provider !config_ref.model !config_ref.api_base
   in
-  let switch_model model =
+  let apply_config next =
+    let workspace_root = !config_ref.workspace_root in
+    let max_steps = !config_ref.max_steps in
+    config_ref := { next with workspace_root; max_steps };
+    model_client := Model_client.create ~config:!config_ref
+  in
+  let switch_model_direct model =
     config_ref := { !config_ref with model };
     model_client := Model_client.create ~config:!config_ref;
     show_current_model ()
+  in
+  let switch_model model =
+    match
+      resolve_model_provider ~current_provider:!config_ref.provider model
+    with
+    | `Current_provider -> switch_model_direct model
+    | `Provider provider -> (
+        match Config.load ?provider:(Some provider) ?model:(Some model) () with
+        | Error e -> Stdlib.print_endline ("model error: " ^ e)
+        | Ok next ->
+            apply_config next;
+            show_current_model ())
+    | `Ambiguous providers ->
+        Stdlib.Printf.printf
+          "model id appears in multiple providers: %s\n\
+           use /provider <name> %s\n\
+           %!"
+          (String.concat providers ~sep:", ")
+          model
   in
   let cycle_model () =
     match next_model_id ~current:!config_ref.model !config_ref.models with
@@ -1272,7 +1345,7 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
     | `Only_model model ->
         Stdlib.Printf.printf "only one configured model: %s\n%!" model;
         show_current_model ()
-    | `Next_model model -> switch_model model
+    | `Next_model model -> switch_model_direct model
   in
   let print_models () =
     match Config.available_providers () with
@@ -1300,8 +1373,8 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
                     in
                     Stdlib.Printf.printf "    %s %s\n" model_mark model));
         Stdlib.print_endline
-          "Use /provider <name> [model] to switch provider, or /model <id> \
-           within the current provider."
+          "Use /model <id> to switch by model id, /model-next to cycle the \
+           current provider, or /provider <name> [model] to switch provider."
   in
   let switch_provider args =
     let parts =
@@ -1320,13 +1393,7 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
         match Config.load ?provider:(Some provider) ?api_base ?model () with
         | Error e -> Stdlib.print_endline ("provider error: " ^ e)
         | Ok next ->
-            config_ref :=
-              {
-                next with
-                workspace_root = !config_ref.workspace_root;
-                max_steps = !config_ref.max_steps;
-              };
-            model_client := Model_client.create ~config:!config_ref;
+            apply_config next;
             show_current_model ())
   in
   let oneline s =

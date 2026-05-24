@@ -656,7 +656,7 @@ let test_repl_lists_and_switches_custom_provider_models () =
     run ~env
       ~stdin:
         "/models\n\
-         /provider local-llm qwen36-rtx\n\
+         /model qwen36-rtx\n\
          /model-next\n\
          /model\n\
          /model-cycle\n\
@@ -670,8 +670,9 @@ let test_repl_lists_and_switches_custom_provider_models () =
   assert_contains "models include custom model" repl.stdout "qwen36-rtx";
   assert_contains "models include second custom model" repl.stdout
     "qwen36-rtx-fast";
-  assert_contains "provider switched" repl.stdout "provider: local-llm";
-  assert_contains "model switched" repl.stdout "model: qwen36-rtx";
+  assert_contains "model command switched provider" repl.stdout
+    "provider: local-llm";
+  assert_contains "model command selected model" repl.stdout "model: qwen36-rtx";
   assert_contains "model-next switched" repl.stdout "model: qwen36-rtx-fast"
 
 let test_repl_shows_project_instructions () =

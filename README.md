@@ -90,9 +90,10 @@ earlier turns. Meta-commands start with `/`; anything else is a task.
 Use `--tui` without a task to start the fullscreen interactive shell. It uses
 the same session log and command palette as one-shot TUI runs; Ctrl+Enter
 submits the current draft as either a slash command or an agent task. `/model
-<id>`, `/model-next`, and `/provider <name> [model] [api-base]` update the
-active runtime for later turns inside the TUI; `/resume <dir>` and `/fork
-[index]` switch the active event-sourced session.
+<id>` can switch to another configured provider when the model id uniquely
+matches that provider; `/model-next` cycles the current provider's models; and
+`/provider <name> [model] [api-base]` updates the active runtime directly.
+`/resume <dir>` and `/fork [index]` switch the active event-sourced session.
 
 Code review requests get a review-specific system instruction: the agent starts
 from `git status --short` and `git diff --stat`, inspects changed files and
@@ -335,8 +336,9 @@ top-level provider map or `{ "providers": { ... } }`. A pi-style subset works:
 The implementation uses `baseUrl`, `api`, `apiKey`, `models[].id` or
 `models[].name`, `models[].maxTokens`, `compat.supportsUsageInStreaming`, and
 `compat.maxTokensField`. In the REPL, `/models` lists built-in providers plus
-custom providers from these files, and `/provider <name> <model>` switches to
-one of them.
+custom providers from these files. `/model <id>` switches to the uniquely
+matching configured provider/model, while `/provider <name> <model>` keeps an
+explicit provider override available.
 
 ### Environment variables
 
