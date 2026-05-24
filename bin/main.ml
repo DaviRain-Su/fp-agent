@@ -36,7 +36,7 @@ let prompt_approval tc reason =
   Lwt.return (String.equal answer "y" || String.equal answer "yes")
 
 let run_agent task provider_opt api_base_opt model_opt workspace_opt
-    max_steps_opt confirm =
+    max_steps_opt confirm resume_opt =
   match
     Config.load ?provider:provider_opt ?api_base:api_base_opt ?model:model_opt
       ()
@@ -58,9 +58,22 @@ let run_agent task provider_opt api_base_opt model_opt workspace_opt
           1
       | Ok workspace -> (
           let root = Workspace.root workspace in
-          let session_dir = Session.create ~base_dir:root in
-          Stdlib.Printf.eprintf "model: %s @ %s\nsession: %s\n%!" config.model
-            config.api_base session_dir;
+          let session_dir, initial_history =
+            match resume_opt with
+            | Some dir -> (
+                match Transcript.of_session ~session_dir:dir with
+                | Ok history -> (dir, history)
+                | Error e ->
+                    Stdlib.prerr_endline ("resume warning: " ^ e);
+                    (dir, []))
+            | None -> (Session.create ~base_dir:root, [])
+          in
+          Stdlib.Printf.eprintf "model: %s @ %s\nsession: %s%s\n%!" config.model
+            config.api_base session_dir
+            (if List.is_empty initial_history then ""
+             else
+               Printf.sprintf " (resumed, %d prior messages)"
+                 (List.length initial_history));
           let event_log = Event_log.create ~session_dir in
           let model_client = Model_client.create ~config in
           let on_event e =
@@ -76,7 +89,8 @@ let run_agent task provider_opt api_base_opt model_opt workspace_opt
           let outcome =
             Lwt_main.run
               (Agent_loop.run ~on_event ~policy ~on_approval:prompt_approval
-                 ~config ~model_client ~event_log ~workspace ~task ())
+                 ~initial_history ~config ~model_client ~event_log ~workspace
+                 ~task ())
           in
           Event_log.close event_log;
           print_summary outcome;
@@ -135,11 +149,20 @@ let () =
             "Ask for confirmation on stdin before each shell command or file \
              modification.")
   in
+  let resume =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "resume" ] ~docv:"SESSION_DIR"
+          ~doc:
+            "Resume from a previous session directory: replay its event log as \
+             context and continue.")
+  in
   let doc = "A type-safe local CLI code agent harness." in
   let term =
     Term.(
       const run_agent $ task $ provider $ api_base $ model $ workspace
-      $ max_steps $ confirm)
+      $ max_steps $ confirm $ resume)
   in
   let info = Cmd.info "fp-agent" ~version:"0.1.0" ~doc in
   Stdlib.exit (Cmd.eval' (Cmd.v info term))

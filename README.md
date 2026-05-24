@@ -48,6 +48,8 @@ Options:
 - `--api-base URL` — override the provider's base URL
 - `-w`, `--workspace DIR` — workspace root (default: `WORKSPACE_ROOT` or cwd)
 - `--max-steps N` — max agent steps (default: `MAX_STEPS` or 30)
+- `--confirm` — ask for approval before each shell command or file write
+- `--resume SESSION_DIR` — replay a previous session's event log as context and continue
 
 On completion the agent prints a status summary and, if the workspace is a git
 repo, `git diff --stat`. Every run also writes a full trace to

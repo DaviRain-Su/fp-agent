@@ -11,10 +11,7 @@ let status_to_string = function
   | Failed -> "failed"
   | Max_steps_reached -> "max_steps_reached"
 
-let observation_of_result (result : Tool_result.t) =
-  match result with
-  | Tool_result.Success { output } -> "TOOL_RESULT ok=true\n" ^ output
-  | Tool_result.Error { message } -> "TOOL_RESULT ok=false\n" ^ message
+let observation_of_result = Tool_result.to_observation
 
 (* Keep the system prompt plus the most recent messages that fit the budget, so
    long sessions do not blow the context window. *)
@@ -28,8 +25,8 @@ let truncate_history ~system messages =
   system :: take [] max_history_chars (List.rev messages)
 
 let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
-    ?(on_approval = fun _ _ -> Lwt.return false) ~(config : Config.t)
-    ~model_client ~event_log ~workspace ~task () =
+    ?(on_approval = fun _ _ -> Lwt.return false) ?(initial_history = [])
+    ~(config : Config.t) ~model_client ~event_log ~workspace ~task () =
   let log e =
     Event_log.append event_log e;
     on_event e
@@ -43,7 +40,7 @@ let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
     | Error _ -> state := next
   in
   log (Event.User_message { content = task });
-  let history = ref [ Message.user task ] in
+  let history = ref (initial_history @ [ Message.user task ]) in
   let add_msg m = history := !history @ [ m ] in
   let system = Message.system Model_client.system_prompt in
   let messages () = truncate_history ~system !history in
