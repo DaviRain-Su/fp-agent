@@ -250,6 +250,43 @@ let test_install_plugin_can_replace_existing () =
                         "replaced script ran" true
                         (String.is_substring output ~substring:"version=v2")))))
 
+let test_discover_reports_invalid_manifests () =
+  with_temp_dir "fp_agent_plugin_discover" (fun root ->
+      let plugin_root = Stdlib.Filename.concat root "plugins" in
+      let valid = Stdlib.Filename.concat plugin_root "valid" in
+      let invalid = Stdlib.Filename.concat plugin_root "invalid" in
+      mkdir_p valid;
+      mkdir_p invalid;
+      Unix.putenv "FP_AGENT_PLUGIN_PATH" plugin_root;
+      Unix.putenv "FP_AGENT_PLUGIN_HOME" (Stdlib.Filename.concat root "home");
+      write_plugin valid ~id:"com.example.discover"
+        ~tool_name:"plugin_discover_echo" ~kind:"read";
+      write
+        (Stdlib.Filename.concat invalid Plugin.manifest_file)
+        {|{
+  "id": "com.example.invalid",
+  "tools": []
+}
+|};
+      let discovery = Plugin.discover () in
+      Alcotest.(check int)
+        "valid manifest count" 1
+        (List.length discovery.manifests);
+      Alcotest.(check string)
+        "valid manifest id" "com.example.discover"
+        (List.hd_exn discovery.manifests).id;
+      Alcotest.(check int)
+        "invalid manifest count" 1
+        (List.length discovery.errors);
+      let error = List.hd_exn discovery.errors in
+      Alcotest.(check string) "invalid manifest dir" invalid error.dir;
+      Alcotest.(check bool)
+        "invalid manifest message" true
+        (String.is_substring error.message ~substring:"at least one tool");
+      Alcotest.(check int)
+        "legacy manifest helper ignores invalid" 1
+        (List.length (Plugin.manifests ())))
+
 let test_run_tool_for_plugin_development () =
   with_temp_dir "fp_agent_plugin_run_tool" (fun root ->
       let plugin_dir = Stdlib.Filename.concat root "plugin" in
@@ -502,6 +539,8 @@ let () =
             test_install_plugin_copies_to_home;
           Alcotest.test_case "install_replace_plugin" `Quick
             test_install_plugin_can_replace_existing;
+          Alcotest.test_case "discover_invalid_plugin" `Quick
+            test_discover_reports_invalid_manifests;
           Alcotest.test_case "run_tool" `Quick
             test_run_tool_for_plugin_development;
           Alcotest.test_case "run_tool_schema_validation" `Quick

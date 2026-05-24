@@ -169,10 +169,18 @@ let test_plugin_lifecycle_cli () =
   assert_failure "replace without install" replace_without_install;
   assert_contains "replace without install stderr"
     replace_without_install.stderr "--replace-plugin requires --install-plugin";
+  let invalid_installed = Stdlib.Filename.concat home "invalid-plugin" in
+  mkdir_p invalid_installed;
+  write_file
+    (Stdlib.Filename.concat invalid_installed "fp-agent-plugin.json")
+    {|{"id":"com.example.invalid","tools":[]}|};
   let listed = run ~env [ bin; "--list-plugins" ] in
   assert_success "list plugins after install" listed;
   assert_contains "list plugin id" listed.stdout "local.my-plugin";
   assert_contains "list plugin tool" listed.stdout "hello_world";
+  assert_contains "list invalid plugin section" listed.stdout
+    "Invalid installed plugins:";
+  assert_contains "list invalid plugin error" listed.stdout "at least one tool";
   let removed = run ~env [ bin; "--remove-plugin"; "local.my-plugin" ] in
   assert_success "remove plugin" removed;
   assert_contains "remove output" removed.stdout "removed plugin:";
@@ -255,9 +263,20 @@ let test_plugin_tool_debug_cli () =
 let test_repl_lists_dynamic_plugin_tools () =
   let root = tmp_dir "fp-agent-cli-repl-plugin-" in
   let plugin_dir = Stdlib.Filename.concat root "my-plugin" in
+  let bad_plugin_dir = Stdlib.Filename.concat root "bad-plugin" in
   let bin = fp_agent_bin () in
-  let env = isolated_env root @ [ ("FP_AGENT_PLUGIN_PATH", plugin_dir) ] in
+  let env =
+    isolated_env root
+    @ [
+        ( "FP_AGENT_PLUGIN_PATH",
+          String.concat ~sep:":" [ plugin_dir; bad_plugin_dir ] );
+      ]
+  in
   assert_success "new plugin" (run ~env [ bin; "--new-plugin"; plugin_dir ]);
+  mkdir_p bad_plugin_dir;
+  write_file
+    (Stdlib.Filename.concat bad_plugin_dir "fp-agent-plugin.json")
+    {|{"id":"com.example.bad","tools":[]}|};
   let repl =
     run ~env
       ~stdin:
@@ -274,6 +293,9 @@ let test_repl_lists_dynamic_plugin_tools () =
   in
   assert_success "repl plugin commands" repl;
   assert_contains "plugins lists scaffold" repl.stdout "local.my-plugin";
+  assert_contains "plugins report invalid section" repl.stdout
+    "Invalid plugins:";
+  assert_contains "plugins report invalid error" repl.stdout "at least one tool";
   assert_contains "plugin detail id" repl.stdout "id: local.my-plugin";
   assert_contains "plugin detail tool" repl.stdout "- hello_world";
   assert_contains "plugin detail command" repl.stdout "command: sh hello.sh";

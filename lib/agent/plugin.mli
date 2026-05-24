@@ -16,11 +16,18 @@ type manifest = {
   tools : plugin_tool list;
 }
 
+type load_error = { dir : string; message : string }
+type discovery = { manifests : manifest list; errors : load_error list }
+
 val manifest_file : string
 val supported_sdk_version : int
 
 val load_manifest : string -> (manifest, string) result
 (** Load and validate [fp-agent-plugin.json] from a plugin directory. *)
+
+val discover : unit -> discovery
+(** Discover plugin manifests and return both valid manifests and invalid
+    manifest diagnostics. *)
 
 val manifests : unit -> manifest list
 (** Discover plugin manifests from [FP_AGENT_PLUGIN_PATH], [.fp-agent/plugins],
@@ -38,6 +45,9 @@ val install : ?replace:bool -> string -> (string, string) result
 
 val installed_manifests : unit -> manifest list
 (** Load valid manifests installed directly under the plugin home. *)
+
+val installed_discovery : unit -> discovery
+(** Load installed plugin manifests and diagnostics from the plugin home. *)
 
 val remove : string -> (string, string) result
 (** Remove an installed plugin by id from the plugin home and return the removed

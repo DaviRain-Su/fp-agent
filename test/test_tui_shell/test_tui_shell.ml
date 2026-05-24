@@ -355,6 +355,7 @@ let test_tui_command_sessions_and_diff () =
 let test_tui_command_plugins_and_tools () =
   with_temp_dir "fp_agent_tui_command_plugins" (fun root ->
       let plugin_dir = Stdlib.Filename.concat root "plugin" in
+      let bad_plugin_dir = Stdlib.Filename.concat root "bad-plugin" in
       write
         (Stdlib.Filename.concat plugin_dir Plugin.manifest_file)
         {|{
@@ -377,13 +378,23 @@ let test_tui_command_plugins_and_tools () =
 }
 |};
       write (Stdlib.Filename.concat plugin_dir "echo.sh") "cat\n";
-      Unix.putenv "FP_AGENT_PLUGIN_PATH" plugin_dir;
+      write
+        (Stdlib.Filename.concat bad_plugin_dir Plugin.manifest_file)
+        {|{"id":"com.example.bad","tools":[]}|};
+      Unix.putenv "FP_AGENT_PLUGIN_PATH"
+        (String.concat ~sep:":" [ plugin_dir; bad_plugin_dir ]);
       Unix.putenv "FP_AGENT_PLUGIN_HOME" (Stdlib.Filename.concat root "home");
       let context = tui_context root in
       let plugins = output "/plugins" context in
       Alcotest.(check bool)
         "plugins include manifest" true
         (String.is_substring plugins ~substring:"com.example.tui");
+      Alcotest.(check bool)
+        "plugins include invalid diagnostics" true
+        (String.is_substring plugins ~substring:"Invalid plugins:");
+      Alcotest.(check bool)
+        "plugins include invalid reason" true
+        (String.is_substring plugins ~substring:"at least one tool");
       let tools = output "/tools" context in
       Alcotest.(check bool)
         "tools include plugin tool" true

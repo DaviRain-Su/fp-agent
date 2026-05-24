@@ -848,8 +848,17 @@ let print_tool_detail query =
     | Some tool ->
         List.iter (View.tool_inspector_lines tool) ~f:Stdlib.print_endline
 
+let print_plugin_errors label errors =
+  match errors with
+  | [] -> ()
+  | errors ->
+      Stdlib.print_endline label;
+      List.iter errors ~f:(fun (error : Plugin.load_error) ->
+          Stdlib.Printf.printf "  - %s: %s\n" error.dir error.message)
+
 let print_plugins () =
-  match Plugin.manifests () with
+  let discovery = Plugin.discover () in
+  (match discovery.manifests with
   | [] -> Stdlib.print_endline "(no plugins discovered)"
   | manifests ->
       List.iter manifests ~f:(fun (plugin : Plugin.manifest) ->
@@ -858,7 +867,8 @@ let print_plugins () =
           List.iter plugin.tools ~f:(fun tool ->
               Stdlib.Printf.printf "  - %-18s %-5s %s\n" tool.tool_name
                 (tool_kind_label tool.tool_kind)
-                tool.tool_description))
+                tool.tool_description)));
+  print_plugin_errors "Invalid plugins:" discovery.errors
 
 let plugin_matches query (plugin : Plugin.manifest) =
   String.equal plugin.id query
@@ -1230,11 +1240,13 @@ let print_plugin_summary (plugin : Plugin.manifest) =
         tool.tool_description)
 
 let print_installed_plugins () =
-  match Plugin.installed_manifests () with
+  let discovery = Plugin.installed_discovery () in
+  (match discovery.manifests with
   | [] -> Stdlib.print_endline "(no installed plugins)"
   | plugins ->
       Stdlib.print_endline "installed plugins:";
-      List.iter plugins ~f:print_plugin_summary
+      List.iter plugins ~f:print_plugin_summary);
+  print_plugin_errors "Invalid installed plugins:" discovery.errors
 
 let parse_json_arg json =
   match Yojson.Safe.from_string json with

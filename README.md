@@ -121,7 +121,9 @@ dune exec -- fp-agent --remove-plugin local.my-plugin
 
 Plugins are discovered from `FP_AGENT_PLUGIN_PATH`, `.fp-agent/plugins`, and
 `FP_AGENT_PLUGIN_HOME` / `~/.local/share/fp-agent/plugins`. See
-`docs/plugins.md` for the SDK contract.
+`docs/plugins.md` for the SDK contract. `/plugins` and `--list-plugins` also
+surface invalid manifest diagnostics instead of silently hiding broken plugin
+directories.
 
 ### Event-sourced sessions and forking
 

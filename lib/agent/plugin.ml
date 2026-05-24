@@ -18,6 +18,9 @@ type manifest = {
   tools : plugin_tool list;
 }
 
+type load_error = { dir : string; message : string }
+type discovery = { manifests : manifest list; errors : load_error list }
+
 let manifest_file = "fp-agent-plugin.json"
 let supported_sdk_version = 1
 let default_timeout_sec = 60
@@ -369,23 +372,28 @@ let dirs_in_root root =
             then Some dir
             else None)
 
-let manifests () =
-  default_search_roots ()
-  |> List.concat_map ~f:dirs_in_root
-  |> List.filter_map ~f:(fun dir ->
+let discover_dirs dirs =
+  List.fold dirs ~init:{ manifests = []; errors = [] } ~f:(fun acc dir ->
       match load_manifest dir with
-      | Ok manifest -> Some manifest
-      | Error _ -> None)
+      | Ok manifest -> { acc with manifests = manifest :: acc.manifests }
+      | Error message -> { acc with errors = { dir; message } :: acc.errors })
+  |> fun discovery ->
+  {
+    manifests = List.rev discovery.manifests;
+    errors = List.rev discovery.errors;
+  }
 
-let installed_manifests () =
+let discover () =
+  default_search_roots () |> List.concat_map ~f:dirs_in_root |> discover_dirs
+
+let manifests () = (discover ()).manifests
+
+let installed_discovery () =
   match install_home () with
-  | None -> []
-  | Some home ->
-      dirs_in_root home
-      |> List.filter_map ~f:(fun dir ->
-          match load_manifest dir with
-          | Ok manifest -> Some manifest
-          | Error _ -> None)
+  | None -> { manifests = []; errors = [] }
+  | Some home -> dirs_in_root home |> discover_dirs
+
+let installed_manifests () = (installed_discovery ()).manifests
 
 let output_of_result result =
   let stdout = String.strip result.Shell.stdout in
@@ -394,7 +402,7 @@ let output_of_result result =
   else if not (String.is_empty stderr) then truncate stderr
   else "(plugin produced no output)"
 
-let run_plugin_tool manifest tool workspace args =
+let run_plugin_tool (manifest : manifest) tool workspace args =
   match validate_args_schema tool.tool_input_schema args with
   | Error e -> Tool_result.Error { message = "schema validation failed: " ^ e }
   | Ok () ->
@@ -468,7 +476,7 @@ let run_tool ~dir ~tool_name ~workspace ~args =
           | Permission.Deny reason ->
               Ok (Tool_result.Error { message = "policy denied: " ^ reason })))
 
-let register_manifest manifest =
+let register_manifest (manifest : manifest) =
   List.iter manifest.tools ~f:(fun plugin_tool ->
       if Option.is_none (Tool.find plugin_tool.tool_name) then
         Tool.register

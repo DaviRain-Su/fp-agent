@@ -59,19 +59,32 @@ let tool_detail_lines query =
     | Some tool -> View.tool_inspector_lines tool
 
 let plugins_lines () =
-  match Plugin.manifests () with
-  | [] -> [ "(no plugins discovered)" ]
-  | manifests ->
-      List.concat_map manifests ~f:(fun (plugin : Plugin.manifest) ->
-          Printf.sprintf "%s %s (%s, sdk %d)" plugin.id plugin.name
-            plugin.version plugin.sdk_version
-          :: ("  " ^ plugin.dir)
-          :: List.map plugin.tools ~f:(fun tool ->
-              Printf.sprintf "  - %-18s %-5s %s" tool.tool_name
-                (tool_kind_label tool.tool_kind)
-                tool.tool_description)
-          @ [ "" ])
-      |> List.drop_last |> Option.value ~default:[]
+  let discovery = Plugin.discover () in
+  let manifest_lines =
+    match discovery.manifests with
+    | [] -> [ "(no plugins discovered)" ]
+    | manifests ->
+        List.concat_map manifests ~f:(fun (plugin : Plugin.manifest) ->
+            Printf.sprintf "%s %s (%s, sdk %d)" plugin.id plugin.name
+              plugin.version plugin.sdk_version
+            :: ("  " ^ plugin.dir)
+            :: List.map plugin.tools ~f:(fun tool ->
+                Printf.sprintf "  - %-18s %-5s %s" tool.tool_name
+                  (tool_kind_label tool.tool_kind)
+                  tool.tool_description)
+            @ [ "" ])
+        |> List.drop_last |> Option.value ~default:[]
+  in
+  match discovery.errors with
+  | [] -> manifest_lines
+  | errors ->
+      let error_lines =
+        "Invalid plugins:"
+        :: List.map errors ~f:(fun (error : Plugin.load_error) ->
+            Printf.sprintf "  - %s: %s" error.dir error.message)
+      in
+      if List.is_empty manifest_lines then error_lines
+      else manifest_lines @ [ "" ] @ error_lines
 
 let plugin_matches query (plugin : Plugin.manifest) =
   String.equal plugin.id query

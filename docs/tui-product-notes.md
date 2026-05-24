@@ -87,6 +87,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   development. Replacement validates and stages the new plugin before removing
   the old installed copy, so reinstalling a local plugin is one command without
   making failed updates destructive.
+- Plugin discovery now keeps diagnostics for invalid manifests. `/plugins` and
+  `--list-plugins` show broken plugin directories and validation errors while
+  still registering every valid plugin found on the same search path.
 - The command palette controller now distinguishes close from accept: Enter
   returns the highlighted command entry, giving the future fullscreen shell a
   tested command-dispatch point while preserving the current overlay behavior.
