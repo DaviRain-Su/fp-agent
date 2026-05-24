@@ -66,73 +66,43 @@ let phase_label = function
   | `Thinking -> Some "thinking…"
   | `Running tool -> Some (Printf.sprintf "running %s…" tool)
 
-let summarize_event (e : Event.t) =
-  match Event.to_display e with
-  | Some line -> line
-  | None -> (
-      match e with
-      | User_message { content } ->
-          "user: "
-          ^ View.truncate ~cols:80
-              (String.substr_replace_all content ~pattern:"\n" ~with_:" ")
-      | Model_delta _ -> "model: streaming"
-      | Assistant_message { content; _ } -> (
-          match Llm.tool_uses content with
-          | [] -> "assistant: final answer"
-          | calls ->
-              Printf.sprintf "assistant: %d tool call%s" (List.length calls)
-                (if List.length calls = 1 then "" else "s"))
-      | Model_response { action = Tool_call tc } ->
-          "model: " ^ Event.describe_tool tc
-      | Model_response { action = Tool_calls calls } ->
-          Printf.sprintf "model: %d tool calls" (List.length calls)
-      | Model_response { action = Final_answer _ } -> "model: final answer"
-      | Policy_decision { permission; _ } ->
-          "policy: " ^ Permission.to_string permission
-      | State_transition { to_state; _ } ->
-          "state: " ^ Agent_state.to_string to_state
-      | Tool_call _ | Tool_result_message _ | Tool_result _
-      | Context_compacted _ | Graph_event _ ->
-          "event")
-
 (* Plain reporter: step lines + an animated spinner line on stderr. The spinner
    line is rewritten in place with CR + clear-to-EOL. *)
 let make_plain_reporter () =
   let phase = make_phase () in
   let i = ref 0 in
   let streaming = ref false in
-  let current_delta = ref "" in
   let clear () = Stdlib.Printf.eprintf "\r\027[K" in
   let finish_stream_if_needed () =
     if !streaming then (
       Stdlib.Printf.eprintf "\n%!";
-      streaming := false;
-      current_delta := "")
+      streaming := false)
   in
   let on_event e =
     update_phase phase e;
     match e with
     | Model_delta { content } ->
-        current_delta := !current_delta ^ content;
-        clear ();
+        if not !streaming then clear ();
         streaming := true;
-        Stdlib.Printf.eprintf "%s%!" !current_delta
+        Stdlib.Printf.eprintf "%s%!" content
     | _ -> (
         match Event.to_display e with
         | Some line ->
-            clear ();
             finish_stream_if_needed ();
+            clear ();
             Stdlib.Printf.eprintf "%s\n%!" line
         | None -> ())
   in
   let tick () =
-    match phase_label !(fst phase) with
-    | None -> ()
-    | Some label ->
-        let frame = spinner_frames.(!i % Array.length spinner_frames) in
-        Int.incr i;
-        Stdlib.Printf.eprintf "\r\027[K%s %s (%.0fs)%!" frame label
-          (now () -. !(snd phase))
+    if !streaming then ()
+    else
+      match phase_label !(fst phase) with
+      | None -> ()
+      | Some label ->
+          let frame = spinner_frames.(!i % Array.length spinner_frames) in
+          Int.incr i;
+          Stdlib.Printf.eprintf "\r\027[K%s %s (%.0fs)%!" frame label
+            (now () -. !(snd phase))
   in
   let close () =
     clear ();
@@ -154,7 +124,7 @@ let make_tui_reporter ~provider ~model ~session ~header =
   let current_delta = ref "" in
   let phase = make_phase () in
   let event_count = ref 0 in
-  let last_event = ref "waiting for first event" in
+  let last_event = ref None in
   let i = ref 0 in
   let visible_lines () =
     if String.is_empty !current_delta then !lines
@@ -206,7 +176,14 @@ let make_tui_reporter ~provider ~model ~session ~header =
               (visible_lines ())
           in
           let inspector =
-            View.inspector_lines status ~last_event:!last_event
+            (match !last_event with
+              | None ->
+                  View.inspector_lines status
+                    ~last_event:"waiting for first event"
+              | Some event ->
+                  View.inspector_lines status
+                    ~last_event:(View.event_summary event)
+                  @ ("" :: View.event_inspector_lines event))
             |> View.viewport ~rows:body_rows ~cols:panes.inspector_cols
           in
           I.vcat
@@ -246,7 +223,7 @@ let make_tui_reporter ~provider ~model ~session ~header =
   redraw ();
   let on_event e =
     Int.incr event_count;
-    last_event := summarize_event e;
+    last_event := Some e;
     update_phase phase e;
     (match e with
     | Model_delta { content } -> current_delta := !current_delta ^ content

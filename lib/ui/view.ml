@@ -78,6 +78,108 @@ let inspector_lines s ~last_event =
     last_event;
   ]
 
+let flat s = String.substr_replace_all s ~pattern:"\n" ~with_:" "
+
+let event_kind (e : Event.t) =
+  match e with
+  | User_message _ -> "user_message"
+  | Model_delta _ -> "model_delta"
+  | Assistant_message _ -> "assistant_message"
+  | Model_response _ -> "model_response"
+  | Policy_decision _ -> "policy_decision"
+  | Tool_call _ -> "tool_call"
+  | Tool_result_message _ -> "tool_result_message"
+  | Tool_result _ -> "tool_result"
+  | Context_compacted _ -> "context_compacted"
+  | Graph_event _ -> "graph_event"
+  | State_transition _ -> "state_transition"
+
+let event_summary (e : Event.t) =
+  match Event.to_display e with
+  | Some line -> line
+  | None -> (
+      match e with
+      | User_message { content } -> "user: " ^ truncate ~cols:80 (flat content)
+      | Model_delta _ -> "model: streaming"
+      | Assistant_message { content; _ } -> (
+          match Llm.tool_uses content with
+          | [] -> "assistant: final answer"
+          | calls ->
+              Printf.sprintf "assistant: %d tool call%s" (List.length calls)
+                (if List.length calls = 1 then "" else "s"))
+      | Model_response { action = Tool_call tc } ->
+          "model: " ^ Event.describe_tool tc
+      | Model_response { action = Tool_calls calls } ->
+          Printf.sprintf "model: %d tool calls" (List.length calls)
+      | Model_response { action = Final_answer _ } -> "model: final answer"
+      | Policy_decision { permission; _ } ->
+          "policy: " ^ Permission.to_string permission
+      | State_transition { to_state; _ } ->
+          "state: " ^ Agent_state.to_string to_state
+      | Tool_call _ | Tool_result_message _ | Tool_result _
+      | Context_compacted _ | Graph_event _ ->
+          "event")
+
+let json_preview_lines json = Yojson.Safe.pretty_to_string json |> display_lines
+
+let tool_call_lines (tc : Tool_call.t) =
+  [ "tool: " ^ tc.name; "args:" ] @ json_preview_lines tc.args
+
+let result_lines = function
+  | Tool_result.Success { output } -> [ "ok: true"; "output: " ^ flat output ]
+  | Tool_result.Error { message } -> [ "ok: false"; "error: " ^ flat message ]
+
+let event_detail_lines (e : Event.t) =
+  match e with
+  | Tool_call tc -> tool_call_lines tc
+  | Model_response { action = Tool_call tc } -> tool_call_lines tc
+  | Model_response { action = Tool_calls calls } ->
+      [ Printf.sprintf "tools: %d" (List.length calls) ]
+      @ List.concat_mapi calls ~f:(fun i tc ->
+          ("#" ^ Int.to_string (i + 1)) :: tool_call_lines tc)
+  | Tool_result result -> result_lines result
+  | Tool_result_message { id; result } ->
+      ("tool_use_id: " ^ id) :: result_lines result
+  | Policy_decision { tool_call; permission } ->
+      [
+        "permission: " ^ Permission.to_string permission;
+        "tool: " ^ tool_call.name;
+        "args:";
+      ]
+      @ json_preview_lines tool_call.args
+  | Assistant_message { usage; content } ->
+      [
+        Printf.sprintf "usage: %d in / %d out" usage.input_tokens
+          usage.output_tokens;
+        Printf.sprintf "content blocks: %d" (List.length content);
+      ]
+  | Context_compacted { summary; recent } ->
+      [
+        "summary: " ^ flat summary;
+        Printf.sprintf "recent turns: %d" (List.length recent);
+      ]
+  | State_transition { from_state; to_state } ->
+      [
+        "from: " ^ Agent_state.to_string from_state;
+        "to: " ^ Agent_state.to_string to_state;
+      ]
+  | Graph_event event -> [ "graph: " ^ Graph_event.describe event ]
+  | User_message { content } -> [ "content: " ^ flat content ]
+  | Model_delta { content } -> [ "delta: " ^ flat content ]
+  | Model_response { action = Final_answer { answer } } ->
+      [ "final: " ^ flat answer ]
+
+let event_inspector_lines e =
+  [
+    "Event";
+    "kind: " ^ event_kind e;
+    "summary: " ^ event_summary e;
+    "";
+    "Details";
+  ]
+  @ event_detail_lines e
+  @ ("" :: "JSON" :: json_preview_lines (Event.to_yojson e))
+
 (* Classify a display line so the renderer can pick a color. Mirrors the icons
    produced by {!Event.to_display}. *)
 let classify s : [ `Ok | `Err | `Action | `Plain ] =

@@ -97,6 +97,36 @@ let test_status_and_inspector () =
     ]
     (View.inspector_lines status ~last_event:"→ read_file README.md")
 
+let test_event_summary () =
+  let event = Event.Tool_call (Tool_call.read_file "README.md") in
+  Alcotest.(check string) "kind" "tool_call" (View.event_kind event);
+  Alcotest.(check string)
+    "summary" "→ read_file README.md" (View.event_summary event);
+  let user = Event.User_message { content = "hello\nworld" } in
+  Alcotest.(check string)
+    "user summary flattens" "user: hello world" (View.event_summary user)
+
+let test_event_inspector_lines () =
+  let event =
+    Event.Tool_call
+      (Tool_call.make ~name:"search"
+         ~args:(`Assoc [ ("query", `String "Plugin"); ("path", `String "lib") ]))
+  in
+  let lines = View.event_inspector_lines event in
+  let joined = String.concat lines ~sep:"\n" in
+  Alcotest.(check bool)
+    "shows kind" true
+    (String.is_substring joined ~substring:"kind: tool_call");
+  Alcotest.(check bool)
+    "shows tool" true
+    (String.is_substring joined ~substring:"tool: search");
+  Alcotest.(check bool)
+    "shows args" true
+    (String.is_substring joined ~substring:"\"query\": \"Plugin\"");
+  Alcotest.(check bool)
+    "shows json preview" true
+    (String.is_substring joined ~substring:"JSON")
+
 let kind_str = function
   | `Ok -> "ok"
   | `Err -> "err"
@@ -124,6 +154,9 @@ let () =
           Alcotest.test_case "split_panes" `Quick test_split_panes;
           Alcotest.test_case "status_and_inspector" `Quick
             test_status_and_inspector;
+          Alcotest.test_case "event_summary" `Quick test_event_summary;
+          Alcotest.test_case "event_inspector_lines" `Quick
+            test_event_inspector_lines;
           Alcotest.test_case "classify" `Quick test_classify;
         ] );
     ]

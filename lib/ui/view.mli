@@ -44,5 +44,15 @@ val status_line : status -> string
 val inspector_lines : status -> last_event:string -> string list
 (** Render the right-side run inspector as plain lines. *)
 
+val event_kind : Event.t -> string
+(** Stable event type label for the inspector. *)
+
+val event_summary : Event.t -> string
+(** One-line event summary for timelines and inspector headers. *)
+
+val event_inspector_lines : Event.t -> string list
+(** Render event details, including important tool/policy fields and a JSON
+    preview, as plain inspector lines. *)
+
 val classify : string -> [ `Ok | `Err | `Action | `Plain ]
 (** Classify a display line by its leading icon so the renderer can color it. *)
