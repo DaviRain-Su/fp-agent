@@ -60,7 +60,7 @@ let test_edit_readme_e2e () =
       let outcome =
         Lwt_main.run
           (Agent_loop.run ~config ~model_client:client ~event_log ~workspace
-             ~task:"document the project")
+             ~task:"document the project" ())
       in
       Event_log.close event_log;
       Alcotest.(check string)

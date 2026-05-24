@@ -16,3 +16,32 @@ let of_yojson json =
   match t_of_yojson json with
   | t -> Ok t
   | exception exn -> Error (Exn.to_string exn)
+
+let describe_tool (tc : Tool_call.t) =
+  match tc with
+  | Read_file { path } -> "read_file " ^ path
+  | Write_file { path; _ } -> "write_file " ^ path
+  | Edit_file { path; _ } -> "edit_file " ^ path
+  | Run_command { command; _ } -> "run_command " ^ command
+  | List_files { path } -> "list_files " ^ path
+
+let first_line s =
+  let line =
+    match String.lsplit2 s ~on:'\n' with Some (h, _) -> h | None -> s
+  in
+  if String.length line > 120 then String.prefix line 120 ^ "…" else line
+
+(* A concise one-line rendering for live display; [None] means "do not show".
+   The full record is always in the event log regardless. *)
+let to_display (t : t) =
+  match t with
+  | Tool_call tc -> Some ("→ " ^ describe_tool tc)
+  | Tool_result (Success { output }) -> Some ("  ✓ " ^ first_line output)
+  | Tool_result (Error { message }) -> Some ("  ✗ " ^ first_line message)
+  | Policy_decision { permission = Permission.Deny reason; _ } ->
+      Some ("  ✗ policy denied: " ^ reason)
+  | Policy_decision { permission = Permission.Ask_user reason; _ } ->
+      Some ("  ? needs approval: " ^ reason)
+  | User_message _ | Model_response _ | Policy_decision _ | State_transition _
+    ->
+      None

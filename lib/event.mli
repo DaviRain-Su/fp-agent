@@ -10,3 +10,7 @@ val yojson_of_t : t -> Yojson.Safe.t
 val t_of_yojson : Yojson.Safe.t -> t
 val to_yojson : t -> Yojson.Safe.t
 val of_yojson : Yojson.Safe.t -> (t, string) result
+
+val to_display : t -> string option
+(** A concise one-line rendering for live display, or [None] to omit the event
+    from the live view (it is still written to the event log). *)

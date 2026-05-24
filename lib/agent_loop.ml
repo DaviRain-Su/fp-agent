@@ -27,8 +27,12 @@ let truncate_history ~system messages =
   in
   system :: take [] max_history_chars (List.rev messages)
 
-let run ~(config : Config.t) ~model_client ~event_log ~workspace ~task =
-  let log e = Event_log.append event_log e in
+let run ?(on_event = fun _ -> ()) ~(config : Config.t) ~model_client ~event_log
+    ~workspace ~task () =
+  let log e =
+    Event_log.append event_log e;
+    on_event e
+  in
   let state = ref Agent_state.Initializing in
   let goto next =
     match Agent_state.transition !state next with

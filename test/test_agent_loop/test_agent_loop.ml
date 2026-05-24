@@ -41,7 +41,7 @@ let scripted actions =
 
 let run config workspace event_log client task =
   Lwt_main.run
-    (Agent_loop.run ~config ~model_client:client ~event_log ~workspace ~task)
+    (Agent_loop.run ~config ~model_client:client ~event_log ~workspace ~task ())
 
 let test_tool_then_final () =
   with_env (fun config workspace event_log session_dir ->

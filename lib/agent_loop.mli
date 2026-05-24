@@ -4,11 +4,13 @@ type outcome = { status : status; summary : string; steps : int }
 val status_to_string : status -> string
 
 val run :
+  ?on_event:(Event.t -> unit) ->
   config:Config.t ->
   model_client:Model_client.t ->
   event_log:Event_log.t ->
   workspace:Workspace.t ->
   task:string ->
+  unit ->
   outcome Lwt.t
 (** Drive the agent: send the task to the model, execute tool calls behind the
     policy, feed observations back, and log every step. Stops on a final answer,

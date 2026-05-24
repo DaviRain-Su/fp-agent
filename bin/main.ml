@@ -52,9 +52,15 @@ let run_agent task provider_opt api_base_opt model_opt workspace_opt
             config.api_base session_dir;
           let event_log = Event_log.create ~session_dir in
           let model_client = Model_client.create ~config in
+          let on_event e =
+            match Event.to_display e with
+            | Some line -> Stdlib.Printf.eprintf "%s\n%!" line
+            | None -> ()
+          in
           let outcome =
             Lwt_main.run
-              (Agent_loop.run ~config ~model_client ~event_log ~workspace ~task)
+              (Agent_loop.run ~on_event ~config ~model_client ~event_log
+                 ~workspace ~task ())
           in
           Event_log.close event_log;
           print_summary outcome;
