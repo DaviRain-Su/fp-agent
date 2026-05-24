@@ -573,6 +573,59 @@ let test_plugin_tool_debug_cli () =
   in
   assert_success "good plugin enum args" enum_ok;
   assert_contains "good enum output" enum_ok.stdout {|"mode":"safe"|};
+  let strict_plugin_dir = Stdlib.Filename.concat root "strict-plugin" in
+  mkdir_p strict_plugin_dir;
+  write_file
+    (Stdlib.Filename.concat strict_plugin_dir "fp-agent-plugin.json")
+    {|{
+  "id": "com.example.strict",
+  "tools": [
+    {
+      "name": "strict_echo",
+      "kind": "read",
+      "description": "Rejects undeclared args",
+      "command": "sh echo.sh",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "message": { "type": "string" }
+        },
+        "required": ["message"],
+        "additionalProperties": false
+      }
+    }
+  ]
+}|};
+  write_file (Stdlib.Filename.concat strict_plugin_dir "echo.sh") "cat\n";
+  let strict_bad =
+    run ~env
+      [
+        bin;
+        "--run-plugin-tool";
+        strict_plugin_dir;
+        "--plugin-tool";
+        "strict_echo";
+        "--plugin-args";
+        {|{"message":"hi","extra":"ignored"}|};
+      ]
+  in
+  assert_failure "bad plugin additional args" strict_bad;
+  assert_contains "bad additional stderr" strict_bad.stderr
+    "unexpected field 'extra'";
+  let strict_ok =
+    run ~env
+      [
+        bin;
+        "--run-plugin-tool";
+        strict_plugin_dir;
+        "--plugin-tool";
+        "strict_echo";
+        "--plugin-args";
+        {|{"message":"hi"}|};
+      ]
+  in
+  assert_success "good plugin additional args" strict_ok;
+  assert_contains "good additional output" strict_ok.stdout {|"message":"hi"|};
   let missing =
     run ~env
       [

@@ -66,10 +66,12 @@ over consuming stdin directly.
 
 Before the command starts, `input_schema` is validated locally. The supported
 subset is intentionally small and portable: `type`, `enum`, `required`, object
-`properties`, and array `items`. Supported types are `object`, `array`,
-`string`, `number`, `integer`, `boolean`, and `null`; unsupported schema
-keywords are ignored. If validation fails, the tool returns a schema validation
-error and the plugin command is not executed.
+`properties`, object `additionalProperties`, and array `items`. Supported types
+are `object`, `array`, `string`, `number`, `integer`, `boolean`, and `null`;
+unsupported schema keywords are ignored. Set `additionalProperties` to `false`
+when undeclared object fields should be rejected, or to a schema object when
+extra fields should share one validation rule. If validation fails, the tool
+returns a schema validation error and the plugin command is not executed.
 
 Plugin tools are still bounded by `fp-agent` policy. If a plugin call includes a
 `path` arg, `read` tools must resolve inside the workspace and `write` tools

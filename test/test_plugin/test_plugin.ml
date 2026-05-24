@@ -607,6 +607,122 @@ let test_run_tool_validates_input_schema_enum () =
             "enum valid output" true
             (String.is_substring output ~substring:{|"mode":"safe"|}))
 
+let test_run_tool_rejects_additional_properties () =
+  with_temp_dir "fp_agent_plugin_schema_additional" (fun root ->
+      let plugin_dir = Stdlib.Filename.concat root "plugin" in
+      let marker = Stdlib.Filename.concat plugin_dir "ran" in
+      mkdir_p plugin_dir;
+      write
+        (Stdlib.Filename.concat plugin_dir Plugin.manifest_file)
+        {|{
+  "id": "com.example.schema_additional",
+  "tools": [
+    {
+      "name": "plugin_schema_additional",
+      "kind": "read",
+      "description": "Rejects undeclared args",
+      "command": "sh echo.sh",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "message": { "type": "string" }
+        },
+        "required": ["message"],
+        "additionalProperties": false
+      }
+    }
+  ]
+}
+|};
+      write
+        (Stdlib.Filename.concat plugin_dir "echo.sh")
+        "touch ran\nprintf 'args ok: '\ncat\n";
+      let run args =
+        Plugin.run_tool ~dir:plugin_dir ~tool_name:"plugin_schema_additional"
+          ~workspace:(workspace root) ~args
+      in
+      (match
+         run
+           (`Assoc
+              [ ("message", `String "hello"); ("extra", `String "ignored") ])
+       with
+      | Error e -> Alcotest.failf "additional load error: %s" e
+      | Ok (Tool_result.Success { output }) ->
+          Alcotest.failf "additional unexpectedly succeeded: %s" output
+      | Ok (Tool_result.Error { message }) ->
+          Alcotest.(check bool)
+            "additional prefix" true
+            (String.is_substring message ~substring:"schema validation failed");
+          Alcotest.(check bool)
+            "additional detail" true
+            (String.is_substring message ~substring:"unexpected field 'extra'"));
+      Alcotest.(check bool)
+        "unexpected arg did not execute command" false
+        (Stdlib.Sys.file_exists marker);
+      match run (`Assoc [ ("message", `String "hello") ]) with
+      | Error e -> Alcotest.failf "additional valid load error: %s" e
+      | Ok (Tool_result.Error { message }) ->
+          Alcotest.failf "additional valid tool error: %s" message
+      | Ok (Tool_result.Success { output }) ->
+          Alcotest.(check bool)
+            "additional valid output" true
+            (String.is_substring output ~substring:{|"message":"hello"|}))
+
+let test_run_tool_validates_additional_properties_schema () =
+  with_temp_dir "fp_agent_plugin_schema_additional_schema" (fun root ->
+      let plugin_dir = Stdlib.Filename.concat root "plugin" in
+      mkdir_p plugin_dir;
+      write
+        (Stdlib.Filename.concat plugin_dir Plugin.manifest_file)
+        {|{
+  "id": "com.example.schema_additional_schema",
+  "tools": [
+    {
+      "name": "plugin_schema_additional_schema",
+      "kind": "read",
+      "description": "Validates undeclared args with one schema",
+      "command": "sh echo.sh",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "message": { "type": "string" }
+        },
+        "required": ["message"],
+        "additionalProperties": { "type": "integer" }
+      }
+    }
+  ]
+}
+|};
+      write (Stdlib.Filename.concat plugin_dir "echo.sh") "cat\n";
+      let run args =
+        Plugin.run_tool ~dir:plugin_dir
+          ~tool_name:"plugin_schema_additional_schema"
+          ~workspace:(workspace root) ~args
+      in
+      (match
+         run
+           (`Assoc [ ("message", `String "hello"); ("count", `String "wrong") ])
+       with
+      | Error e -> Alcotest.failf "additional schema load error: %s" e
+      | Ok (Tool_result.Success { output }) ->
+          Alcotest.failf "additional schema unexpectedly succeeded: %s" output
+      | Ok (Tool_result.Error { message }) ->
+          Alcotest.(check bool)
+            "additional schema detail" true
+            (String.is_substring message
+               ~substring:"field 'count' expected integer"));
+      match
+        run (`Assoc [ ("message", `String "hello"); ("count", `Int 2) ])
+      with
+      | Error e -> Alcotest.failf "additional schema valid load error: %s" e
+      | Ok (Tool_result.Error { message }) ->
+          Alcotest.failf "additional schema valid tool error: %s" message
+      | Ok (Tool_result.Success { output }) ->
+          Alcotest.(check bool)
+            "additional schema valid output" true
+            (String.is_substring output ~substring:{|"count":2|}))
+
 let test_run_tool_ignores_unsupported_schema_shape () =
   with_temp_dir "fp_agent_plugin_schema_shape" (fun root ->
       let plugin_dir = Stdlib.Filename.concat root "plugin" in
@@ -851,6 +967,10 @@ let () =
             test_run_tool_validates_input_schema;
           Alcotest.test_case "run_tool_schema_enum" `Quick
             test_run_tool_validates_input_schema_enum;
+          Alcotest.test_case "run_tool_schema_additional_properties" `Quick
+            test_run_tool_rejects_additional_properties;
+          Alcotest.test_case "run_tool_schema_additional_properties_schema"
+            `Quick test_run_tool_validates_additional_properties_schema;
           Alcotest.test_case "run_tool_unsupported_schema_shape" `Quick
             test_run_tool_ignores_unsupported_schema_shape;
           Alcotest.test_case "run_tool_unknown" `Quick

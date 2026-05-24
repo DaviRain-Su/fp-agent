@@ -114,6 +114,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - Plugin `input_schema` validation now supports JSON Schema `enum`, so local
   runs, smoke checks, and model-triggered plugin calls reject invalid option
   values before executing plugin code.
+- Plugin `input_schema` validation now also honors object
+  `additionalProperties`, letting plugin authors reject undeclared model
+  arguments before their command runs.
 - Plugin scaffolding now accepts `--plugin-id`, letting developers create a
   starter manifest with the final package id instead of the directory-derived
   `local.*` default.

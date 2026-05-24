@@ -97,6 +97,14 @@ let schema_enum_values schema =
 let enum_values_label values =
   values |> List.map ~f:Yojson.Safe.to_string |> String.concat ~sep:", "
 
+let property_names schema =
+  match schema_member "properties" schema with
+  | `Assoc properties -> List.map properties ~f:fst
+  | _ -> []
+
+let has_property schema name =
+  List.mem (property_names schema) name ~equal:String.equal
+
 let required_fields schema =
   match schema_member "required" schema with
   | `List values ->
@@ -159,19 +167,24 @@ and validate_object_schema ~path schema fields =
   match required_result with
   | Error _ as e -> e
   | Ok () -> (
-      match schema_member "properties" schema with
-      | `Assoc properties ->
-          List.fold properties ~init:(Ok ())
-            ~f:(fun acc (name, property_schema) ->
-              match acc with
-              | Error _ as e -> e
-              | Ok () -> (
-                  match List.Assoc.find fields name ~equal:String.equal with
-                  | None -> Ok ()
-                  | Some value ->
-                      validate_schema ~path:(field_path path name)
-                        property_schema value))
-      | _ -> Ok ())
+      let property_result =
+        match schema_member "properties" schema with
+        | `Assoc properties ->
+            List.fold properties ~init:(Ok ())
+              ~f:(fun acc (name, property_schema) ->
+                match acc with
+                | Error _ as e -> e
+                | Ok () -> (
+                    match List.Assoc.find fields name ~equal:String.equal with
+                    | None -> Ok ()
+                    | Some value ->
+                        validate_schema ~path:(field_path path name)
+                          property_schema value))
+        | _ -> Ok ()
+      in
+      match property_result with
+      | Error _ as e -> e
+      | Ok () -> validate_additional_properties ~path schema fields)
 
 and validate_array_schema ~path (schema : Yojson.Safe.t) (value : Yojson.Safe.t)
     =
@@ -195,6 +208,25 @@ and validate_enum_schema ~path schema value =
         Error
           (Printf.sprintf "%s expected one of: %s" (schema_path_label path)
              (enum_values_label values))
+
+and validate_additional_properties ~path schema fields =
+  let extras =
+    List.filter fields ~f:(fun (name, _) -> not (has_property schema name))
+  in
+  match schema_member "additionalProperties" schema with
+  | `Bool false -> (
+      match extras with
+      | [] -> Ok ()
+      | (name, _) :: _ ->
+          Error (Printf.sprintf "unexpected field '%s'" (field_path path name)))
+  | `Assoc _ as additional_schema ->
+      List.fold extras ~init:(Ok ()) ~f:(fun acc (name, value) ->
+          match acc with
+          | Error _ as e -> e
+          | Ok () ->
+              validate_schema ~path:(field_path path name) additional_schema
+                value)
+  | _ -> Ok ()
 
 let validate_args_schema schema args =
   match schema with
