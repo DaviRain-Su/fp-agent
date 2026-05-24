@@ -17,5 +17,9 @@ type t = {
 val register : t -> unit
 val find : string -> t option
 
+val clear : unit -> unit
+(** Remove all registered tools. Intended for reloading built-ins and plugins
+    after plugin installation state changes. *)
+
 val all : unit -> t list
 (** All registered tools, sorted by name. *)

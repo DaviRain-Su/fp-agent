@@ -88,7 +88,10 @@ Use the REPL command:
 ```text
 /plugins
 /plugin echo_json
-/plugin-smoke my-plugin
+/plugin-check my-plugin
+/plugin-install --replace my-plugin
+/plugin-smoke --replace my-plugin
+/plugin-remove com.example.echo
 /tool echo_json
 /tools
 ```
@@ -108,9 +111,14 @@ directory, version, tool kind, command, timeout, and input schema.
 sees it: kind, description, and input schema. This works for both built-in and
 plugin tools.
 
-`/plugin-smoke <dir>` validates a plugin directory and runs every tool against
-its `examples/<tool>.args.json` file without leaving the current REPL or
-fullscreen TUI session.
+`/plugin-smoke [--replace] <dir>` validates a plugin directory and runs every
+tool against its `examples/<tool>.args.json` file without leaving the current
+REPL or fullscreen TUI session.
+
+`/plugin-check [--replace] <dir>`, `/plugin-install [--replace] <dir>`, and
+`/plugin-remove <id>` expose the same local install workflow inside a live REPL
+or fullscreen TUI session. Install/remove commands reload the in-process tool
+registry, so `/tools` and later model calls see the updated plugin set.
 
 ## Install
 
@@ -166,7 +174,10 @@ matching file:
 ```sh
 dune exec -- fp-agent --smoke-plugin my-plugin
 dune exec -- fp-agent
-> /plugin-smoke my-plugin
+> /plugin-check my-plugin
+> /plugin-install --replace my-plugin
+> /plugin-smoke --replace my-plugin
+> /plugin-remove com.example.echo
 
 dune exec -- fp-agent --run-plugin-tool my-plugin \
   --plugin-tool hello_world \

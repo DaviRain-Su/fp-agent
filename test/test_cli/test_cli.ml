@@ -262,6 +262,45 @@ let test_plugin_lifecycle_cli () =
   assert_contains "remove missing stderr" missing.stderr
     "plugin is not installed"
 
+let test_repl_installs_and_removes_plugin () =
+  let root = tmp_dir "fp-agent-cli-repl-install-" in
+  let plugin_dir = Stdlib.Filename.concat root "my-plugin" in
+  let home = Stdlib.Filename.concat root "installed" in
+  let bin = fp_agent_bin () in
+  let env =
+    isolated_env root
+    @ [ ("FP_AGENT_PLUGIN_PATH", ""); ("FP_AGENT_PLUGIN_HOME", home) ]
+  in
+  assert_success "new plugin" (run ~env [ bin; "--new-plugin"; plugin_dir ]);
+  let repl =
+    run ~env
+      ~stdin:
+        (String.concat ~sep:"\n"
+           [
+             "/plugin-check " ^ plugin_dir;
+             "/plugin-install " ^ plugin_dir;
+             "/plugins";
+             "/tool hello_world";
+             "/plugin-remove local.my-plugin";
+             "/tool hello_world";
+             "/plugins";
+             "/exit";
+             "";
+           ])
+      [ bin ]
+  in
+  assert_success "repl plugin install commands" repl;
+  assert_contains "check output" repl.stdout "plugin manifest ok:";
+  assert_contains "install output" repl.stdout "installed plugin:";
+  assert_contains "install reload output" repl.stdout "tools reloaded";
+  assert_contains "plugin listed after install" repl.stdout "local.my-plugin";
+  assert_contains "tool available after install" repl.stdout "name: hello_world";
+  assert_contains "remove output" repl.stdout "removed plugin:";
+  assert_contains "tool gone after remove" repl.stdout
+    "no tool matching: hello_world";
+  assert_contains "plugins empty after remove" repl.stdout
+    "(no plugins discovered)"
+
 let test_new_plugin_custom_id_cli () =
   let root = tmp_dir "fp-agent-cli-plugin-id-" in
   let plugin_dir = Stdlib.Filename.concat root "named-plugin" in
@@ -494,7 +533,7 @@ let test_repl_lists_dynamic_plugin_tools () =
              "/plugins";
              "/plugin local.my-plugin";
              "/plugin hello_world";
-             "/plugin-smoke " ^ plugin_dir;
+             "/plugin-smoke --replace " ^ plugin_dir;
              "/plugin missing";
              "/tool read_file";
              "/tool hello_world";
@@ -747,6 +786,8 @@ let () =
       ( "cli",
         [
           Alcotest.test_case "plugin lifecycle" `Quick test_plugin_lifecycle_cli;
+          Alcotest.test_case "repl plugin install" `Quick
+            test_repl_installs_and_removes_plugin;
           Alcotest.test_case "plugin custom id" `Quick
             test_new_plugin_custom_id_cli;
           Alcotest.test_case "plugin tool debug" `Quick

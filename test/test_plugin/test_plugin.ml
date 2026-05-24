@@ -434,6 +434,30 @@ let test_smoke_runs_example_args () =
           Alcotest.failf "expected one smoke result, got %d"
             (List.length results))
 
+let test_tool_loader_refreshes_removed_plugins () =
+  with_temp_dir "fp_agent_plugin_reload" (fun root ->
+      let src = Stdlib.Filename.concat root "src" in
+      let home = Stdlib.Filename.concat root "home" in
+      mkdir_p src;
+      Unix.putenv "FP_AGENT_PLUGIN_PATH" "";
+      Unix.putenv "FP_AGENT_PLUGIN_HOME" home;
+      write_plugin src ~id:"com.example.reload" ~tool_name:"plugin_reload_echo"
+        ~kind:"read";
+      (match Plugin.install src with
+      | Error e -> Alcotest.failf "install failed: %s" e
+      | Ok _ -> ());
+      Tool_loader.register_all ();
+      Alcotest.(check bool)
+        "installed plugin registered" true
+        (Option.is_some (Tool.find "plugin_reload_echo"));
+      (match Plugin.remove "com.example.reload" with
+      | Error e -> Alcotest.failf "remove failed: %s" e
+      | Ok _ -> ());
+      Tool_loader.register_all ();
+      Alcotest.(check bool)
+        "removed plugin unregistered" true
+        (Option.is_none (Tool.find "plugin_reload_echo")))
+
 let test_plugin_runtime_environment () =
   with_temp_dir "fp_agent_plugin_env" (fun root ->
       let plugin_dir = Stdlib.Filename.concat root "plugin" in
@@ -737,6 +761,8 @@ let () =
           Alcotest.test_case "run_tool" `Quick
             test_run_tool_for_plugin_development;
           Alcotest.test_case "smoke" `Quick test_smoke_runs_example_args;
+          Alcotest.test_case "tool_loader_reload" `Quick
+            test_tool_loader_refreshes_removed_plugins;
           Alcotest.test_case "runtime_environment" `Quick
             test_plugin_runtime_environment;
           Alcotest.test_case "run_tool_schema_validation" `Quick

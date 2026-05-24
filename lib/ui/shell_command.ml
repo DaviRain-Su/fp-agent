@@ -6,6 +6,9 @@ type id =
   | Tool
   | Plugins
   | Plugin
+  | PluginCheck
+  | PluginInstall
+  | PluginRemove
   | PluginSmoke
   | Sessions
   | Tree
@@ -87,8 +90,32 @@ let specs =
       acceptance = Draft "/plugin ";
     };
     {
+      id = PluginCheck;
+      command = "/plugin-check [--replace] <dir>";
+      description = "validate a plugin directory";
+      aliases = [];
+      palette = true;
+      acceptance = Draft "/plugin-check ";
+    };
+    {
+      id = PluginInstall;
+      command = "/plugin-install [--replace] <dir>";
+      description = "install a plugin directory";
+      aliases = [];
+      palette = true;
+      acceptance = Draft "/plugin-install ";
+    };
+    {
+      id = PluginRemove;
+      command = "/plugin-remove <id>";
+      description = "remove an installed plugin";
+      aliases = [ "/plugin-uninstall" ];
+      palette = true;
+      acceptance = Draft "/plugin-remove ";
+    };
+    {
       id = PluginSmoke;
-      command = "/plugin-smoke <dir>";
+      command = "/plugin-smoke [--replace] <dir>";
       description = "run plugin smoke tests";
       aliases = [];
       palette = true;

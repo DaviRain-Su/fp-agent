@@ -4,6 +4,9 @@ type id =
   | Tool
   | Plugins
   | Plugin
+  | PluginCheck
+  | PluginInstall
+  | PluginRemove
   | PluginSmoke
   | Sessions
   | Tree

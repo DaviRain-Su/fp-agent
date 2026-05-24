@@ -609,13 +609,67 @@ let plugin_smoke_result_lines results =
       Printf.sprintf "smoke ok: %s (%s)" result.tool_name result.args_file
       :: (if String.is_empty output then [] else String.split_lines output))
 
-let plugin_smoke_lines ?(replace = false) ~workspace dir =
-  let dir = String.strip dir in
-  if String.is_empty dir then [ "usage: /plugin-smoke <dir>" ]
+let parse_plugin_dir_arg ~usage raw =
+  let arg = String.strip raw in
+  let replace_prefixes = [ "--replace "; "--replace-plugin " ] in
+  if String.is_empty arg then Error usage
   else
-    match Plugin.smoke ~replace ~workspace dir with
-    | Error e -> [ "plugin smoke error: " ^ e ]
-    | Ok results -> plugin_smoke_result_lines results
+    match
+      List.find_map replace_prefixes ~f:(fun prefix ->
+          if String.is_prefix arg ~prefix then
+            Some (String.strip (String.drop_prefix arg (String.length prefix)))
+          else None)
+    with
+    | Some "" -> Error usage
+    | Some dir -> Ok (true, dir)
+    | None
+      when String.equal arg "--replace" || String.equal arg "--replace-plugin"
+      ->
+        Error usage
+    | None -> Ok (false, arg)
+
+let plugin_check_lines args =
+  match
+    parse_plugin_dir_arg ~usage:"usage: /plugin-check [--replace] <dir>" args
+  with
+  | Error e -> [ e ]
+  | Ok (replace, dir) -> (
+      match Plugin.check ~replace dir with
+      | Error e -> [ "plugin check error: " ^ e ]
+      | Ok manifest ->
+          "plugin manifest ok:" :: View.plugin_inspector_lines manifest)
+
+let plugin_install_lines args =
+  match
+    parse_plugin_dir_arg ~usage:"usage: /plugin-install [--replace] <dir>" args
+  with
+  | Error e -> [ e ]
+  | Ok (replace, dir) -> (
+      match Plugin.install ~replace dir with
+      | Error e -> [ "plugin install error: " ^ e ]
+      | Ok dst ->
+          Tool_loader.register_all ();
+          [ "installed plugin: " ^ dst; "tools reloaded" ])
+
+let plugin_remove_lines arg =
+  let id = String.strip arg in
+  if String.is_empty id then [ "usage: /plugin-remove <id>" ]
+  else
+    match Plugin.remove id with
+    | Error e -> [ "plugin remove error: " ^ e ]
+    | Ok dst ->
+        Tool_loader.register_all ();
+        [ "removed plugin: " ^ dst; "tools reloaded" ]
+
+let plugin_smoke_lines ~workspace args =
+  match
+    parse_plugin_dir_arg ~usage:"usage: /plugin-smoke [--replace] <dir>" args
+  with
+  | Error e -> [ e ]
+  | Ok (replace, dir) -> (
+      match Plugin.smoke ~replace ~workspace dir with
+      | Error e -> [ "plugin smoke error: " ^ e ]
+      | Ok results -> plugin_smoke_result_lines results)
 
 let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
   let root = Workspace.root workspace in
@@ -823,6 +877,15 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
     view.append_lines
       ("[tui] /plugin-smoke" :: plugin_smoke_lines ~workspace arg)
   in
+  let check_plugin arg =
+    view.append_lines ("[tui] /plugin-check" :: plugin_check_lines arg)
+  in
+  let install_plugin arg =
+    view.append_lines ("[tui] /plugin-install" :: plugin_install_lines arg)
+  in
+  let remove_plugin arg =
+    view.append_lines ("[tui] /plugin-remove" :: plugin_remove_lines arg)
+  in
   let stop = ref false in
   let handle_submission raw =
     match Shell_command.parse raw with
@@ -843,6 +906,9 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
     | Command (Retry, _) -> retry_last_task ()
     | Command (Compact, _) -> compact_session ()
     | Command (Undo, _) -> undo ()
+    | Command (PluginCheck, arg) -> check_plugin arg
+    | Command (PluginInstall, arg) -> install_plugin arg
+    | Command (PluginRemove, arg) -> remove_plugin arg
     | Command (PluginSmoke, arg) -> smoke_plugin arg
     | Command _ -> (
         match Tui_command.run (command_context ()) raw with
@@ -1312,6 +1378,15 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
             loop ()
         | Command (Plugin, arg) ->
             print_plugin_detail arg;
+            loop ()
+        | Command (PluginCheck, arg) ->
+            List.iter (plugin_check_lines arg) ~f:Stdlib.print_endline;
+            loop ()
+        | Command (PluginInstall, arg) ->
+            List.iter (plugin_install_lines arg) ~f:Stdlib.print_endline;
+            loop ()
+        | Command (PluginRemove, arg) ->
+            List.iter (plugin_remove_lines arg) ~f:Stdlib.print_endline;
             loop ()
         | Command (PluginSmoke, arg) ->
             List.iter

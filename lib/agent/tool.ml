@@ -17,6 +17,7 @@ type t = {
 let registry : (string, t) Hashtbl.t = Hashtbl.create (module String)
 let register tool = Hashtbl.set registry ~key:tool.name ~data:tool
 let find name = Hashtbl.find registry name
+let clear () = Hashtbl.clear registry
 
 let all () =
   Hashtbl.data registry

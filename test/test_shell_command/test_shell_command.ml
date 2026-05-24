@@ -44,8 +44,16 @@ let test_parse () =
     "local-llm qwen36-rtx http://127.0.0.1:8000/v1"
     (Shell_command.parse
        "/provider local-llm qwen36-rtx http://127.0.0.1:8000/v1");
-  require_command "plugin smoke" Shell_command.PluginSmoke "./my-plugin"
-    (Shell_command.parse "/plugin-smoke ./my-plugin");
+  require_command "plugin check" Shell_command.PluginCheck "./my-plugin"
+    (Shell_command.parse "/plugin-check ./my-plugin");
+  require_command "plugin install" Shell_command.PluginInstall
+    "--replace ./my-plugin"
+    (Shell_command.parse "/plugin-install --replace ./my-plugin");
+  require_command "plugin remove alias" Shell_command.PluginRemove "local.foo"
+    (Shell_command.parse "/plugin-uninstall local.foo");
+  require_command "plugin smoke" Shell_command.PluginSmoke
+    "--replace ./my-plugin"
+    (Shell_command.parse "/plugin-smoke --replace ./my-plugin");
   require_command "quit alias" Shell_command.Exit ""
     (Shell_command.parse "/quit");
   Alcotest.(check bool)
@@ -71,8 +79,17 @@ let test_metadata () =
     "palette has status" true
     (List.mem palette "/status" ~equal:String.equal);
   Alcotest.(check bool)
+    "palette has plugin check" true
+    (List.mem palette "/plugin-check [--replace] <dir>" ~equal:String.equal);
+  Alcotest.(check bool)
+    "palette has plugin install" true
+    (List.mem palette "/plugin-install [--replace] <dir>" ~equal:String.equal);
+  Alcotest.(check bool)
+    "palette has plugin remove" true
+    (List.mem palette "/plugin-remove <id>" ~equal:String.equal);
+  Alcotest.(check bool)
     "palette has plugin smoke" true
-    (List.mem palette "/plugin-smoke <dir>" ~equal:String.equal);
+    (List.mem palette "/plugin-smoke [--replace] <dir>" ~equal:String.equal);
   Alcotest.(check bool)
     "palette has instructions" true
     (List.mem palette "/instructions" ~equal:String.equal);
@@ -116,9 +133,18 @@ let test_acceptance () =
     (Shell_command.accept (entry "/tool <name>"));
   require_acceptance "provider draft" ("draft", "/provider ")
     (Shell_command.accept (entry "/provider <name> [model] [api-base]"));
+  require_acceptance "plugin check draft"
+    ("draft", "/plugin-check ")
+    (Shell_command.accept (entry "/plugin-check [--replace] <dir>"));
+  require_acceptance "plugin install draft"
+    ("draft", "/plugin-install ")
+    (Shell_command.accept (entry "/plugin-install [--replace] <dir>"));
+  require_acceptance "plugin remove draft"
+    ("draft", "/plugin-remove ")
+    (Shell_command.accept (entry "/plugin-remove <id>"));
   require_acceptance "plugin smoke draft"
     ("draft", "/plugin-smoke ")
-    (Shell_command.accept (entry "/plugin-smoke <dir>"));
+    (Shell_command.accept (entry "/plugin-smoke [--replace] <dir>"));
   require_acceptance "new session draft" ("draft", "/new")
     (Shell_command.accept (entry "/new"));
   require_acceptance "retry draft" ("draft", "/retry")
