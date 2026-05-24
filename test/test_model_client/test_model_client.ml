@@ -290,6 +290,56 @@ let test_streaming_tool_ids () =
   | Ok _ -> Alcotest.fail "expected one anthropic tool_use"
   | Error e -> Alcotest.failf "anthropic complete failed: %s" e
 
+let test_streaming_preserves_reasoning_blocks () =
+  let openai_payloads =
+    [
+      {|{"choices":[{"delta":{"reasoning_content":"inspect first"}}]}|};
+      {|{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_openai","function":{"name":"read_file","arguments":"{\"path\":\"README.md\"}"}}]}}]}|};
+    ]
+  in
+  (match Model_client.openai_complete_for_test openai_payloads with
+  | Ok
+      ( [
+          Llm.Thinking { text = reasoning; signature };
+          Llm.Tool_use { id; name; input };
+        ],
+        _ ) ->
+      Alcotest.(check string) "openai reasoning" "inspect first" reasoning;
+      Alcotest.(check string) "openai reasoning signature" "" signature;
+      Alcotest.(check string) "openai tool id" "call_openai" id;
+      Alcotest.(check string) "openai tool name" "read_file" name;
+      Alcotest.(check (option string))
+        "openai tool path" (Some "README.md")
+        (match Yojson.Safe.Util.member "path" input with
+        | `String s -> Some s
+        | _ -> None)
+  | Ok blocks ->
+      Alcotest.failf "unexpected openai blocks: %s"
+        (Yojson.Safe.to_string
+           (`List (List.map (fst blocks) ~f:Llm.content_to_json)))
+  | Error e -> Alcotest.failf "openai complete failed: %s" e);
+  let anthropic_payloads =
+    [
+      {|{"type":"content_block_start","index":0,"content_block":{"type":"thinking"}}|};
+      {|{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"inspect"}}|};
+      {|{"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"sig-123"}}|};
+      {|{"type":"content_block_stop","index":0}|};
+      {|{"type":"content_block_start","index":1,"content_block":{"type":"text"}}|};
+      {|{"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"done"}}|};
+      {|{"type":"content_block_stop","index":1}|};
+    ]
+  in
+  match Model_client.anthropic_complete_for_test anthropic_payloads with
+  | Ok ([ Llm.Thinking { text = reasoning; signature }; Llm.Text answer ], _) ->
+      Alcotest.(check string) "anthropic reasoning" "inspect" reasoning;
+      Alcotest.(check string) "anthropic signature" "sig-123" signature;
+      Alcotest.(check string) "anthropic answer" "done" answer
+  | Ok blocks ->
+      Alcotest.failf "unexpected anthropic blocks: %s"
+        (Yojson.Safe.to_string
+           (`List (List.map (fst blocks) ~f:Llm.content_to_json)))
+  | Error e -> Alcotest.failf "anthropic complete failed: %s" e
+
 let test_request_preserves_tool_result_ids () =
   let config =
     {
@@ -309,6 +359,7 @@ let test_request_preserves_tool_result_ids () =
     [
       Llm.assistant
         [
+          Llm.Thinking { text = "look first"; signature = "" };
           Llm.Tool_use
             {
               id = "call_keep";
@@ -331,6 +382,9 @@ let test_request_preserves_tool_result_ids () =
   Alcotest.(check string)
     "assistant tool id" "call_keep"
     (tool_call |> member "id" |> to_string);
+  Alcotest.(check string)
+    "reasoning content" "look first"
+    (assistant |> member "reasoning_content" |> to_string);
   Alcotest.(check string)
     "tool result id" "call_keep"
     (tool_msg |> member "tool_call_id" |> to_string)
@@ -526,6 +580,8 @@ let () =
       ( "provider_blocks",
         [
           Alcotest.test_case "streaming_tool_ids" `Quick test_streaming_tool_ids;
+          Alcotest.test_case "streaming_reasoning_blocks" `Quick
+            test_streaming_preserves_reasoning_blocks;
           Alcotest.test_case "request_preserves_tool_result_ids" `Quick
             test_request_preserves_tool_result_ids;
         ] );

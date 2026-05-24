@@ -556,7 +556,7 @@ let action_of_content_blocks blocks =
           | _ -> None)
       with
       | Some e -> Error e
-      | None -> Ok tool_blocks)
+      | None -> Ok blocks)
   | [] ->
       let text =
         List.filter_map blocks ~f:(function Text s -> Some s | _ -> None)
@@ -566,13 +566,13 @@ let action_of_content_blocks blocks =
         Error "provider returned no text or tool_use blocks"
       else if looks_like_internal_action_text text then
         Result.map (parse_action text) ~f:content_of_action
-      else Ok [ Text text ]
+      else Ok blocks
 
 (* --- Anthropic protocol --- *)
 
 type anthropic_builder =
   | BText of Buffer.t
-  | BThinking of Buffer.t
+  | BThinking of { text : Buffer.t; signature : Buffer.t }
   | BTool of { id : string; name : string; json : Buffer.t }
 
 let assoc_set r key data =
@@ -631,9 +631,14 @@ let anthropic_complete ~on_delta payloads =
   let finish idx =
     match assoc_find builders idx with
     | Some (BText b) -> blocks := Text (Buffer.contents b) :: !blocks
-    | Some (BThinking b) ->
+    | Some (BThinking { text; signature }) ->
         blocks :=
-          Thinking { text = Buffer.contents b; signature = "" } :: !blocks
+          Thinking
+            {
+              text = Buffer.contents text;
+              signature = Buffer.contents signature;
+            }
+          :: !blocks
     | Some (BTool { id; name; json }) ->
         blocks :=
           Tool_use
@@ -661,7 +666,12 @@ let anthropic_complete ~on_delta payloads =
               | `String "text" ->
                   assoc_set builders idx (BText (Buffer.create 256))
               | `String "thinking" ->
-                  assoc_set builders idx (BThinking (Buffer.create 256))
+                  assoc_set builders idx
+                    (BThinking
+                       {
+                         text = Buffer.create 256;
+                         signature = Buffer.create 64;
+                       })
               | `String "tool_use" ->
                   assoc_set builders idx
                     (BTool
@@ -680,8 +690,11 @@ let anthropic_complete ~on_delta payloads =
                   Buffer.add_string b s;
                   feed_delta delta_filter s
               | `String "thinking_delta", Some (BThinking b) ->
-                  Buffer.add_string b
+                  Buffer.add_string b.text
                     (json_string_or_empty (member "thinking" delta))
+              | `String "signature_delta", Some (BThinking b) ->
+                  Buffer.add_string b.signature
+                    (json_string_or_empty (member "signature" delta))
               | `String "input_json_delta", Some (BTool t) ->
                   Buffer.add_string t.json
                     (json_string_or_empty (member "partial_json" delta))
