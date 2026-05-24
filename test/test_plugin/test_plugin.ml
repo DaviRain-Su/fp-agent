@@ -219,6 +219,19 @@ let test_package_plugin_installs_archive () =
           Alcotest.(check bool)
             "package file created" true
             (Stdlib.Sys.file_exists package_path);
+          (match Plugin.inspect_source package_path with
+          | Error e -> Alcotest.failf "inspect package failed: %s" e
+          | Ok info ->
+              Alcotest.(check string)
+                "package source kind" "package" info.source_kind;
+              Alcotest.(check string)
+                "package source manifest" "com.example.package" info.manifest.id;
+              Alcotest.(check bool)
+                "package source has size" true
+                (Option.is_some info.package_bytes);
+              Alcotest.(check bool)
+                "package source has members" true
+                (not (List.is_empty info.archive_members)));
           match Plugin.install package_path with
           | Error e -> Alcotest.failf "install package failed: %s" e
           | Ok dst -> (

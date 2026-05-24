@@ -168,7 +168,7 @@ plugin directory, then writes a distributable `.fp-plugin.tar.gz` package. The
 generated package can be installed with `/plugin-install --replace <package>`.
 
 `/plugin-new [--id ID] [--tool-name NAME] [--kind KIND] [--template NAME]
-<dir>`, `/plugin-check [--replace] <dir>`,
+<dir>`, `/plugin-check [--replace] <dir|package>`,
 `/plugin-package [--replace] [--output FILE] <dir>`,
 `/plugin-install [--replace] <dir|package>`, and `/plugin-remove <id>` expose
 the same workflow as individual steps inside a live REPL or fullscreen TUI
@@ -296,6 +296,17 @@ The installer validates the manifest and copies the plugin into the plugin home,
 whether the source is a directory or a `.fp-plugin.tar.gz` package. It does not
 overwrite an existing plugin with the same id, and it rejects tool-name
 conflicts before copying.
+
+Audit a packaged plugin before installing it:
+
+```sh
+dune exec -- fp-agent --check-plugin echo.fp-plugin.tar.gz
+```
+
+For packages, the check output includes the manifest details plus package byte
+size, sha256 when the local `shasum` command is available, and archive member
+count. This gives users a read-only install preview before copying third-party
+plugins into the plugin home.
 
 During plugin development, reinstall a changed plugin with:
 

@@ -156,7 +156,7 @@ let plugin_diagnostics_lines () =
       "";
       "next: /plugins";
       "next: /plugin <id|tool>";
-      "next: /plugin-check <dir>";
+      "next: /plugin-check <dir|package>";
       "next: /plugin-package --output <file> <dir>";
       "next: /plugin-dev --replace <dir>";
     ]

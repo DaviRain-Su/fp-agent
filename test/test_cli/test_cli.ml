@@ -211,6 +211,16 @@ let test_plugin_lifecycle_cli () =
   Alcotest.(check bool)
     "package file created" true
     (Stdlib.Sys.file_exists package_path);
+  let checked_package = run ~env [ bin; "--check-plugin"; package_path ] in
+  assert_success "check plugin package" checked_package;
+  assert_contains "check package source" checked_package.stdout
+    "source_kind: package";
+  assert_contains "check package sha256" checked_package.stdout
+    "package_sha256:";
+  assert_contains "check package member count" checked_package.stdout
+    "archive_members:";
+  assert_contains "check package manifest" checked_package.stdout
+    "plugin manifest ok";
   let installed = run ~env [ bin; "--install-plugin"; package_path ] in
   assert_success "install plugin package" installed;
   assert_contains "install output" installed.stdout "installed plugin:";
@@ -269,7 +279,8 @@ let test_plugin_lifecycle_cli () =
   assert_contains "replace without install stderr"
     replace_without_install.stderr
     "--replace-plugin requires --install-plugin DIR|PACKAGE or --check-plugin \
-     DIR or --smoke-plugin DIR or --dev-plugin DIR or --package-plugin DIR";
+     DIR|PACKAGE or --smoke-plugin DIR or --dev-plugin DIR or --package-plugin \
+     DIR";
   let invalid_installed = Stdlib.Filename.concat home "invalid-plugin" in
   mkdir_p invalid_installed;
   write_file
@@ -389,7 +400,7 @@ let test_repl_installs_and_removes_plugin () =
   assert_contains "plugin listed after install" repl.stdout "local.repl-plugin";
   assert_contains "plugin doctor output" repl.stdout "Plugin diagnostics";
   assert_contains "plugin doctor next command" repl.stdout
-    "next: /plugin-check <dir>";
+    "next: /plugin-check <dir|package>";
   assert_contains "tool available after install" repl.stdout "name: repl_echo";
   assert_contains "smoke output" repl.stdout "smoke ok: repl_echo";
   assert_contains "package output" repl.stdout "plugin package ok:";

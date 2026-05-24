@@ -126,8 +126,8 @@ let specs =
     };
     {
       id = PluginCheck;
-      command = "/plugin-check [--replace] <dir>";
-      description = "validate a plugin directory";
+      command = "/plugin-check [--replace] <dir|package>";
+      description = "validate a plugin directory or package";
       aliases = [];
       palette = true;
       acceptance = Draft "/plugin-check ";

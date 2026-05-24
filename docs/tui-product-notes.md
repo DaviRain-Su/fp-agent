@@ -194,6 +194,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   `/plugin-package [--replace] [--output FILE] <dir>` or `--package-plugin`.
   The package command validates the manifest, runs smoke cases, and writes a
   `.fp-plugin.tar.gz` archive that `/plugin-install` can install directly.
+- `/plugin-check [--replace] <dir|package>` and `--check-plugin` now provide a
+  read-only install preview for packages, including package byte size, sha256
+  when available, archive member count, manifest details, and conflict checks.
 - Plugin scaffold/install/remove output now includes actionable next commands:
   scaffold points at validation, smoke, and replace-install; install points at
   the installed plugin id, each registered tool, and runnable `/plugin-run`

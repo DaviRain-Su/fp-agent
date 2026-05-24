@@ -35,6 +35,15 @@ type package_result = {
   smoke_results : smoke_result list;
 }
 
+type source_info = {
+  source_path : string;
+  source_kind : string;
+  manifest : manifest;
+  package_bytes : int option;
+  package_sha256 : string option;
+  archive_members : string list;
+}
+
 type scaffold_template_info = {
   template_id : string;
   template_aliases : string list;
@@ -108,6 +117,11 @@ val check : ?replace:bool -> string -> (manifest, string) result
     rejects tool names that would be shadowed by built-in tools or existing
     discovered plugins. When [replace] is [true], an existing installed plugin
     with the same id is ignored for conflict checks. *)
+
+val inspect_source : ?replace:bool -> string -> (source_info, string) result
+(** Validate a plugin directory or [.fp-plugin.tar.gz] package without running
+    plugin code. Package sources include archive size, sha256 when available,
+    and member paths. *)
 
 val scaffold :
   ?id:string ->

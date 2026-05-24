@@ -908,6 +908,32 @@ let plugin_new_lines args =
       | Error e -> [ "plugin scaffold error: " ^ e ]
       | Ok dst -> plugin_new_success_lines dst)
 
+let plugin_source_info_lines (info : Plugin.source_info) =
+  let package_lines =
+    match info.source_kind with
+    | "package" ->
+        let size =
+          Option.value_map info.package_bytes ~default:"unknown"
+            ~f:Int.to_string
+        in
+        let sha256 = Option.value info.package_sha256 ~default:"unknown" in
+        [
+          "package_bytes: " ^ size;
+          "package_sha256: " ^ sha256;
+          Printf.sprintf "archive_members: %d"
+            (List.length info.archive_members);
+        ]
+        @ (List.take info.archive_members 8
+          |> List.map ~f:(fun member_ -> "  - " ^ member_))
+        @ if List.length info.archive_members > 8 then [ "  ..." ] else []
+    | _ -> []
+  in
+  [
+    "plugin source ok: " ^ info.source_path; "source_kind: " ^ info.source_kind;
+  ]
+  @ package_lines
+  @ ("plugin manifest ok:" :: View.plugin_inspector_lines info.manifest)
+
 let parse_plugin_dir_arg ~usage raw =
   let arg = String.strip raw in
   let replace_prefixes = [ "--replace "; "--replace-plugin " ] in
@@ -975,14 +1001,14 @@ let plugin_package_lines ~workspace args =
 
 let plugin_check_lines args =
   match
-    parse_plugin_dir_arg ~usage:"usage: /plugin-check [--replace] <dir>" args
+    parse_plugin_dir_arg ~usage:"usage: /plugin-check [--replace] <dir|package>"
+      args
   with
   | Error e -> [ e ]
   | Ok (replace, dir) -> (
-      match Plugin.check ~replace dir with
+      match Plugin.inspect_source ~replace dir with
       | Error e -> [ "plugin check error: " ^ e ]
-      | Ok manifest ->
-          "plugin manifest ok:" :: View.plugin_inspector_lines manifest)
+      | Ok info -> plugin_source_info_lines info)
 
 let plugin_install_lines args =
   match
@@ -2603,10 +2629,9 @@ let dispatch add_provider provider_base provider_models provider_api
             "plugin scaffold error: --plugin-template requires --new-plugin DIR";
           1
       | None, None, None, None, None, Some path, _, _, _, _, _, _, _, _ -> (
-          match Plugin.check ~replace:replace_plugin path with
-          | Ok manifest ->
-              Stdlib.print_endline "plugin manifest ok:";
-              print_plugin_summary manifest;
+          match Plugin.inspect_source ~replace:replace_plugin path with
+          | Ok info ->
+              List.iter (plugin_source_info_lines info) ~f:Stdlib.print_endline;
               0
           | Error e ->
               Stdlib.prerr_endline ("plugin check error: " ^ e);
@@ -2735,8 +2760,8 @@ let dispatch add_provider provider_base provider_models provider_api
         when replace_plugin ->
           Stdlib.prerr_endline
             "plugin error: --replace-plugin requires --install-plugin \
-             DIR|PACKAGE or --check-plugin DIR or --smoke-plugin DIR or \
-             --dev-plugin DIR or --package-plugin DIR";
+             DIR|PACKAGE or --check-plugin DIR|PACKAGE or --smoke-plugin DIR \
+             or --dev-plugin DIR or --package-plugin DIR";
           1
       | ( None,
           None,
@@ -2904,9 +2929,9 @@ let () =
     Arg.(
       value
       & opt (some string) None
-      & info [ "check-plugin" ] ~docv:"DIR"
+      & info [ "check-plugin" ] ~docv:"DIR|PACKAGE"
           ~doc:
-            "Validate a plugin directory containing fp-agent-plugin.json, then \
+            "Validate a plugin directory or .fp-plugin.tar.gz package, then \
              exit.")
   in
   let new_plugin =

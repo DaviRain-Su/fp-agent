@@ -198,7 +198,8 @@ let test_metadata () =
        ~equal:String.equal);
   Alcotest.(check bool)
     "palette has plugin check" true
-    (List.mem palette "/plugin-check [--replace] <dir>" ~equal:String.equal);
+    (List.mem palette "/plugin-check [--replace] <dir|package>"
+       ~equal:String.equal);
   Alcotest.(check bool)
     "palette has plugin dev" true
     (List.mem palette "/plugin-dev [--replace] <dir>" ~equal:String.equal);
@@ -330,7 +331,7 @@ let test_acceptance () =
     (Shell_command.accept (entry "/plugin-dev [--replace] <dir>"));
   require_acceptance "plugin check draft"
     ("draft", "/plugin-check ")
-    (Shell_command.accept (entry "/plugin-check [--replace] <dir>"));
+    (Shell_command.accept (entry "/plugin-check [--replace] <dir|package>"));
   require_acceptance "plugin install draft"
     ("draft", "/plugin-install ")
     (Shell_command.accept (entry "/plugin-install [--replace] <dir|package>"));

@@ -37,6 +37,15 @@ type package_result = {
   smoke_results : smoke_result list;
 }
 
+type source_info = {
+  source_path : string;
+  source_kind : string;
+  manifest : manifest;
+  package_bytes : int option;
+  package_sha256 : string option;
+  archive_members : string list;
+}
+
 let manifest_file = "fp-agent-plugin.json"
 let supported_sdk_version = 1
 let default_timeout_sec = 60
@@ -507,8 +516,15 @@ let validate_tool_list (tools : plugin_tool list) =
     | Some name -> Error ("duplicate tool name: " ^ name)
     | None -> Ok tools
 
-let load_manifest dir =
+let rec load_manifest dir =
   let path = Stdlib.Filename.concat dir manifest_file in
+  match Unix.lstat path with
+  | exception exn ->
+      Error (Printf.sprintf "cannot read %s: %s" path (Exn.to_string exn))
+  | { st_kind = Unix.S_REG; _ } -> load_regular_manifest dir path
+  | _ -> Error (Printf.sprintf "plugin manifest is not a regular file: %s" path)
+
+and load_regular_manifest dir path =
   match Yojson.Safe.from_file path with
   | exception exn ->
       Error (Printf.sprintf "cannot read %s: %s" path (Exn.to_string exn))
@@ -577,9 +593,6 @@ let default_search_roots () =
 
 let search_roots = default_search_roots
 
-let has_manifest dir =
-  Stdlib.Sys.file_exists (Stdlib.Filename.concat dir manifest_file)
-
 let is_directory path =
   match Unix.lstat path with
   | { st_kind = Unix.S_DIR; _ } -> true
@@ -591,6 +604,9 @@ let is_regular_file path =
   | { st_kind = Unix.S_REG; _ } -> true
   | _ -> false
   | exception _ -> false
+
+let has_manifest dir =
+  is_regular_file (Stdlib.Filename.concat dir manifest_file)
 
 let dirs_in_root root =
   if has_manifest root then [ root ]
@@ -1064,6 +1080,74 @@ let package_manifest_dir extracted =
       Error
         ("plugin package contains multiple plugin manifests: "
         ^ String.concat dirs ~sep:", ")
+
+let file_size path =
+  match Unix.stat path with
+  | { st_size; _ } -> Some st_size
+  | exception _ -> None
+
+let file_sha256 path =
+  let command =
+    Printf.sprintf "shasum -a 256 %s" (Stdlib.Filename.quote path)
+  in
+  match Shell.run ~command ~timeout_sec:30 with
+  | Error _ -> None
+  | Ok { exit_code = 0; stdout; _ } -> (
+      stdout |> String.strip |> String.split ~on:' '
+      |> List.find ~f:(fun token -> not (String.is_empty token))
+      |> function
+      | Some hash when String.length hash >= 32 -> Some hash
+      | _ -> None)
+  | Ok _ -> None
+
+let inspect_package ?(replace = false) package_path =
+  if not (is_regular_file package_path) then
+    Error ("plugin package is not a file: " ^ package_path)
+  else
+    let extracted = temp_dir "fp_agent_plugin_package" in
+    Exn.protect
+      ~f:(fun () ->
+        match extract_package package_path extracted with
+        | Error _ as e -> e
+        | Ok () -> (
+            match package_manifest_dir extracted with
+            | Error _ as e -> e
+            | Ok dir -> (
+                match check ~replace dir with
+                | Error _ as e -> e
+                | Ok manifest -> (
+                    match tar_members package_path with
+                    | Error _ as e -> e
+                    | Ok archive_members ->
+                        Ok
+                          {
+                            source_path = package_path;
+                            source_kind = "package";
+                            manifest;
+                            package_bytes = file_size package_path;
+                            package_sha256 = file_sha256 package_path;
+                            archive_members;
+                          }))))
+      ~finally:(fun () -> cleanup_staged_dir extracted)
+
+let inspect_source ?(replace = false) src =
+  if is_directory src then
+    match check ~replace src with
+    | Error _ as e -> e
+    | Ok manifest ->
+        Ok
+          {
+            source_path = src;
+            source_kind = "directory";
+            manifest;
+            package_bytes = None;
+            package_sha256 = None;
+            archive_members = [];
+          }
+  else if is_regular_file src then inspect_package ~replace src
+  else if Stdlib.Sys.file_exists src then
+    Error ("plugin source is not a directory or regular package file: " ^ src)
+  else Error ("plugin source does not exist: " ^ src)
 
 let install_package ?(replace = false) package_path =
   if not (is_regular_file package_path) then

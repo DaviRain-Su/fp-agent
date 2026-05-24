@@ -294,7 +294,7 @@ copy. Two consequences:
   SDK changes.
 - **Plugin install management** (`/plugin-new [--id ID] [--tool-name NAME]
   [--kind KIND] [--template NAME] <dir>`, `/plugin-dev [--replace] <dir>`,
-  `/plugin-check <dir>`, `/plugin-package [--output FILE] <dir>`,
+  `/plugin-check <dir|package>`, `/plugin-package [--output FILE] <dir>`,
   `/plugin-install [--replace] <dir|package>`, `/plugin-remove <id>`)
   scaffolds, validates, smoke-tests, packages, installs, and removes plugins
   from the REPL or fullscreen TUI, then reloads the in-process tool registry so
@@ -365,7 +365,8 @@ Options:
   `--new-plugin`: `read`, `write`, or `exec`
 - `--plugin-template NAME` / `--template NAME` — initial scaffold template for
   `--new-plugin`: `shell` or `python`
-- `--check-plugin DIR` — validate a plugin directory, then exit
+- `--check-plugin DIR|PACKAGE` — validate a plugin directory or package and
+  show install-time package metadata, then exit
 - `--smoke-plugin DIR` — validate a plugin directory and run each tool with
   `examples/<tool>.args.json` plus `examples/<tool>/*.json` cases
 - `--dev-plugin DIR` / `--plugin-dev DIR` — validate, smoke-test, install,
