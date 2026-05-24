@@ -309,6 +309,9 @@ let test_tui_command_model_log_and_inspect () =
         (Option.is_none
            (Tui_command.run context "/provider local-llm qwen36-rtx"));
       Alcotest.(check bool)
+        "new session is stateful" true
+        (Option.is_none (Tui_command.run context "/new"));
+      Alcotest.(check bool)
         "retry is stateful" true
         (Option.is_none (Tui_command.run context "/retry"));
       Alcotest.(check (option string))
@@ -351,6 +354,9 @@ let test_tui_command_sessions_and_diff () =
       Alcotest.(check bool)
         "resume is stateful" true
         (Option.is_none (Tui_command.run context "/resume child-session"));
+      Alcotest.(check bool)
+        "new session is stateful" true
+        (Option.is_none (Tui_command.run context "/new"));
       Alcotest.(check bool)
         "fork is stateful" true
         (Option.is_none (Tui_command.run context "/fork 0"));

@@ -61,6 +61,7 @@ dune exec -- fp-agent
 > /fork 3            # fork a new branch at event index 3 (or /fork for the end)
 > /tree              # show the session fork tree
 > /sessions          # list sessions in this workspace
+> /new               # start a fresh session without prior history
 > /resume <name>     # switch to a past session
 > /models            # list all configured provider/model ids
 > /model qwen36-rtx  # switch model inside the REPL
@@ -136,6 +137,8 @@ copy. Two consequences:
 
 - **Resume** (`--resume` / `/resume`) reconstructs state by replaying a
   session's log.
+- **New session** (`/new`) starts a fresh root session in the same workspace
+  without replaying the current task history.
 - **Retry** (`/retry`) finds the latest user task in the current event log and
   submits it again. The command is a seeded draft in the TUI palette so an
   accidental palette Enter cannot rerun work without an explicit submit.
@@ -160,8 +163,9 @@ copy. Two consequences:
   results directly inside the fullscreen view.
 - **TUI model/provider switching** lets `/model <id>` and `/provider <name>
   [model] [api-base]` change the runtime used by later TUI task submissions.
-- **TUI session navigation** lets `/resume <dir>` and `/fork [index]` switch
-  the active fullscreen session and continue writing to the selected event log.
+- **TUI session navigation** lets `/new`, `/resume <dir>`, and `/fork [index]`
+  switch the active fullscreen session and continue writing to the selected
+  event log.
 - **TUI undo** lets `/undo` restore the git worktree to the checkpoint captured
   before the previous submitted TUI task, while leaving `.ocaml-agent` session
   logs alone.

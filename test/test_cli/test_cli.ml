@@ -517,6 +517,8 @@ let test_repl_inspects_session_events () =
          /inspect 3\n\
          /inspect nope\n\
          /retry\n\
+         /new\n\
+         /log\n\
          /exit\n"
       [ fp_agent_bin (); "--resume"; session_dir ]
   in
@@ -532,7 +534,9 @@ let test_repl_inspects_session_events () =
   assert_contains "inspect range" repl.stdout "no event at index 3 (0..1)";
   assert_contains "inspect usage" repl.stdout "usage: /inspect [event-index]";
   assert_contains "retry without user task" repl.stdout
-    "no previous user task to retry"
+    "no previous user task to retry";
+  assert_contains "new session switched" repl.stdout "new session:";
+  assert_contains "new session has empty log" repl.stdout "(no events yet)"
 
 let test_tui_confirm_reaches_config_for_oneshot () =
   let root = tmp_dir "fp-agent-cli-tui-" in

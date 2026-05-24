@@ -734,13 +734,18 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
               ~model:!config_ref.model ~api_base:!config_ref.api_base;
             view.append_lines (current_model_lines ("/provider " ^ args)))
   in
-  let switch_session dir =
+  let switch_session ?message dir =
     Event_log.close !log;
     session := dir;
     log := Event_log.create ~session_dir:dir;
     let events = events () in
     view.set_session ~session_dir:dir ~events;
-    view.append_lines [ "[tui] switched session: " ^ dir ]
+    view.append_lines
+      [ Option.value message ~default:("[tui] switched session: " ^ dir) ]
+  in
+  let new_session () =
+    let dir = Session.create ~base_dir:root in
+    switch_session ~message:("[tui] new session: " ^ dir) dir
   in
   let resume_session arg =
     let arg = String.strip arg in
@@ -790,6 +795,7 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
     | Command (Model, "") -> view.append_lines (current_model_lines "/model")
     | Command (Model, model) -> switch_model model
     | Command (Provider, args) -> switch_provider args
+    | Command (NewSession, _) -> new_session ()
     | Command (Resume, arg) -> resume_session arg
     | Command (Fork, arg) -> fork_session arg
     | Command (Retry, _) -> retry_last_task ()
@@ -938,11 +944,16 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
     ref (Option.value resume_opt ~default:(Session.create ~base_dir:root))
   in
   let log = ref (Event_log.create ~session_dir:!session) in
-  let switch dir =
+  let switch ?message dir =
     Event_log.close !log;
     session := dir;
     log := Event_log.create ~session_dir:dir;
-    Stdlib.Printf.printf "switched to %s\n%!" dir
+    Stdlib.Printf.printf "%s\n%!"
+      (Option.value message ~default:("switched to " ^ dir))
+  in
+  let start_new_session () =
+    let dir = Session.create ~base_dir:root in
+    switch ~message:("new session: " ^ dir) dir
   in
   let snapshots = Git_snapshot.create ~root in
   let is_git = Stdlib.Sys.file_exists (Stdlib.Filename.concat root ".git") in
@@ -1068,6 +1079,7 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
   let print_log () =
     match Journal.read ~session_dir:!session with
     | Error e -> Stdlib.print_endline e
+    | Ok [] -> Stdlib.print_endline "(no events yet)"
     | Ok events ->
         List.iteri events ~f:(fun i e ->
             Stdlib.Printf.printf "  %3d  %s\n" i (describe_event e))
@@ -1230,6 +1242,9 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
             loop ()
         | Command (Provider, args) ->
             switch_provider args;
+            loop ()
+        | Command (NewSession, _) ->
+            start_new_session ();
             loop ()
         | Command (Diff, _) ->
             show_diff ();

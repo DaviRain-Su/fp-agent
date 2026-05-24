@@ -6,6 +6,7 @@ type id =
   | Plugin
   | Sessions
   | Tree
+  | NewSession
   | Resume
   | Model
   | Models

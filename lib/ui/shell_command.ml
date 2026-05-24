@@ -8,6 +8,7 @@ type id =
   | Plugin
   | Sessions
   | Tree
+  | NewSession
   | Resume
   | Model
   | Models
@@ -96,6 +97,14 @@ let specs =
       aliases = [];
       palette = true;
       acceptance = Execute "/tree";
+    };
+    {
+      id = NewSession;
+      command = "/new";
+      description = "start a fresh session";
+      aliases = [];
+      palette = true;
+      acceptance = Draft "/new";
     };
     {
       id = Resume;

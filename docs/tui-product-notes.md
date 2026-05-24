@@ -24,7 +24,7 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - Right/secondary inspector: selected event JSON, tool args/result, usage, and
   policy decision.
 - Footer command palette: `/model`, `/provider`, `/plugins`, `/tools`,
-  `/resume`, `/fork`, `/retry`, `/undo`, `/diff`.
+  `/new`, `/resume`, `/fork`, `/retry`, `/undo`, `/diff`.
 - Status strip: provider/model, session id, step count, token usage, current
   phase, and active plugin count.
 - Review mode: navigate prior events, fork from an event, and replay compacted
@@ -68,9 +68,10 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - The fullscreen shell now treats `/model <id>` and `/provider <name> [model]
   [api-base]` as stateful commands. They rebuild the model client, update the
   status strip, and subsequent task submissions use the switched runtime.
-- The fullscreen shell now treats `/resume <dir>` and `/fork [index]` as
-  stateful commands. They switch the active session directory, reopen the event
-  log, reload inspector context, and continue later turns from that session.
+- The fullscreen shell now treats `/new`, `/resume <dir>`, and `/fork [index]`
+  as stateful commands. They switch the active session directory, reopen the
+  event log, reload inspector context, and continue later turns from that
+  session.
 - Token usage is now derived from assistant-message events and shown in the
   status/inspector surfaces; `/usage` renders input, output, and total tokens
   from the current event log.

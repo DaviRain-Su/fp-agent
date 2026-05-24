@@ -30,6 +30,8 @@ let test_parse () =
     (Shell_command.parse "/model qwen36-rtx");
   require_command "models" Shell_command.Models ""
     (Shell_command.parse "/models");
+  require_command "new session" Shell_command.NewSession ""
+    (Shell_command.parse "/new");
   require_command "usage" Shell_command.Usage "" (Shell_command.parse "/usage");
   require_command "retry" Shell_command.Retry "" (Shell_command.parse "/retry");
   require_command "provider" Shell_command.Provider
@@ -58,6 +60,9 @@ let test_metadata () =
     "palette has usage" true
     (List.mem palette "/usage" ~equal:String.equal);
   Alcotest.(check bool)
+    "palette has new session" true
+    (List.mem palette "/new" ~equal:String.equal);
+  Alcotest.(check bool)
     "palette has retry" true
     (List.mem palette "/retry" ~equal:String.equal);
   let help = Shell_command.help_text () in
@@ -84,6 +89,8 @@ let test_acceptance () =
     (Shell_command.accept (entry "/tool <name>"));
   require_acceptance "provider draft" ("draft", "/provider ")
     (Shell_command.accept (entry "/provider <name> [model] [api-base]"));
+  require_acceptance "new session draft" ("draft", "/new")
+    (Shell_command.accept (entry "/new"));
   require_acceptance "retry draft" ("draft", "/retry")
     (Shell_command.accept (entry "/retry"));
   require_acceptance "undo draft" ("draft", "/undo")
