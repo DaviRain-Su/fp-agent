@@ -332,6 +332,28 @@ let usage_lines ctx =
     Printf.sprintf "total_tokens: %d" (View.token_usage_total usage);
   ]
 
+let latest_plan events =
+  List.find_map (List.rev events) ~f:(function
+    | Event.Plan_updated { items } -> Some items
+    | _ -> None)
+
+let plan_lines_of_items items =
+  match items with
+  | [] -> [ "(plan is empty)" ]
+  | items ->
+      "Session plan:"
+      :: List.mapi items ~f:(fun index item ->
+          Printf.sprintf "  %d. %s" (index + 1) (Event.plan_item_line item))
+
+let plan_lines events =
+  match latest_plan events with
+  | None ->
+      [
+        "(no session plan)";
+        "Use /plan-set todo inspect code; doing implement fix; done write tests";
+      ]
+  | Some items -> plan_lines_of_items items
+
 let status_lines ctx =
   Tool_loader.register_all ();
   let discovery = Plugin.discover () in
@@ -405,6 +427,7 @@ let run ctx command =
   | Command (Log, _) -> Some (command_section command (log_lines ctx))
   | Command (Inspect, arg) ->
       Some (command_section command (inspect_lines ctx arg))
+  | Command (Plan, _) -> Some (command_section command (plan_lines ctx.events))
   | Command (Usage, _) -> Some (command_section command (usage_lines ctx))
   | Command (Status, _) -> Some (command_section command (status_lines ctx))
   | Command (Instructions, _) ->

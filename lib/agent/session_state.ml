@@ -67,7 +67,7 @@ let reduce (st : t) (event : Event.t) =
           :: recent;
       }
   | State_transition { to_state; _ } -> { st with agent_state = to_state }
-  | Tool_call _ | Policy_decision _ | Graph_event _ -> st
+  | Tool_call _ | Policy_decision _ | Plan_updated _ | Graph_event _ -> st
 
 let replay events = List.fold events ~init:empty ~f:reduce
 let turns t = t.turns

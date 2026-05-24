@@ -316,7 +316,20 @@ let test_event_summary () =
     "summary" "→ read_file README.md" (View.event_summary event);
   let user = Event.User_message { content = "hello\nworld" } in
   Alcotest.(check string)
-    "user summary flattens" "user: hello world" (View.event_summary user)
+    "user summary flattens" "user: hello world" (View.event_summary user);
+  let plan =
+    Event.Plan_updated
+      {
+        items =
+          [
+            { Event.status = Event.Todo; text = "inspect code" };
+            { Event.status = Event.Done; text = "write tests" };
+          ];
+      }
+  in
+  Alcotest.(check string) "plan kind" "plan_updated" (View.event_kind plan);
+  Alcotest.(check string)
+    "plan summary" "plan: 1/2 done" (View.event_summary plan)
 
 let test_event_inspector_lines () =
   let event =
@@ -338,6 +351,26 @@ let test_event_inspector_lines () =
   Alcotest.(check bool)
     "shows json preview" true
     (String.is_substring joined ~substring:"JSON")
+
+let test_plan_event_inspector_lines () =
+  let event =
+    Event.Plan_updated
+      {
+        items =
+          [
+            { Event.status = Event.Todo; text = "inspect code" };
+            { Event.status = Event.Doing; text = "implement command" };
+            { Event.status = Event.Done; text = "run tests" };
+          ];
+      }
+  in
+  let joined = View.event_inspector_lines event |> String.concat ~sep:"\n" in
+  Alcotest.(check bool)
+    "plan inspector kind" true
+    (String.is_substring joined ~substring:"kind: plan_updated");
+  Alcotest.(check bool)
+    "plan inspector item" true
+    (String.is_substring joined ~substring:"[doing] implement command")
 
 let test_plugin_inspector_lines () =
   let plugin : Plugin.manifest =
@@ -473,6 +506,8 @@ let () =
           Alcotest.test_case "event_summary" `Quick test_event_summary;
           Alcotest.test_case "event_inspector_lines" `Quick
             test_event_inspector_lines;
+          Alcotest.test_case "plan_event_inspector_lines" `Quick
+            test_plan_event_inspector_lines;
           Alcotest.test_case "plugin_inspector_lines" `Quick
             test_plugin_inspector_lines;
           Alcotest.test_case "tool_inspector_lines" `Quick

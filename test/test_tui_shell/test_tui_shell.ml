@@ -371,6 +371,9 @@ let test_tui_command_model_log_and_inspect () =
         (Option.is_none
            (Tui_command.run context "/provider local-llm qwen36-rtx"));
       Alcotest.(check bool)
+        "plan-set is stateful" true
+        (Option.is_none (Tui_command.run context "/plan-set todo inspect code"));
+      Alcotest.(check bool)
         "new session is stateful" true
         (Option.is_none (Tui_command.run context "/new"));
       Alcotest.(check bool)
@@ -404,6 +407,30 @@ let test_tui_command_model_log_and_inspect () =
       Alcotest.(check bool)
         "usage command shows total" true
         (String.is_substring usage ~substring:"total_tokens: 28");
+      let plan_context =
+        tui_context
+          ~events:
+            (events
+            @ [
+                Event.Plan_updated
+                  {
+                    items =
+                      [
+                        { Event.status = Event.Todo; text = "inspect code" };
+                        { Event.status = Event.Doing; text = "implement plan" };
+                        { Event.status = Event.Done; text = "write tests" };
+                      ];
+                  };
+              ])
+          root
+      in
+      let plan = output "/plan" plan_context in
+      Alcotest.(check bool)
+        "plan command shows header" true
+        (String.is_substring plan ~substring:"[tui] /plan");
+      Alcotest.(check bool)
+        "plan command shows item" true
+        (String.is_substring plan ~substring:"2. [doing] implement plan");
       let status = output "/status" context in
       Alcotest.(check bool)
         "status command header" true

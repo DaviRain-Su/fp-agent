@@ -123,6 +123,16 @@ let test_event_roundtrips () =
       ( "Context_compacted",
         Event.Context_compacted
           { summary = "Earlier findings"; recent = [ Llm.user "continue" ] } );
+      ( "Plan_updated",
+        Event.Plan_updated
+          {
+            items =
+              [
+                { Event.status = Event.Todo; text = "inspect code" };
+                { Event.status = Event.Doing; text = "implement command" };
+                { Event.status = Event.Done; text = "run tests" };
+              ];
+          } );
       ( "Graph_event",
         Event.Graph_event
           (Graph_event.Node_started

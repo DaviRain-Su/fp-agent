@@ -23,6 +23,8 @@ type id =
   | ProviderAdd
   | Log
   | Inspect
+  | Plan
+  | PlanSet
   | Usage
   | Status
   | Instructions

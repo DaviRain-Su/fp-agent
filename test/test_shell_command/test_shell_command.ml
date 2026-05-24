@@ -44,6 +44,11 @@ let test_parse () =
   require_command "compact" Shell_command.Compact ""
     (Shell_command.parse "/compact");
   require_command "retry" Shell_command.Retry "" (Shell_command.parse "/retry");
+  require_command "plan" Shell_command.Plan "" (Shell_command.parse "/plan");
+  require_command "plan set" Shell_command.PlanSet
+    "todo inspect code; doing implement plan; done write tests"
+    (Shell_command.parse
+       "/plan-set todo inspect code; doing implement plan; done write tests");
   require_command "provider" Shell_command.Provider
     "local-llm qwen36-rtx http://127.0.0.1:8000/v1"
     (Shell_command.parse
@@ -124,6 +129,13 @@ let test_metadata () =
   Alcotest.(check bool)
     "palette has usage" true
     (List.mem palette "/usage" ~equal:String.equal);
+  Alcotest.(check bool)
+    "palette has plan" true
+    (List.mem palette "/plan" ~equal:String.equal);
+  Alcotest.(check bool)
+    "palette has plan set" true
+    (List.mem palette "/plan-set <status item; ...>" ~equal:String.equal);
+  Alcotest.(check string) "plan group" "Context" (entry "/plan").group;
   Alcotest.(check bool)
     "palette has status" true
     (List.mem palette "/status" ~equal:String.equal);
@@ -206,6 +218,8 @@ let test_acceptance () =
     (Shell_command.accept (entry "/model-next"));
   require_acceptance "usage execute" ("execute", "/usage")
     (Shell_command.accept (entry "/usage"));
+  require_acceptance "plan execute" ("execute", "/plan")
+    (Shell_command.accept (entry "/plan"));
   require_acceptance "status execute" ("execute", "/status")
     (Shell_command.accept (entry "/status"));
   require_acceptance "instructions execute"
@@ -223,6 +237,8 @@ let test_acceptance () =
        (entry
           "/provider-add <name> <base-url> <model[,model...]> [--api-key KEY] \
            [--local-compat]"));
+  require_acceptance "plan set draft" ("draft", "/plan-set ")
+    (Shell_command.accept (entry "/plan-set <status item; ...>"));
   require_acceptance "plugin new draft" ("draft", "/plugin-new ")
     (Shell_command.accept
        (entry

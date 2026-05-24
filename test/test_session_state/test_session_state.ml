@@ -193,6 +193,28 @@ let test_context_compaction_replaces_visible_turns () =
       Alcotest.failf "unexpected compacted turns: %s"
         (Yojson.Safe.to_string (`List (List.map turns ~f:Llm.turn_to_json)))
 
+let test_plan_events_do_not_enter_model_transcript () =
+  let st =
+    Session_state.replay
+      [
+        Event.User_message { content = "build feature" };
+        Event.Plan_updated
+          {
+            items =
+              [
+                { Event.status = Event.Todo; text = "inspect code" };
+                { Event.status = Event.Doing; text = "implement command" };
+              ];
+          };
+        Event.Assistant_message
+          { content = [ Llm.Text "done" ]; usage = Llm.zero_usage };
+      ]
+  in
+  Alcotest.(check int) "one model step" 1 (Session_state.steps st);
+  Alcotest.(check int)
+    "plan is not a turn" 2
+    (List.length (Session_state.turns st))
+
 let () =
   Alcotest.run "session_state"
     [
@@ -208,5 +230,7 @@ let () =
             test_normalized_events_preserve_tool_ids;
           Alcotest.test_case "context_compaction" `Quick
             test_context_compaction_replaces_visible_turns;
+          Alcotest.test_case "plan_events" `Quick
+            test_plan_events_do_not_enter_model_transcript;
         ] );
     ]

@@ -1071,6 +1071,34 @@ let plugin_run_lines ~workspace args =
               (if String.is_empty output then [] else String.split_lines output)
           ))
 
+let plan_set_usage =
+  "usage: /plan-set <todo|doing|done> <item>; [<todo|doing|done> <item>; ...]"
+
+let split_plan_specs raw =
+  raw |> String.split_lines
+  |> List.concat_map ~f:(String.split ~on:';')
+  |> List.map ~f:String.strip
+  |> List.filter ~f:(fun spec -> not (String.is_empty spec))
+
+let parse_plan_item spec =
+  match String.lsplit2 spec ~on:' ' with
+  | None -> Error plan_set_usage
+  | Some (status, text) -> (
+      let text = String.strip text in
+      match (Event.plan_status_of_string status, String.is_empty text) with
+      | None, _ -> Error ("unknown plan status: " ^ status)
+      | _, true -> Error plan_set_usage
+      | Some status, false -> Ok { Event.status; text })
+
+let parse_plan_set_args raw =
+  match split_plan_specs raw with
+  | [] -> Error plan_set_usage
+  | specs -> Result.all (List.map specs ~f:parse_plan_item)
+
+let plan_updated_lines items =
+  Printf.sprintf "plan updated: %d item(s)" (List.length items)
+  :: Tui_command.plan_lines [ Event.Plan_updated { items } ]
+
 let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
   let root = Workspace.root workspace in
   let sessions_root =
@@ -1176,6 +1204,15 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
                   (String.length summary) (List.length recent);
               ]
         | Some _ -> ())
+  in
+  let set_plan arg =
+    match parse_plan_set_args arg with
+    | Error e -> view.append_lines [ "[tui] /plan-set"; e ]
+    | Ok items ->
+        let event = Event.Plan_updated { items } in
+        Event_log.append !log event;
+        view.reporter.on_event event;
+        view.append_lines ("[tui] /plan-set" :: plan_updated_lines items)
   in
   let current_model_lines command =
     Option.value
@@ -1379,6 +1416,7 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
     | Command (Fork, arg) -> fork_session arg
     | Command (Retry, _) -> retry_last_task ()
     | Command (Compact, _) -> compact_session ()
+    | Command (PlanSet, arg) -> set_plan arg
     | Command (Undo, _) -> undo ()
     | Command (PluginNew, arg) -> new_plugin arg
     | Command (PluginDev, arg) -> dev_plugin arg
@@ -1692,6 +1730,12 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
     | Tool_result (Success _) -> "result ok"
     | Tool_result (Error _) -> "result err"
     | Context_compacted _ -> "context compacted"
+    | Plan_updated { items } ->
+        let done_count =
+          List.count items ~f:(fun item ->
+              Poly.equal item.Event.status Event.Done)
+        in
+        Printf.sprintf "plan: %d/%d done" done_count (List.length items)
     | Graph_event event -> "graph " ^ Graph_event.describe event
     | Policy_decision { permission; _ } ->
         "policy " ^ Permission.to_string permission
@@ -1860,6 +1904,19 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
               (String.length summary) (List.length recent)
         | Some _ -> ())
   in
+  let print_plan () =
+    match Journal.read ~session_dir:!session with
+    | Error e -> Stdlib.print_endline e
+    | Ok events ->
+        List.iter (Tui_command.plan_lines events) ~f:Stdlib.print_endline
+  in
+  let set_plan arg =
+    match parse_plan_set_args arg with
+    | Error e -> Stdlib.print_endline e
+    | Ok items ->
+        Event_log.append !log (Event.Plan_updated { items });
+        List.iter (plan_updated_lines items) ~f:Stdlib.print_endline
+  in
   let rec loop () =
     Stdlib.print_string "\n> ";
     Stdlib.Out_channel.flush Stdlib.stdout;
@@ -1951,6 +2008,12 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
             loop ()
         | Command (Compact, _) ->
             compact_session ();
+            loop ()
+        | Command (Plan, _) ->
+            print_plan ();
+            loop ()
+        | Command (PlanSet, arg) ->
+            set_plan arg;
             loop ()
         | Command (Undo, _) ->
             undo ();

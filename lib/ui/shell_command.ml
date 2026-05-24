@@ -25,6 +25,8 @@ type id =
   | ProviderAdd
   | Log
   | Inspect
+  | Plan
+  | PlanSet
   | Usage
   | Status
   | Instructions
@@ -252,6 +254,22 @@ let specs =
       acceptance = Execute "/inspect";
     };
     {
+      id = Plan;
+      command = "/plan";
+      description = "show the latest session plan";
+      aliases = [];
+      palette = true;
+      acceptance = Execute "/plan";
+    };
+    {
+      id = PlanSet;
+      command = "/plan-set <status item; ...>";
+      description = "replace the session plan";
+      aliases = [];
+      palette = true;
+      acceptance = Draft "/plan-set ";
+    };
+    {
       id = Usage;
       command = "/usage";
       description = "show token usage from the event log";
@@ -337,7 +355,7 @@ let group_of_id = function
       "Plugins"
   | Sessions | Tree | NewSession | Resume -> "Sessions"
   | Model | ModelNext | Models | Provider | ProviderAdd -> "Models"
-  | Log | Inspect | Usage | Status | Instructions -> "Context"
+  | Log | Inspect | Plan | PlanSet | Usage | Status | Instructions -> "Context"
   | Compact | Fork | Diff | Retry | Undo -> "Run Control"
   | Help | Exit -> "Shell"
 

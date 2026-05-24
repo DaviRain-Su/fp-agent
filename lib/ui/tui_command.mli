@@ -26,5 +26,8 @@ val plugin_diagnostics_lines : unit -> string list
 (** Render plugin search path, manifest, and conflict diagnostics without a
     command header. *)
 
+val plan_lines : Event.t list -> string list
+(** Render the latest session plan from an event list. *)
+
 val last_user_message : Event.t list -> string option
 (** Return the latest non-empty user task from an event log, if any. *)

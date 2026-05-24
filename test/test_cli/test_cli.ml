@@ -1020,6 +1020,10 @@ let test_repl_inspects_session_events () =
     run ~env
       ~stdin:
         "/log\n\
+         /plan\n\
+         /plan-set todo inspect code; doing implement plan; done write tests\n\
+         /plan\n\
+         /log\n\
          /usage\n\
          /status\n\
          /inspect 0\n\
@@ -1034,6 +1038,10 @@ let test_repl_inspects_session_events () =
   in
   assert_success "repl inspect command" repl;
   assert_contains "log includes event" repl.stdout "tool_call search";
+  assert_contains "plan initially empty" repl.stdout "(no session plan)";
+  assert_contains "plan update" repl.stdout "plan updated: 3 item(s)";
+  assert_contains "plan item" repl.stdout "2. [doing] implement plan";
+  assert_contains "log includes plan event" repl.stdout "plan: 1/3 done";
   assert_contains "inspect prints index" repl.stdout "event 0";
   assert_contains "inspect kind" repl.stdout "kind: tool_call";
   assert_contains "inspect tool" repl.stdout "tool: search";
@@ -1042,11 +1050,11 @@ let test_repl_inspects_session_events () =
   assert_contains "usage input" repl.stdout "input_tokens: 31";
   assert_contains "usage total" repl.stdout "total_tokens: 40";
   assert_contains "status session" repl.stdout "session: inspect-session";
-  assert_contains "status events" repl.stdout "events: 2";
+  assert_contains "status events" repl.stdout "events: 3";
   assert_contains "status tokens" repl.stdout
     "tokens: input 31 output 9 total 40";
   assert_contains "status tools" repl.stdout "tools:";
-  assert_contains "inspect range" repl.stdout "no event at index 3 (0..1)";
+  assert_contains "inspect range" repl.stdout "no event at index 3 (0..2)";
   assert_contains "inspect usage" repl.stdout "usage: /inspect [event-index]";
   assert_contains "retry without user task" repl.stdout
     "no previous user task to retry";

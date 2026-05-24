@@ -332,6 +332,7 @@ let event_kind (e : Event.t) =
   | Tool_result_message _ -> "tool_result_message"
   | Tool_result _ -> "tool_result"
   | Context_compacted _ -> "context_compacted"
+  | Plan_updated _ -> "plan_updated"
   | Graph_event _ -> "graph_event"
   | State_transition _ -> "state_transition"
 
@@ -355,6 +356,9 @@ let event_summary (e : Event.t) =
       | Model_response { action = Final_answer _ } -> "model: final answer"
       | Policy_decision { permission; _ } ->
           "policy: " ^ Permission.to_string permission
+      | Plan_updated { items } ->
+          Printf.sprintf "plan: %d item%s" (List.length items)
+            (if List.length items = 1 then "" else "s")
       | State_transition { to_state; _ } ->
           "state: " ^ Agent_state.to_string to_state
       | Tool_call _ | Tool_result_message _ | Tool_result _
@@ -399,6 +403,9 @@ let event_detail_lines (e : Event.t) =
         "summary: " ^ flat summary;
         Printf.sprintf "recent turns: %d" (List.length recent);
       ]
+  | Plan_updated { items } ->
+      Printf.sprintf "items: %d" (List.length items)
+      :: List.map items ~f:(fun item -> "  " ^ Event.plan_item_line item)
   | State_transition { from_state; to_state } ->
       [
         "from: " ^ Agent_state.to_string from_state;

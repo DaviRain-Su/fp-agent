@@ -1,3 +1,6 @@
+type plan_status = Todo | Doing | Done
+type plan_item = { status : plan_status; text : string }
+
 type t =
   | User_message of { content : string }
   | Model_delta of { content : string }
@@ -8,6 +11,7 @@ type t =
   | Tool_result_message of { id : string; result : Tool_result.t }
   | Tool_result of Tool_result.t
   | Context_compacted of { summary : string; recent : Llm.turn list }
+  | Plan_updated of { items : plan_item list }
   | Graph_event of Graph_event.t
   | State_transition of { from_state : Agent_state.t; to_state : Agent_state.t }
 
@@ -22,3 +26,7 @@ val to_display : t -> string option
 
 val describe_tool : Tool_call.t -> string
 (** A short human-readable description of a tool call, e.g. "read_file a.ml". *)
+
+val plan_status_to_string : plan_status -> string
+val plan_status_of_string : string -> plan_status option
+val plan_item_line : plan_item -> string
