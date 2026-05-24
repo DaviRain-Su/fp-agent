@@ -94,7 +94,7 @@ dune exec -- fp-agent
 > /tools
 ```
 
-Install a plugin into the user plugin home:
+Create, test, and install a plugin into the user plugin home:
 
 ```sh
 dune exec -- fp-agent --new-plugin my-plugin
@@ -102,7 +102,7 @@ dune exec -- fp-agent --check-plugin my-plugin
 dune exec -- fp-agent --run-plugin-tool my-plugin \
   --plugin-tool hello_world \
   --plugin-args '{"message":"hi"}'
-dune exec -- fp-agent --install-plugin examples/plugins/echo
+dune exec -- fp-agent --install-plugin my-plugin
 dune exec -- fp-agent --list-plugins
 dune exec -- fp-agent --remove-plugin local.my-plugin
 ```

@@ -106,6 +106,14 @@ let test_plugin_lifecycle_cli () =
     "manifest created" true
     (Stdlib.Sys.file_exists
        (Stdlib.Filename.concat plugin_dir "fp-agent-plugin.json"));
+  Alcotest.(check bool)
+    "readme created" true
+    (Stdlib.Sys.file_exists (Stdlib.Filename.concat plugin_dir "README.md"));
+  Alcotest.(check bool)
+    "sample args created" true
+    (Stdlib.Sys.file_exists
+       (Stdlib.Filename.concat plugin_dir
+          (Stdlib.Filename.concat "examples" "hello.args.json")));
   let checked = run ~env [ bin; "--check-plugin"; plugin_dir ] in
   assert_success "check plugin" checked;
   assert_contains "check output" checked.stdout "plugin manifest ok";
@@ -121,6 +129,11 @@ let test_plugin_lifecycle_cli () =
     (Stdlib.Sys.file_exists
        (Stdlib.Filename.concat home
           (Stdlib.Filename.concat "local.my-plugin" "fp-agent-plugin.json")));
+  Alcotest.(check bool)
+    "installed readme" true
+    (Stdlib.Sys.file_exists
+       (Stdlib.Filename.concat home
+          (Stdlib.Filename.concat "local.my-plugin" "README.md")));
   let listed = run ~env [ bin; "--list-plugins" ] in
   assert_success "list plugins after install" listed;
   assert_contains "list plugin id" listed.stdout "local.my-plugin";

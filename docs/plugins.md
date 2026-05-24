@@ -84,6 +84,10 @@ Create a starter plugin:
 dune exec -- fp-agent --new-plugin my-plugin
 ```
 
+The scaffold includes `fp-agent-plugin.json`, `hello.sh`, a README with the
+local development commands, and `examples/hello.args.json` for a first
+`--run-plugin-tool` smoke test.
+
 Validate it before installing:
 
 ```sh

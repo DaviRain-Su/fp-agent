@@ -228,6 +228,14 @@ let test_scaffold_creates_valid_plugin () =
             "manifest exists" true
             (Stdlib.Sys.file_exists
                (Stdlib.Filename.concat dir Plugin.manifest_file));
+          Alcotest.(check bool)
+            "readme exists" true
+            (Stdlib.Sys.file_exists (Stdlib.Filename.concat dir "README.md"));
+          Alcotest.(check bool)
+            "sample args exists" true
+            (Stdlib.Sys.file_exists
+               (Stdlib.Filename.concat dir
+                  (Stdlib.Filename.concat "examples" "hello.args.json")));
           match Plugin.check dir with
           | Error e -> Alcotest.failf "scaffold check failed: %s" e
           | Ok manifest ->
