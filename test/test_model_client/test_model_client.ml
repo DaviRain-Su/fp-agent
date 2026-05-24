@@ -122,10 +122,13 @@ let test_mock_client () =
 let test_config_providers () =
   Unix.putenv "KIMI_API_KEY" "kimi-secret";
   Unix.putenv "DEEPSEEK_API_KEY" "ds-secret";
+  Unix.putenv "LOCAL_API_KEY" "";
+  Unix.putenv "FP_AGENT_CONFIG" "";
   (match Config.load () with
   | Ok cfg ->
       Alcotest.(check string)
         "default model is kimi" "kimi-for-coding" cfg.model;
+      Alcotest.(check string) "default provider" "kimi" cfg.provider;
       Alcotest.(check bool)
         "kimi base" true
         (String.is_substring cfg.api_base ~substring:"api.kimi.com");
@@ -139,6 +142,61 @@ let test_config_providers () =
       Alcotest.(check string) "deepseek model" "deepseek-v4-flash" cfg.model;
       Alcotest.(check string) "deepseek key" "ds-secret" cfg.api_key
   | Error e -> Alcotest.failf "deepseek load: %s" e);
+  (match Config.load ~provider:"local" ~model:"qwen-local" () with
+  | Ok cfg ->
+      Alcotest.(check string) "local provider" "local" cfg.provider;
+      Alcotest.(check string) "local model" "qwen-local" cfg.model;
+      Alcotest.(check string) "local key optional" "" cfg.api_key;
+      Alcotest.(check bool)
+        "local uses openai protocol" true
+        (match cfg.protocol with Provider.Openai -> true | _ -> false)
+  | Error e -> Alcotest.failf "local load: %s" e);
+  let dir = Stdlib.Filename.temp_dir "fp_agent_provider" "" in
+  let config_path = Stdlib.Filename.concat dir "providers.json" in
+  Stdlib.Out_channel.with_open_bin config_path (fun oc ->
+      Stdlib.Out_channel.output_string oc
+        {|
+{
+  "local-llm": {
+    "baseUrl": "http://101.132.142.56:18080/v1",
+    "api": "openai-completions",
+    "apiKey": "dummy",
+    "compat": {
+      "supportsDeveloperRole": false,
+      "maxTokensField": "max_tokens"
+    },
+    "models": [
+      { "id": "qwen36-rtx", "name": "qwen36-rtx" },
+      { "id": "qwen-coder" }
+    ]
+  }
+}
+|});
+  Unix.putenv "FP_AGENT_CONFIG" config_path;
+  (match Config.load ~provider:"local-llm" () with
+  | Ok cfg ->
+      Alcotest.(check string) "custom provider" "local-llm" cfg.provider;
+      Alcotest.(check string)
+        "custom base" "http://101.132.142.56:18080/v1" cfg.api_base;
+      Alcotest.(check string) "custom key" "dummy" cfg.api_key;
+      Alcotest.(check string) "first custom model" "qwen36-rtx" cfg.model;
+      Alcotest.(check (list string))
+        "custom models"
+        [ "qwen36-rtx"; "qwen-coder" ]
+        cfg.models
+  | Error e -> Alcotest.failf "custom provider load: %s" e);
+  (match
+     Config.load ~provider:"local-llm" ~model:"qwen-coder"
+       ~api_base:"http://127.0.0.1:18080/v1" ()
+   with
+  | Ok cfg ->
+      Alcotest.(check string) "custom model override" "qwen-coder" cfg.model;
+      Alcotest.(check string)
+        "custom base override" "http://127.0.0.1:18080/v1" cfg.api_base
+  | Error e -> Alcotest.failf "custom override load: %s" e);
+  (try Unix.unlink config_path with Unix.Unix_error _ -> ());
+  (try Unix.rmdir dir with Unix.Unix_error _ -> ());
+  Unix.putenv "FP_AGENT_CONFIG" "";
   (match Config.load ~model:"custom-model" () with
   | Ok cfg -> Alcotest.(check string) "model override" "custom-model" cfg.model
   | Error e -> Alcotest.failf "override load: %s" e);

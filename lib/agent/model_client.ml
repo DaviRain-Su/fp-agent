@@ -125,8 +125,10 @@ let parse_object json : (Model_action.t, string) Result.t =
   let member = Yojson.Safe.Util.member in
   let args_obj =
     match member "args" json with
-    | `Null -> ( match member "arguments" json with `Null -> json | a -> a)
-    | a -> a
+    | `Assoc _ as a -> a
+    | `Null -> (
+        match member "arguments" json with `Assoc _ as a -> a | _ -> json)
+    | _ -> json
   in
   let as_tool tool =
     Result.map (build_tool tool args_obj) ~f:(fun tc ->
@@ -175,12 +177,12 @@ let parse_action content : (Model_action.t, string) Result.t =
 
 let openai_request (config : Config.t) messages =
   let uri = Uri.of_string (config.api_base ^ "/chat/completions") in
+  let auth =
+    if String.is_empty config.api_key then []
+    else [ ("Authorization", "Bearer " ^ config.api_key) ]
+  in
   let headers =
-    Cohttp.Header.of_list
-      [
-        ("Authorization", "Bearer " ^ config.api_key);
-        ("Content-Type", "application/json");
-      ]
+    Cohttp.Header.of_list (auth @ [ ("Content-Type", "application/json") ])
   in
   let body_json =
     `Assoc

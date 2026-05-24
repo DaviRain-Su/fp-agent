@@ -21,9 +21,11 @@ let test_edit_readme_e2e () =
           Stdlib.Out_channel.output_string oc "# Project\n\nTODO: write docs\n");
       let config =
         {
+          Config.provider = "test";
           Config.api_key = "k";
           api_base = "http://localhost";
           model = "m";
+          models = [];
           protocol = Provider.Openai;
           max_steps = 10;
           workspace_root = root;

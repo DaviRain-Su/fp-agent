@@ -265,6 +265,10 @@ let print_help () =
     \  /sessions          list sessions in this workspace\n\
     \  /tree              show the session fork tree\n\
     \  /resume <dir>      switch to a session (name under sessions/ or a path)\n\
+    \  /model [id]        show or switch the current model\n\
+    \  /models            list LOCAL_MODELS entries, if configured\n\
+    \  /provider <name> [model] [api-base]\n\
+    \                     switch provider (e.g. local qwen2.5-coder:7b)\n\
     \  /log               list this session's events with indices\n\
     \  /fork [<index>]    fork the session (at an event index, or the end)\n\
     \  /diff              show uncommitted changes (git)\n\
@@ -294,7 +298,8 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
     Stdlib.Filename.concat root
       (Stdlib.Filename.concat ".ocaml-agent" "sessions")
   in
-  let model_client = Model_client.create ~config in
+  let config_ref = ref config in
+  let model_client = ref (Model_client.create ~config) in
   let policy = policy_of ~confirm in
   let session =
     ref (Option.value resume_opt ~default:(Session.create ~base_dir:root))
@@ -361,6 +366,65 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
           Stdlib.print_endline "untracked:";
           Stdlib.print_string stdout
       | _ -> ())
+  in
+  let show_current_model () =
+    Stdlib.Printf.printf "provider: %s\nmodel: %s\napi_base: %s\n%!"
+      !config_ref.provider !config_ref.model !config_ref.api_base
+  in
+  let switch_model model =
+    config_ref := { !config_ref with model };
+    model_client := Model_client.create ~config:!config_ref;
+    show_current_model ()
+  in
+  let local_models () =
+    match Stdlib.Sys.getenv_opt "LOCAL_MODELS" with
+    | None | Some "" -> []
+    | Some s ->
+        String.split s ~on:',' |> List.map ~f:String.strip
+        |> List.filter ~f:(fun s -> not (String.is_empty s))
+  in
+  let print_models () =
+    let models =
+      !config_ref.models @ local_models ()
+      |> List.dedup_and_sort ~compare:String.compare
+    in
+    match models with
+    | [] ->
+        Stdlib.print_endline
+          "(no configured models; add models to FP_AGENT_CONFIG or set \
+           LOCAL_MODELS=model-a,model-b)"
+    | models ->
+        List.iter models ~f:(fun model ->
+            let mark =
+              if String.equal model !config_ref.model then "*" else " "
+            in
+            Stdlib.Printf.printf "  %s %s\n" mark model)
+  in
+  let switch_provider args =
+    let parts =
+      String.split args ~on:' ' |> List.map ~f:String.strip
+      |> List.filter ~f:(fun s -> not (String.is_empty s))
+    in
+    match parts with
+    | [] -> Stdlib.print_endline "usage: /provider <name> [model] [api-base]"
+    | provider :: rest -> (
+        let model, api_base =
+          match rest with
+          | [] -> (None, None)
+          | [ model ] -> (Some model, None)
+          | model :: api_base :: _ -> (Some model, Some api_base)
+        in
+        match Config.load ?provider:(Some provider) ?api_base ?model () with
+        | Error e -> Stdlib.print_endline ("provider error: " ^ e)
+        | Ok next ->
+            config_ref :=
+              {
+                next with
+                workspace_root = !config_ref.workspace_root;
+                max_steps = !config_ref.max_steps;
+              };
+            model_client := Model_client.create ~config:!config_ref;
+            show_current_model ())
   in
   let oneline s =
     let flat = String.substr_replace_all s ~pattern:"\n" ~with_:" " in
@@ -433,7 +497,7 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
     "fp-agent REPL — model %s. Type /help for commands, /exit to quit.\n\
      session: %s\n\
      %!"
-    config.Config.model !session;
+    !config_ref.Config.model !session;
   warn_yolo yolo;
   let run_task task =
     checkpoint ();
@@ -447,8 +511,9 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
       Lwt_main.run
         (run_with_reporter reporter
            (Agent_loop.run ~on_event:reporter.on_event ~policy
-              ~on_approval:prompt_approval ~initial_history ~yolo ~config
-              ~model_client ~event_log:!log ~workspace ~task ()))
+              ~on_approval:prompt_approval ~initial_history ~yolo
+              ~config:!config_ref ~model_client:!model_client ~event_log:!log
+              ~workspace ~task ()))
     in
     reporter.close ();
     print_summary outcome
@@ -470,6 +535,18 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
           loop ())
         else if String.equal line "/sessions" then (
           print_sessions sessions_root !session;
+          loop ())
+        else if String.equal line "/model" then (
+          show_current_model ();
+          loop ())
+        else if String.is_prefix line ~prefix:"/model " then (
+          switch_model (String.strip (String.drop_prefix line 7));
+          loop ())
+        else if String.equal line "/models" then (
+          print_models ();
+          loop ())
+        else if String.is_prefix line ~prefix:"/provider " then (
+          switch_provider (String.strip (String.drop_prefix line 10));
           loop ())
         else if String.equal line "/diff" then (
           show_diff ();
@@ -545,8 +622,9 @@ let () =
       & opt (some string) None
       & info [ "p"; "provider" ] ~docv:"NAME"
           ~doc:
-            "Model provider: kimi (default), zhipu, or deepseek. Also reads \
-             the PROVIDER env var.")
+            "Model provider: kimi (default), zhipu, deepseek, local, or a \
+             custom provider from FP_AGENT_CONFIG. Also reads the PROVIDER env \
+             var.")
   in
   let api_base =
     Arg.(

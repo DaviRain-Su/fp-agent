@@ -39,6 +39,10 @@ dune exec -- fp-agent "fix the failing test in lib/foo.ml"
 # or another provider
 export ZAI_API_KEY=...
 dune exec -- fp-agent --provider zhipu "add a docstring to lib/foo.ml"
+
+# or a custom OpenAI-compatible endpoint
+export FP_AGENT_CONFIG=./providers.json
+dune exec -- fp-agent --provider local-llm --model qwen36-rtx "fix tests"
 ```
 
 ### Interactive REPL
@@ -56,6 +60,9 @@ dune exec -- fp-agent
 > /tree              # show the session fork tree
 > /sessions          # list sessions in this workspace
 > /resume <name>     # switch to a past session
+> /models            # list configured model ids
+> /model qwen36-rtx  # switch model inside the REPL
+> /provider local-llm qwen36-rtx
 > /tools             # preview available tools
 > /help
 > /exit
@@ -79,7 +86,8 @@ copy. Two consequences:
 
 Options:
 
-- `-p`, `--provider NAME` — `kimi` (default), `zhipu`, or `deepseek`
+- `-p`, `--provider NAME` — `kimi` (default), `zhipu`, `deepseek`, `local`,
+  or a custom provider from `FP_AGENT_CONFIG`
 - `-m`, `--model ID` — override the model id
 - `--api-base URL` — override the provider's base URL
 - `-w`, `--workspace DIR` — workspace root (default: `WORKSPACE_ROOT` or cwd)
@@ -96,15 +104,17 @@ repo, `git diff --stat`. Every run also writes a full trace to
 
 ### Providers
 
-Each provider has a built-in key env var, base URL, and default model. All carry
-the same JSON action contract; the wire protocol differs (Kimi for coding speaks
-the Anthropic Messages API, the others OpenAI chat completions).
+Built-in providers have a key env var, base URL, and default model. Custom
+providers can be loaded from JSON. All carry the same JSON action contract; the
+wire protocol differs (Kimi for coding speaks the Anthropic Messages API, the
+others OpenAI chat completions).
 
 | Provider | Key env var | Base URL | Default model | Protocol | Status |
 | --- | --- | --- | --- | --- | --- |
 | `kimi` (default) | `KIMI_API_KEY` | `https://api.kimi.com/coding` | `kimi-for-coding` | Anthropic | verified end-to-end |
 | `deepseek` | `DEEPSEEK_API_KEY` | `https://api.deepseek.com` | `deepseek-v4-flash` | OpenAI | verified end-to-end |
 | `zhipu` | `ZAI_API_KEY` | `https://api.z.ai/api/paas/v4` | `glm-4` | OpenAI | wiring verified; needs account balance |
+| `local` | optional `LOCAL_API_KEY` | `http://localhost:11434/v1` | `local-model` | OpenAI | built-in convenience profile |
 
 For DeepSeek Pro: `--model deepseek-v4-pro`.
 
@@ -112,14 +122,47 @@ For DeepSeek Pro: `--model deepseek-v4-pro`.
 > z.ai error `1113` ("Insufficient balance or no resource package"). Recharge the
 > account, then `--provider zhipu` (optionally `--model glm-5.1`) works as-is.
 
+Custom providers are looked up in `FP_AGENT_CONFIG`, `.fp-agent/providers.json`,
+`.fp-agent.json`, or `~/.config/fp-agent/providers.json`. The file can be a
+top-level provider map or `{ "providers": { ... } }`. A pi-style subset works:
+
+```json
+{
+  "local-llm": {
+    "baseUrl": "http://101.132.142.56:18080/v1",
+    "api": "openai-completions",
+    "apiKey": "dummy",
+    "compat": {
+      "supportsDeveloperRole": false,
+      "supportsReasoningEffort": false,
+      "supportsUsageInStreaming": false,
+      "maxTokensField": "max_tokens"
+    },
+    "models": [
+      {
+        "id": "qwen36-rtx",
+        "name": "qwen36-rtx",
+        "contextWindow": 131072,
+        "maxTokens": 8192
+      }
+    ]
+  }
+}
+```
+
+The current implementation uses `baseUrl`, `api`, `apiKey`, and `models[].id`
+or `models[].name`; unsupported `compat` fields are accepted but ignored.
+
 ### Environment variables
 
 | Variable | Meaning | Default |
 | --- | --- | --- |
 | `PROVIDER` | Provider to use | `kimi` |
-| `<PROVIDER>_API_KEY` | Selected provider's API key (required) | — |
+| `<PROVIDER>_API_KEY` | Built-in provider API key (`LOCAL_API_KEY` optional) | — |
+| `FP_AGENT_CONFIG` | Custom provider config file | optional |
 | `API_BASE` | Override the provider's base URL | provider default |
 | `MODEL_NAME` | Override the model id | provider default |
+| `LOCAL_MODELS` | Comma-separated extra model ids for REPL `/models` | optional |
 | `MAX_STEPS` | Max agent loop steps | `30` |
 | `WORKSPACE_ROOT` | Workspace root directory | current directory |
 

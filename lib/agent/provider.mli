@@ -1,7 +1,7 @@
 (** Supported model providers. All expose an OpenAI-compatible chat completion
     endpoint, so only the key, base URL, and default model differ. *)
 
-type t = Kimi | Zhipu | Deepseek
+type t = Kimi | Zhipu | Deepseek | Local
 
 (** Wire protocol the provider's endpoint speaks. *)
 type protocol = Openai | Anthropic
@@ -20,6 +20,9 @@ val default : t
 
 val key_env : t -> string
 (** Environment variable holding this provider's API key. *)
+
+val requires_api_key : t -> bool
+(** Whether config loading must fail when [key_env] is unset. *)
 
 val default_api_base : t -> string
 (** Default OpenAI-compatible base URL (no trailing slash). *)

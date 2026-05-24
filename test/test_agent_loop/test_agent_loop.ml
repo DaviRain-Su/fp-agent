@@ -5,9 +5,11 @@ let with_env f =
   let root = Stdlib.Filename.temp_dir "fp_agent_loop" "" in
   let config =
     {
+      Config.provider = "test";
       Config.api_key = "test-key";
       api_base = "http://localhost";
       model = "test";
+      models = [];
       protocol = Provider.Openai;
       max_steps = 10;
       workspace_root = root;
