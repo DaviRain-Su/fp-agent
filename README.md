@@ -218,9 +218,10 @@ copy. Two consequences:
   `/models`, `/model`, `/usage`, `/status`, `/instructions`, `/diff`, `/log`,
   and `/inspect` render their results directly inside the fullscreen view.
 - **Plugin smoke checks** (`/plugin-smoke [--replace] <dir>`) validate a
-  plugin and run its `examples/<tool>.args.json` files from inside the REPL or
-  fullscreen TUI, so plugin developers can keep the current agent session open
-  while testing SDK changes.
+  plugin and run `examples/<tool>.args.json` plus any
+  `examples/<tool>/*.json` case files from inside the REPL or fullscreen TUI,
+  so plugin developers can keep the current agent session open while testing
+  SDK changes.
 - **Plugin install management** (`/plugin-new [--id ID] [--tool-name NAME]
   <dir>`, `/plugin-dev [--replace] <dir>`, `/plugin-check <dir>`,
   `/plugin-install [--replace] <dir>`, `/plugin-remove <id>`) scaffolds,
@@ -275,7 +276,7 @@ Options:
 - `--plugin-tool-name NAME` — initial tool name to use with `--new-plugin`
 - `--check-plugin DIR` — validate a plugin directory, then exit
 - `--smoke-plugin DIR` — validate a plugin directory and run each tool with
-  `examples/<tool>.args.json`
+  `examples/<tool>.args.json` plus `examples/<tool>/*.json` cases
 - `--dev-plugin DIR` / `--plugin-dev DIR` — validate, smoke-test, install,
   refresh, and print plugin/tool inspection next steps, then exit
 - `--replace-plugin` with `--check-plugin` — validate replacement

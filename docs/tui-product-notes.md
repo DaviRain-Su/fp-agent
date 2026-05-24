@@ -123,7 +123,8 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - Plugin scaffolding now also accepts `--plugin-tool-name`, so the manifest,
   README, and smoke-test args file start with the developer's real first tool.
 - Plugin local development now has `--smoke-plugin`, which validates a plugin
-  and runs each tool against `examples/<tool>.args.json` before install.
+  and runs each tool against `examples/<tool>.args.json` plus any sorted
+  `examples/<tool>/*.json` case files before install.
 - Plugin smoke checks are now available inside the REPL and fullscreen TUI as
   `/plugin-smoke [--replace] <dir>`, backed by the same SDK smoke runner as the
   CLI.

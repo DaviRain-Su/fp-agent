@@ -648,15 +648,58 @@ let smoke_arg_candidates dir tool_name =
     [ Stdlib.Filename.concat examples "hello.args.json" ]
   else []
 
-let smoke_args_file dir tool_name =
-  List.find (smoke_arg_candidates dir tool_name) ~f:Stdlib.Sys.file_exists
+let smoke_case_dir dir tool_name =
+  Stdlib.Filename.concat (Stdlib.Filename.concat dir "examples") tool_name
+
+let is_regular_file path =
+  Stdlib.Sys.file_exists path
+  &&
+  match Stdlib.Sys.is_directory path with
+  | true -> false
+  | false -> true
+  | exception _ -> false
+
+let smoke_case_files dir tool_name =
+  let case_dir = smoke_case_dir dir tool_name in
+  if not (Stdlib.Sys.file_exists case_dir) then []
+  else
+    match Stdlib.Sys.is_directory case_dir with
+    | false -> []
+    | true -> (
+        match Stdlib.Sys.readdir case_dir with
+        | exception _ -> []
+        | entries ->
+            Array.sort entries ~compare:String.compare;
+            Array.to_list entries
+            |> List.filter_map ~f:(fun name ->
+                if not (String.is_suffix name ~suffix:".json") then None
+                else
+                  let path = Stdlib.Filename.concat case_dir name in
+                  if is_regular_file path then Some path else None))
+    | exception _ -> []
+
+let unique_paths paths =
+  let rec loop seen acc = function
+    | [] -> List.rev acc
+    | path :: rest ->
+        if List.mem seen path ~equal:String.equal then loop seen acc rest
+        else loop (path :: seen) (path :: acc) rest
+  in
+  loop [] [] paths
+
+let smoke_args_files dir tool_name =
+  (smoke_arg_candidates dir tool_name |> List.filter ~f:is_regular_file)
+  @ smoke_case_files dir tool_name
+  |> unique_paths
 
 let smoke_error_line dir tool_name =
   let expected =
     smoke_arg_candidates dir tool_name |> String.concat ~sep:", "
   in
-  Printf.sprintf "missing smoke args for tool %s; expected one of: %s" tool_name
-    expected
+  Printf.sprintf
+    "missing smoke args for tool %s; expected one of: %s or JSON files under %s"
+    tool_name expected
+    (smoke_case_dir dir tool_name)
 
 let run_smoke_tool manifest workspace (tool : plugin_tool) args =
   match plugin_check tool.tool_kind workspace args with
@@ -674,22 +717,36 @@ let smoke ?(replace = false) ~workspace dir =
         match tools with
         | [] -> Ok (List.rev acc)
         | tool :: rest -> (
-            match smoke_args_file dir tool.tool_name with
-            | None -> Error (smoke_error_line dir tool.tool_name)
-            | Some args_file -> (
-                match read_json_file args_file with
+            match smoke_args_files dir tool.tool_name with
+            | [] -> Error (smoke_error_line dir tool.tool_name)
+            | args_files -> (
+                let tool_results =
+                  List.fold args_files ~init:(Ok acc) ~f:(fun acc args_file ->
+                      match acc with
+                      | Error _ as e -> e
+                      | Ok acc -> (
+                          match read_json_file args_file with
+                          | Error _ as e -> e
+                          | Ok args -> (
+                              match
+                                run_smoke_tool manifest workspace tool args
+                              with
+                              | Tool_result.Success { output } ->
+                                  Ok
+                                    ({
+                                       tool_name = tool.tool_name;
+                                       args_file;
+                                       output;
+                                     }
+                                    :: acc)
+                              | Tool_result.Error { message } ->
+                                  Error
+                                    (Printf.sprintf "%s (%s) failed: %s"
+                                       tool.tool_name args_file message))))
+                in
+                match tool_results with
                 | Error _ as e -> e
-                | Ok args -> (
-                    match run_smoke_tool manifest workspace tool args with
-                    | Tool_result.Success { output } ->
-                        loop
-                          ({ tool_name = tool.tool_name; args_file; output }
-                          :: acc)
-                          rest
-                    | Tool_result.Error { message } ->
-                        Error
-                          (Printf.sprintf "%s failed: %s" tool.tool_name message)
-                    )))
+                | Ok acc -> loop acc rest))
       in
       loop [] manifest.tools
 
@@ -889,6 +946,12 @@ Run the full development loop:
 dune exec -- fp-agent --dev-plugin . --replace-plugin
 ```
 
+Add more smoke cases for this tool by placing JSON files under:
+
+```text
+examples/%s/
+```
+
 Validate:
 
 ```sh
@@ -921,6 +984,6 @@ Install it with:
 dune exec -- fp-agent --install-plugin --replace .
 ```
 |}
-                   id tool_name id tool_name tool_name));
+                   id tool_name id tool_name tool_name tool_name));
           Ok dir
         with exn -> Error ("plugin scaffold failed: " ^ Exn.to_string exn))

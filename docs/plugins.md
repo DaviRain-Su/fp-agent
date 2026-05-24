@@ -122,8 +122,9 @@ sees it: kind, description, and input schema. This works for both built-in and
 plugin tools.
 
 `/plugin-smoke [--replace] <dir>` validates a plugin directory and runs every
-tool against its `examples/<tool>.args.json` file without leaving the current
-REPL or fullscreen TUI session.
+tool against `examples/<tool>.args.json` plus any sorted
+`examples/<tool>/*.json` case files without leaving the current REPL or
+fullscreen TUI session.
 
 `/plugin-dev [--replace] <dir>` runs the normal local development loop in one
 step: validate the manifest, run smoke examples, install the plugin, refresh the
@@ -158,7 +159,8 @@ dune exec -- fp-agent --new-plugin my-plugin --plugin-tool-name my_tool
 
 The scaffold includes `fp-agent-plugin.json`, `hello.sh`, a README with the
 local development commands, and `examples/<tool>.args.json` for a first
-`--run-plugin-tool` smoke test.
+`--run-plugin-tool` smoke test. Add more JSON files under `examples/<tool>/` to
+run multiple smoke cases for the same tool.
 
 Validate it before installing:
 
@@ -182,9 +184,10 @@ dune exec -- fp-agent --run-plugin-tool my-plugin \
   --plugin-args '{"message":"hi"}'
 ```
 
-You can also keep reusable smoke-test inputs in files. The convention is
-`examples/<tool>.args.json`, and `--smoke-plugin` runs every tool with its
-matching file:
+You can also keep reusable smoke-test inputs in files. The default convention is
+`examples/<tool>.args.json`, and additional cases can live under
+`examples/<tool>/*.json`. `--smoke-plugin` runs every matching file for each
+tool:
 
 ```sh
 dune exec -- fp-agent --smoke-plugin my-plugin

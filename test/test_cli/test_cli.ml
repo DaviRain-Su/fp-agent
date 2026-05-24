@@ -120,6 +120,14 @@ let test_plugin_lifecycle_cli () =
     (Stdlib.Sys.file_exists
        (Stdlib.Filename.concat plugin_dir
           (Stdlib.Filename.concat "examples" "hello_world.args.json")));
+  let smoke_cases_dir =
+    Stdlib.Filename.concat plugin_dir
+      (Stdlib.Filename.concat "examples" "hello_world")
+  in
+  mkdir_p smoke_cases_dir;
+  write_file
+    (Stdlib.Filename.concat smoke_cases_dir "01-case.json")
+    {|{"message":"from-case"}|};
   let checked = run ~env [ bin; "--check-plugin"; plugin_dir ] in
   assert_success "check plugin" checked;
   assert_contains "check output" checked.stdout "plugin manifest ok";
@@ -129,6 +137,9 @@ let test_plugin_lifecycle_cli () =
   assert_contains "smoke output" smoked.stdout "smoke ok: hello_world";
   assert_contains "smoke tool output" smoked.stdout
     "hello from fp-agent plugin:";
+  assert_contains "smoke case file" smoked.stdout
+    "examples/hello_world/01-case.json";
+  assert_contains "smoke case output" smoked.stdout "from-case";
   let missing_smoke_dir = Stdlib.Filename.concat root "missing-smoke" in
   assert_success "new plugin missing smoke"
     (run ~env [ bin; "--new-plugin"; missing_smoke_dir ]);

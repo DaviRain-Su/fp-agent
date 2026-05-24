@@ -411,27 +411,52 @@ let test_run_tool_for_plugin_development () =
 let test_smoke_runs_example_args () =
   with_temp_dir "fp_agent_plugin_smoke" (fun root ->
       let plugin_dir = Stdlib.Filename.concat root "plugin" in
+      let cases_dir =
+        Stdlib.Filename.concat plugin_dir
+          (Stdlib.Filename.concat "examples" "plugin_smoke_echo")
+      in
       mkdir_p plugin_dir;
+      mkdir_p cases_dir;
       write_plugin plugin_dir ~id:"com.example.smoke"
         ~tool_name:"plugin_smoke_echo" ~kind:"read";
       write
         (Stdlib.Filename.concat plugin_dir
            (Stdlib.Filename.concat "examples" "plugin_smoke_echo.args.json"))
         {|{"message":"from-smoke"}|};
+      write
+        (Stdlib.Filename.concat cases_dir "01-safe.json")
+        {|{"message":"from-case-1"}|};
+      write
+        (Stdlib.Filename.concat cases_dir "02-edge.json")
+        {|{"message":"from-case-2"}|};
       match Plugin.smoke ~workspace:(workspace root) plugin_dir with
       | Error e -> Alcotest.failf "smoke failed: %s" e
-      | Ok [ result ] ->
+      | Ok [ default; case_1; case_2 ] ->
           Alcotest.(check string)
-            "smoke tool" "plugin_smoke_echo" result.tool_name;
+            "default smoke tool" "plugin_smoke_echo" default.tool_name;
           Alcotest.(check bool)
-            "smoke args file" true
-            (String.is_suffix result.args_file
+            "default smoke args file" true
+            (String.is_suffix default.args_file
                ~suffix:"examples/plugin_smoke_echo.args.json");
           Alcotest.(check bool)
-            "smoke output" true
-            (String.is_substring result.output ~substring:"from-smoke")
+            "default smoke output" true
+            (String.is_substring default.output ~substring:"from-smoke");
+          Alcotest.(check bool)
+            "case 1 args file" true
+            (String.is_suffix case_1.args_file
+               ~suffix:"examples/plugin_smoke_echo/01-safe.json");
+          Alcotest.(check bool)
+            "case 1 output" true
+            (String.is_substring case_1.output ~substring:"from-case-1");
+          Alcotest.(check bool)
+            "case 2 args file" true
+            (String.is_suffix case_2.args_file
+               ~suffix:"examples/plugin_smoke_echo/02-edge.json");
+          Alcotest.(check bool)
+            "case 2 output" true
+            (String.is_substring case_2.output ~substring:"from-case-2")
       | Ok results ->
-          Alcotest.failf "expected one smoke result, got %d"
+          Alcotest.failf "expected three smoke results, got %d"
             (List.length results))
 
 let test_tool_loader_refreshes_removed_plugins () =
@@ -812,6 +837,9 @@ let test_scaffold_creates_valid_plugin () =
             "readme documents cli plugin dev" true
             (String.is_substring readme
                ~substring:"--dev-plugin . --replace-plugin");
+          Alcotest.(check bool)
+            "readme documents multi-case smoke" true
+            (String.is_substring readme ~substring:"examples/scaffold_echo/");
           Alcotest.(check bool)
             "readme documents replace install" true
             (String.is_substring readme ~substring:"/plugin-install --replace .");
