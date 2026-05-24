@@ -201,6 +201,73 @@ let test_run_tool_for_plugin_development () =
             "output includes args" true
             (String.is_substring output ~substring:{|"message":"hello"|}))
 
+let test_run_tool_validates_input_schema () =
+  with_temp_dir "fp_agent_plugin_schema_validation" (fun root ->
+      let plugin_dir = Stdlib.Filename.concat root "plugin" in
+      let marker = Stdlib.Filename.concat plugin_dir "ran" in
+      mkdir_p plugin_dir;
+      write_plugin plugin_dir ~id:"com.example.schema_validation"
+        ~tool_name:"plugin_schema_guard" ~kind:"read";
+      write
+        (Stdlib.Filename.concat plugin_dir "echo.sh")
+        "touch ran\nprintf 'should not run'\n";
+      let run args =
+        Plugin.run_tool ~dir:plugin_dir ~tool_name:"plugin_schema_guard"
+          ~workspace:(workspace root) ~args
+      in
+      let assert_schema_error label args substring =
+        match run args with
+        | Error e -> Alcotest.failf "%s load error: %s" label e
+        | Ok (Tool_result.Success { output }) ->
+            Alcotest.failf "%s unexpectedly succeeded: %s" label output
+        | Ok (Tool_result.Error { message }) ->
+            Alcotest.(check bool)
+              (label ^ " prefix") true
+              (String.is_substring message ~substring:"schema validation failed");
+            Alcotest.(check bool)
+              (label ^ " detail") true
+              (String.is_substring message ~substring)
+      in
+      assert_schema_error "missing required" (`Assoc [])
+        "missing required field 'message'";
+      assert_schema_error "wrong type"
+        (`Assoc [ ("message", `Int 1) ])
+        "field 'message' expected string";
+      assert_schema_error "root type" (`String "hello") "args expected object";
+      Alcotest.(check bool)
+        "plugin command was not executed" false
+        (Stdlib.Sys.file_exists marker))
+
+let test_run_tool_ignores_unsupported_schema_shape () =
+  with_temp_dir "fp_agent_plugin_schema_shape" (fun root ->
+      let plugin_dir = Stdlib.Filename.concat root "plugin" in
+      mkdir_p plugin_dir;
+      write
+        (Stdlib.Filename.concat plugin_dir Plugin.manifest_file)
+        {|{
+  "id": "com.example.schema_shape",
+  "tools": [
+    {
+      "name": "plugin_schema_shape",
+      "kind": "read",
+      "description": "Uses an unsupported schema shape",
+      "command": "sh echo.sh",
+      "input_schema": true
+    }
+  ]
+}
+|};
+      write (Stdlib.Filename.concat plugin_dir "echo.sh") "cat\n";
+      match
+        Plugin.run_tool ~dir:plugin_dir ~tool_name:"plugin_schema_shape"
+          ~workspace:(workspace root) ~args:(`Assoc [])
+      with
+      | Error e -> Alcotest.failf "run_tool failed: %s" e
+      | Ok (Tool_result.Error { message }) ->
+          Alcotest.failf "plugin returned error: %s" message
+      | Ok (Tool_result.Success { output }) ->
+          Alcotest.(check string) "unsupported schema ignored" "{}" output)
+
 let test_run_tool_reports_unknown_tool () =
   with_temp_dir "fp_agent_plugin_unknown_tool" (fun root ->
       let plugin_dir = Stdlib.Filename.concat root "plugin" in
@@ -334,6 +401,10 @@ let () =
             test_install_plugin_copies_to_home;
           Alcotest.test_case "run_tool" `Quick
             test_run_tool_for_plugin_development;
+          Alcotest.test_case "run_tool_schema_validation" `Quick
+            test_run_tool_validates_input_schema;
+          Alcotest.test_case "run_tool_unsupported_schema_shape" `Quick
+            test_run_tool_ignores_unsupported_schema_shape;
           Alcotest.test_case "run_tool_unknown" `Quick
             test_run_tool_reports_unknown_tool;
           Alcotest.test_case "scaffold_plugin" `Quick

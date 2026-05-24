@@ -40,6 +40,133 @@ let json_string obj names =
 let json_int obj names =
   match json_member obj names with Some (`Int i) -> Some i | _ -> None
 
+let schema_member name = function
+  | `Assoc _ as schema -> Yojson.Safe.Util.member name schema
+  | _ -> `Null
+
+let schema_types schema =
+  match schema_member "type" schema with
+  | `String s -> [ s ]
+  | `List values ->
+      List.filter_map values ~f:(function `String s -> Some s | _ -> None)
+  | _ -> []
+
+let type_matches expected (value : Yojson.Safe.t) =
+  match (expected, value) with
+  | "string", `String _ -> true
+  | "number", (`Int _ | `Intlit _ | `Float _) -> true
+  | "integer", (`Int _ | `Intlit _) -> true
+  | "boolean", `Bool _ -> true
+  | "object", `Assoc _ -> true
+  | "array", `List _ -> true
+  | "null", `Null -> true
+  | _ -> false
+
+let schema_path_label = function
+  | "$" -> "args"
+  | path -> Printf.sprintf "field '%s'" path
+
+let field_path parent name =
+  if String.equal parent "$" then name else parent ^ "." ^ name
+
+let item_path parent index = Printf.sprintf "%s[%d]" parent index
+
+let expected_types_label types =
+  match types with
+  | [] -> "value"
+  | [ type_ ] -> type_
+  | _ -> "one of " ^ String.concat types ~sep:", "
+
+let required_fields schema =
+  match schema_member "required" schema with
+  | `List values ->
+      List.filter_map values ~f:(function `String s -> Some s | _ -> None)
+  | _ -> []
+
+let rec validate_schema ~path (schema : Yojson.Safe.t) (value : Yojson.Safe.t) =
+  let types = schema_types schema in
+  let type_result =
+    if
+      List.is_empty types
+      || List.exists types ~f:(fun t -> type_matches t value)
+    then Ok ()
+    else
+      Error
+        (Printf.sprintf "%s expected %s" (schema_path_label path)
+           (expected_types_label types))
+  in
+  match type_result with
+  | Error _ as e -> e
+  | Ok () -> validate_schema_keywords ~path schema value
+
+and validate_schema_keywords ~path (schema : Yojson.Safe.t)
+    (value : Yojson.Safe.t) =
+  let has_object_keywords =
+    match
+      (schema_member "required" schema, schema_member "properties" schema)
+    with
+    | `Null, `Null -> false
+    | _ -> true
+  in
+  let object_result =
+    if has_object_keywords then
+      match value with
+      | `Assoc fields -> validate_object_schema ~path schema fields
+      | _ ->
+          Error (Printf.sprintf "%s expected object" (schema_path_label path))
+    else Ok ()
+  in
+  match object_result with
+  | Error _ as e -> e
+  | Ok () -> validate_array_schema ~path schema value
+
+and validate_object_schema ~path schema fields =
+  let required_result =
+    List.fold (required_fields schema) ~init:(Ok ()) ~f:(fun acc name ->
+        match acc with
+        | Error _ as e -> e
+        | Ok () -> (
+            match List.Assoc.find fields name ~equal:String.equal with
+            | Some _ -> Ok ()
+            | None ->
+                Error
+                  (Printf.sprintf "missing required field '%s'"
+                     (field_path path name))))
+  in
+  match required_result with
+  | Error _ as e -> e
+  | Ok () -> (
+      match schema_member "properties" schema with
+      | `Assoc properties ->
+          List.fold properties ~init:(Ok ())
+            ~f:(fun acc (name, property_schema) ->
+              match acc with
+              | Error _ as e -> e
+              | Ok () -> (
+                  match List.Assoc.find fields name ~equal:String.equal with
+                  | None -> Ok ()
+                  | Some value ->
+                      validate_schema ~path:(field_path path name)
+                        property_schema value))
+      | _ -> Ok ())
+
+and validate_array_schema ~path (schema : Yojson.Safe.t) (value : Yojson.Safe.t)
+    =
+  match (schema_member "items" schema, value) with
+  | `Null, _ -> Ok ()
+  | item_schema, `List values ->
+      List.foldi values ~init:(Ok ()) ~f:(fun index acc item ->
+          match acc with
+          | Error _ as e -> e
+          | Ok () ->
+              validate_schema ~path:(item_path path index) item_schema item)
+  | _, _ -> Ok ()
+
+let validate_args_schema schema args =
+  match schema with
+  | None -> Ok ()
+  | Some schema -> validate_schema ~path:"$" schema args
+
 let req_string obj name =
   match json_string obj [ name ] with
   | Some s when not (String.is_empty (String.strip s)) -> Ok s
@@ -241,40 +368,46 @@ let output_of_result result =
   else "(plugin produced no output)"
 
 let run_plugin_tool manifest tool workspace args =
-  let tmp = Stdlib.Filename.temp_file "fp_agent_plugin_args" ".json" in
-  let cleanup () = try Unix.unlink tmp with Unix.Unix_error _ -> () in
-  Exn.protect
-    ~f:(fun () ->
-      Stdlib.Out_channel.with_open_bin tmp (fun oc ->
-          Stdlib.Out_channel.output_string oc (Yojson.Safe.to_string args));
-      let command =
-        Printf.sprintf
-          "cd %s && FP_AGENT_WORKSPACE=%s FP_AGENT_PLUGIN_DIR=%s \
-           FP_AGENT_TOOL_NAME=%s %s < %s"
-          (Stdlib.Filename.quote manifest.dir)
-          (Stdlib.Filename.quote (Workspace.root workspace))
-          (Stdlib.Filename.quote manifest.dir)
-          (Stdlib.Filename.quote tool.tool_name)
-          tool.tool_command
-          (Stdlib.Filename.quote tmp)
-      in
-      match Shell.run ~command ~timeout_sec:tool.tool_timeout_sec with
-      | Error e -> Tool_result.Error { message = e }
-      | Ok ({ exit_code = 0; _ } as result) ->
-          Tool_result.Success { output = output_of_result result }
-      | Ok result ->
-          Tool_result.Error
-            {
-              message =
-                Printf.sprintf "plugin %s failed (exit %d): %s" tool.tool_name
-                  result.exit_code (output_of_result result);
-            })
-    ~finally:cleanup
+  match validate_args_schema tool.tool_input_schema args with
+  | Error e -> Tool_result.Error { message = "schema validation failed: " ^ e }
+  | Ok () ->
+      let tmp = Stdlib.Filename.temp_file "fp_agent_plugin_args" ".json" in
+      let cleanup () = try Unix.unlink tmp with Unix.Unix_error _ -> () in
+      Exn.protect
+        ~f:(fun () ->
+          Stdlib.Out_channel.with_open_bin tmp (fun oc ->
+              Stdlib.Out_channel.output_string oc (Yojson.Safe.to_string args));
+          let command =
+            Printf.sprintf
+              "cd %s && FP_AGENT_WORKSPACE=%s FP_AGENT_PLUGIN_DIR=%s \
+               FP_AGENT_TOOL_NAME=%s %s < %s"
+              (Stdlib.Filename.quote manifest.dir)
+              (Stdlib.Filename.quote (Workspace.root workspace))
+              (Stdlib.Filename.quote manifest.dir)
+              (Stdlib.Filename.quote tool.tool_name)
+              tool.tool_command
+              (Stdlib.Filename.quote tmp)
+          in
+          match Shell.run ~command ~timeout_sec:tool.tool_timeout_sec with
+          | Error e -> Tool_result.Error { message = e }
+          | Ok ({ exit_code = 0; _ } as result) ->
+              Tool_result.Success { output = output_of_result result }
+          | Ok result ->
+              Tool_result.Error
+                {
+                  message =
+                    Printf.sprintf "plugin %s failed (exit %d): %s"
+                      tool.tool_name result.exit_code (output_of_result result);
+                })
+        ~finally:cleanup
 
 let plugin_check kind workspace args =
   let path =
-    match Yojson.Safe.Util.member "path" args with
-    | `String path -> Some path
+    match args with
+    | `Assoc _ -> (
+        match Yojson.Safe.Util.member "path" args with
+        | `String path -> Some path
+        | _ -> None)
     | _ -> None
   in
   match (kind, path) with
@@ -433,7 +566,8 @@ let scaffold ?id dir =
         "type": "object",
         "properties": {
           "message": { "type": "string" }
-        }
+        },
+        "required": ["message"]
       }
     }
   ]

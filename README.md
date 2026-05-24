@@ -83,7 +83,9 @@ request remains unchanged in the event log for audit and resume.
 
 Third-party tools can be added as plugin directories with a
 `fp-agent-plugin.json` manifest. A plugin tool receives JSON args on stdin and
-returns its result on stdout.
+returns its result on stdout. `input_schema` is enforced before the plugin
+command runs, so developers get local feedback from `--run-plugin-tool` without
+spending a model call.
 
 ```sh
 export FP_AGENT_PLUGIN_PATH=$PWD/examples/plugins/echo

@@ -186,6 +186,22 @@ let test_plugin_tool_debug_cli () =
   in
   assert_failure "bad plugin JSON" bad_json;
   assert_contains "bad json stderr" bad_json.stderr "invalid plugin args JSON";
+  let bad_args =
+    run ~env
+      [
+        bin;
+        "--run-plugin-tool";
+        plugin_dir;
+        "--plugin-tool";
+        "hello_world";
+        "--plugin-args";
+        "{}";
+      ]
+  in
+  assert_failure "bad plugin args" bad_args;
+  assert_contains "bad args stderr" bad_args.stderr "schema validation failed";
+  assert_contains "bad args detail" bad_args.stderr
+    "missing required field 'message'";
   let missing =
     run ~env
       [
