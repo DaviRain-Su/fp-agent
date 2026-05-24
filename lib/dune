@@ -1,3 +1,5 @@
 (library
  (name fp_agent)
- (libraries base))
+ (libraries base yojson)
+ (preprocess
+  (pps ppx_yojson_conv)))

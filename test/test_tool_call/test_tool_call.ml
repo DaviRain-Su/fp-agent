@@ -6,9 +6,7 @@ let yojson_roundtrip name of_yojson to_yojson value =
   match of_yojson json with
   | Ok decoded ->
       Alcotest.(check (testable Yojson.Safe.pp Yojson.Safe.equal))
-        (name ^ " roundtrip")
-        json
-        (to_yojson decoded)
+        (name ^ " roundtrip") json (to_yojson decoded)
   | Error msg -> Alcotest.fail (name ^ " decode failed: " ^ msg)
 
 let test_tool_call_roundtrips () =
@@ -16,13 +14,16 @@ let test_tool_call_roundtrips () =
     [
       ("Read_file", Tool_call.Read_file { path = "lib/foo.ml" });
       ( "Write_file",
-        Tool_call.Write_file { path = "lib/foo.ml"; content = "let x = 42" }
-      );
+        Tool_call.Write_file { path = "lib/foo.ml"; content = "let x = 42" } );
       ( "Edit_file",
         Tool_call.Edit_file
-          { path = "lib/foo.ml"; old_text = "let x = 42"; new_text = "let x = 43" }
-      );
-      ("Run_command", Tool_call.Run_command { command = "dune build"; cwd = None });
+          {
+            path = "lib/foo.ml";
+            old_text = "let x = 42";
+            new_text = "let x = 43";
+          } );
+      ( "Run_command",
+        Tool_call.Run_command { command = "dune build"; cwd = None } );
       ( "Run_command_with_cwd",
         Tool_call.Run_command { command = "make test"; cwd = Some "/tmp" } );
       ("List_files", Tool_call.List_files { path = "lib" });
@@ -62,12 +63,12 @@ let test_event_roundtrips () =
           { action = Model_action.Final_answer { answer = "Done" } } );
       ( "Tool_call",
         Event.Tool_call (Tool_call.Read_file { path = "lib/foo.ml" }) );
-      ( "Tool_result",
-        Event.Tool_result (Tool_result.Success { output = "42" }) );
+      ("Tool_result", Event.Tool_result (Tool_result.Success { output = "42" }));
       ( "State_transition",
         Event.State_transition
-          { from_state = Agent_state.Initializing;
-            to_state = Agent_state.Waiting_for_model
+          {
+            from_state = Agent_state.Initializing;
+            to_state = Agent_state.Waiting_for_model;
           } );
     ]
   in
@@ -80,11 +81,7 @@ let test_invalid_json () =
       ("Tool_call: missing tag", `Assoc [ ("path", `String "foo.ml") ]);
       ("Tool_call: unknown tag", `Assoc [ ("tag", `String "Delete_file") ]);
       ( "Tool_call: wrong shape",
-        `Assoc
-          [
-            ("tag", `String "Read_file");
-            ("path", `Int 42);
-          ] );
+        `Assoc [ ("tag", `String "Read_file"); ("path", `Int 42) ] );
       ("Tool_result: empty", `Assoc []);
       ("Model_action: empty", `Assoc []);
       ("Event: empty", `Assoc []);

@@ -1,0 +1,5 @@
+(test
+ (name test_agent_state)
+ (libraries fp_agent alcotest yojson base)
+ (preprocess
+  (pps ppx_yojson_conv)))
