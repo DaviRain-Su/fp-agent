@@ -1,4 +1,0 @@
-(executable
- (public_name fp-agent)
- (name main)
- (libraries fp_agent))

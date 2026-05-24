@@ -1,5 +1,0 @@
-(lang dune 3.23)
-(name fp_agent)
-(version 0.1.0)
-(sections (lib .) (bin ../../bin))
-(files (lib (META dune-package opam)) (bin (fp-agent)))
