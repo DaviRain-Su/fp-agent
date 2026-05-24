@@ -37,6 +37,8 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - The inspector now expands the latest event into a stable type label, summary,
   key tool/policy/result fields, and a JSON preview, keeping audit details close
   to the live run.
+- The REPL exposes the same inspector through `/inspect [index]`, so event-log
+  review works even outside a full-screen TUI and can target historical events.
 - CLI regression tests cover plugin lifecycle commands, REPL plugin/tool
   discovery, custom provider model listing/switching, and `--confirm --tui`
   rejection.

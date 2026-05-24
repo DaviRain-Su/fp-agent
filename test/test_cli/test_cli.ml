@@ -179,6 +179,40 @@ let test_repl_lists_and_switches_custom_provider_models () =
   assert_contains "provider switched" repl.stdout "provider: local-llm";
   assert_contains "model switched" repl.stdout "model: qwen36-rtx"
 
+let test_repl_inspects_session_events () =
+  let root = tmp_dir "fp-agent-cli-inspect-" in
+  let env = isolated_env root in
+  let workspace =
+    match List.Assoc.find env "WORKSPACE_ROOT" ~equal:String.equal with
+    | Some path -> path
+    | None -> Alcotest.fail "missing workspace env"
+  in
+  let sessions_root =
+    Stdlib.Filename.concat workspace
+      (Stdlib.Filename.concat ".ocaml-agent" "sessions")
+  in
+  mkdir_p sessions_root;
+  let session_dir = Stdlib.Filename.concat sessions_root "inspect-session" in
+  mkdir_p session_dir;
+  write_file
+    (Stdlib.Filename.concat session_dir "events.jsonl")
+    {|{"schema_version":1,"ts":"2026-05-24T00:00:00Z","event":["Tool_call",{"name":"search","args":{"query":"Plugin","path":"lib"}}]}
+|};
+  let repl =
+    run ~env
+      ~stdin:"/log\n/inspect 0\n/inspect\n/inspect 3\n/inspect nope\n/exit\n"
+      [ fp_agent_bin (); "--resume"; session_dir ]
+  in
+  assert_success "repl inspect command" repl;
+  assert_contains "log includes event" repl.stdout "tool_call search";
+  assert_contains "inspect prints index" repl.stdout "event 0";
+  assert_contains "inspect kind" repl.stdout "kind: tool_call";
+  assert_contains "inspect tool" repl.stdout "tool: search";
+  assert_contains "inspect args" repl.stdout "\"query\": \"Plugin\"";
+  assert_contains "inspect json" repl.stdout "JSON";
+  assert_contains "inspect range" repl.stdout "no event at index 3 (0..0)";
+  assert_contains "inspect usage" repl.stdout "usage: /inspect [event-index]"
+
 let test_tui_confirm_conflict_fails_before_config () =
   let root = tmp_dir "fp-agent-cli-tui-" in
   let env = isolated_env root in
@@ -199,6 +233,8 @@ let () =
             test_repl_lists_dynamic_plugin_tools;
           Alcotest.test_case "custom provider models" `Quick
             test_repl_lists_and_switches_custom_provider_models;
+          Alcotest.test_case "repl inspect events" `Quick
+            test_repl_inspects_session_events;
           Alcotest.test_case "tui confirm conflict" `Quick
             test_tui_confirm_conflict_fails_before_config;
         ] );

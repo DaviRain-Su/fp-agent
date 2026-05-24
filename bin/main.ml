@@ -369,6 +369,7 @@ let print_help () =
     \  /provider <name> [model] [api-base]\n\
     \                     switch provider (e.g. local qwen2.5-coder:7b)\n\
     \  /log               list this session's events with indices\n\
+    \  /inspect [index]   show inspector details for an event (default: last)\n\
     \  /fork [<index>]    fork the session (at an event index, or the end)\n\
     \  /diff              show uncommitted changes (git)\n\
     \  /undo              revert the last turn's changes (git)\n\
@@ -583,6 +584,33 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
         List.iteri events ~f:(fun i e ->
             Stdlib.Printf.printf "  %3d  %s\n" i (describe_event e))
   in
+  let print_inspect arg =
+    match Journal.read ~session_dir:!session with
+    | Error e -> Stdlib.print_endline e
+    | Ok [] -> Stdlib.print_endline "(no events yet)"
+    | Ok events -> (
+        let max_index = List.length events - 1 in
+        let index =
+          if String.is_empty arg then Ok max_index
+          else
+            try
+              let i = Int.of_string arg in
+              if i < 0 then Error "usage: /inspect [event-index]" else Ok i
+            with _ -> Error "usage: /inspect [event-index]"
+        in
+        match index with
+        | Error e -> Stdlib.print_endline e
+        | Ok i -> (
+            match List.nth events i with
+            | None ->
+                Stdlib.Printf.printf "no event at index %d (0..%d)\n" i
+                  max_index
+            | Some event ->
+                Stdlib.Printf.printf "event %d\n" i;
+                List.iter
+                  (View.event_inspector_lines event)
+                  ~f:Stdlib.print_endline))
+  in
   let print_tree () =
     match Stdlib.Sys.readdir sessions_root with
     | exception _ -> Stdlib.print_endline "(no sessions yet)"
@@ -691,6 +719,12 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
           loop ())
         else if String.equal line "/log" then (
           print_log ();
+          loop ())
+        else if String.equal line "/inspect" then (
+          print_inspect "";
+          loop ())
+        else if String.is_prefix line ~prefix:"/inspect " then (
+          print_inspect (String.strip (String.drop_prefix line 9));
           loop ())
         else if String.equal line "/tree" then (
           print_tree ();

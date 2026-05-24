@@ -64,6 +64,7 @@ dune exec -- fp-agent
 > /model qwen36-rtx  # switch model inside the REPL
 > /provider local-llm qwen36-rtx
 > /tools             # preview available tools
+> /inspect 12        # inspect event 12: tool args/result/policy/JSON
 > /help
 > /exit
 ```
@@ -108,6 +109,9 @@ copy. Two consequences:
   log is a prefix of the parent's, so replaying it yields the state at that
   point. Sessions therefore form a **tree** (`/tree`), letting you explore
   alternative continuations without disturbing the original branch.
+- **Inspect** (`/inspect [index]`) renders the same event inspector used by the
+  TUI: event kind, summary, tool args, policy/result details, and a JSON
+  preview. With no index it inspects the latest event.
 
 Options:
 
