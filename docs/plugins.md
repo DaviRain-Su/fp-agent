@@ -107,6 +107,7 @@ Use the REPL command:
 ```text
 /plugins
 /plugin-doctor
+/plugin-sdk
 /plugin echo_json
 /plugin-new --id com.example.echo --tool-name echo_json --kind read --template python my-plugin
 /plugin-dev --replace my-plugin
@@ -131,6 +132,10 @@ while the rest of the valid plugin remains visible.
 home, valid/invalid plugin counts, tool-name conflict count, invalid manifest
 details, and next inspection commands. Use it when a plugin was installed but a
 tool is missing from `/tools`.
+
+`/plugin-sdk` prints the supported manifest SDK version, built-in scaffold
+templates, generated files, runtime environment variables, and a short local
+development loop. `/plugin-templates` is an alias.
 
 `/plugin <plugin-id|tool-name>` prints the manifest details for one plugin:
 directory, version, tool kind, permissions, approval reason, command, timeout,
@@ -188,6 +193,12 @@ choose the generated runtime starter. Supported templates are `shell` and
 dune exec -- fp-agent --new-plugin my-plugin --plugin-tool-name my_tool
 dune exec -- fp-agent --new-plugin my-plugin --plugin-kind exec
 dune exec -- fp-agent --new-plugin my-plugin --plugin-template python
+```
+
+List the current SDK contract and templates without opening the REPL:
+
+```sh
+dune exec -- fp-agent --plugin-sdk
 ```
 
 The scaffold includes `fp-agent-plugin.json`, a README with the local
@@ -283,6 +294,12 @@ Inspect discovery and install diagnostics:
 
 ```sh
 dune exec -- fp-agent --doctor-plugins
+```
+
+Inspect the SDK contract and built-in templates:
+
+```sh
+dune exec -- fp-agent --plugin-sdk
 ```
 
 The list command also reports invalid installed manifests under

@@ -29,8 +29,19 @@ type tool_conflict = {
 
 type smoke_result = { tool_name : string; args_file : string; output : string }
 
+type scaffold_template_info = {
+  template_id : string;
+  template_aliases : string list;
+  template_command : string;
+  template_files : string list;
+  template_description : string;
+}
+
 val manifest_file : string
 val supported_sdk_version : int
+
+val scaffold_templates : unit -> scaffold_template_info list
+(** Return built-in starter templates accepted by [scaffold]. *)
 
 val permissions_label : Yojson.Safe.t option -> string
 (** Render plugin tool permissions as a compact human-facing label. *)

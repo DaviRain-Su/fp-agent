@@ -1017,6 +1017,14 @@ type scaffold_template = {
   extra_files : (string * string) list;
 }
 
+type scaffold_template_info = {
+  template_id : string;
+  template_aliases : string list;
+  template_command : string;
+  template_files : string list;
+  template_description : string;
+}
+
 let shell_scaffold_template =
   {
     template_id = "shell";
@@ -1126,6 +1134,26 @@ if __name__ == "__main__":
 |};
     extra_files = [ ("fp_agent_sdk.py", python_sdk_body) ];
   }
+
+let scaffold_template_info (template : scaffold_template) ~aliases ~description
+    =
+  {
+    template_id = template.template_id;
+    template_aliases = aliases;
+    template_command = template.command;
+    template_files =
+      template.script_name
+      :: List.map template.extra_files ~f:(fun (name, _) -> name);
+    template_description = description;
+  }
+
+let scaffold_templates () =
+  [
+    scaffold_template_info shell_scaffold_template ~aliases:[ "sh" ]
+      ~description:"portable shell starter with no helper SDK dependency";
+    scaffold_template_info python_scaffold_template ~aliases:[ "python3"; "py" ]
+      ~description:"Python starter with fp_agent_sdk.py helper functions";
+  ]
 
 let scaffold_template_of_string template =
   match String.lowercase (String.strip template) with

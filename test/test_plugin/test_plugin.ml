@@ -1013,6 +1013,31 @@ let test_scaffold_creates_python_template () =
                     | `String value -> Some value
                     | _ -> None))))
 
+let test_scaffold_template_catalog () =
+  let templates = Plugin.scaffold_templates () in
+  let template_ids =
+    List.map templates ~f:(fun template -> template.Plugin.template_id)
+  in
+  Alcotest.(check bool)
+    "shell template listed" true
+    (List.mem template_ids "shell" ~equal:String.equal);
+  Alcotest.(check bool)
+    "python template listed" true
+    (List.mem template_ids "python" ~equal:String.equal);
+  let python =
+    Option.value_exn
+      (List.find templates ~f:(fun template ->
+           String.equal template.Plugin.template_id "python"))
+  in
+  Alcotest.(check string)
+    "python command" "python3 main.py" python.template_command;
+  Alcotest.(check bool)
+    "python aliases" true
+    (List.mem python.template_aliases "py" ~equal:String.equal);
+  Alcotest.(check bool)
+    "python sdk file" true
+    (List.mem python.template_files "fp_agent_sdk.py" ~equal:String.equal)
+
 let test_check_rejects_invalid_manifest () =
   with_temp_dir "fp_agent_plugin_bad" (fun root ->
       let check_error name json substring =
@@ -1176,6 +1201,8 @@ let () =
             test_scaffold_creates_valid_plugin;
           Alcotest.test_case "scaffold_python_template" `Quick
             test_scaffold_creates_python_template;
+          Alcotest.test_case "scaffold_template_catalog" `Quick
+            test_scaffold_template_catalog;
           Alcotest.test_case "check_invalid_plugin" `Quick
             test_check_rejects_invalid_manifest;
           Alcotest.test_case "plugin_schema_request" `Quick

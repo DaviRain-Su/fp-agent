@@ -14,6 +14,7 @@ type id =
   | PluginSmoke
   | PluginRun
   | PluginDoctor
+  | PluginSdk
   | Sessions
   | Tree
   | NewSession
@@ -165,6 +166,14 @@ let specs =
       aliases = [ "/plugins-doctor" ];
       palette = true;
       acceptance = Execute "/plugin-doctor";
+    };
+    {
+      id = PluginSdk;
+      command = "/plugin-sdk";
+      description = "show plugin SDK templates and contract";
+      aliases = [ "/plugin-templates" ];
+      palette = true;
+      acceptance = Execute "/plugin-sdk";
     };
     {
       id = Sessions;
@@ -378,7 +387,7 @@ let command_token command =
 let group_of_id = function
   | Tools | Tool -> "Tools"
   | Plugins | Plugin | PluginNew | PluginDev | PluginCheck | PluginInstall
-  | PluginRemove | PluginSmoke | PluginRun | PluginDoctor ->
+  | PluginRemove | PluginSmoke | PluginRun | PluginDoctor | PluginSdk ->
       "Plugins"
   | Sessions | Tree | NewSession | Resume -> "Sessions"
   | Model | ModelNext | Models | Provider | ProviderAdd -> "Models"

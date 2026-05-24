@@ -24,9 +24,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - Right/secondary inspector: selected event JSON, tool args/result, usage, and
   policy decision.
 - Footer command palette: `/model`, `/provider`, `/provider-add`, `/plugins`,
-  `/tools`, `/new`, `/resume`, `/fork`, `/retry`, `/plan`, `/plan-set`,
-  `/plan-add`, `/plan-update`, `/plan-clear`, `/compact`, `/status`,
-  `/instructions`, `/undo`, `/diff`.
+  `/plugin-sdk`, `/tools`, `/new`, `/resume`, `/fork`, `/retry`, `/plan`,
+  `/plan-set`, `/plan-add`, `/plan-update`, `/plan-clear`, `/compact`,
+  `/status`, `/instructions`, `/undo`, `/diff`.
 - Status strip: provider/model, session id, step count, token usage, current
   phase, and active plugin count.
 - Review mode: navigate prior events, fork from an event, and replay compacted
@@ -176,6 +176,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - Plugin developers now have `/plugin-doctor` and `--doctor-plugins` for
   read-only discovery diagnostics: plugin home, search roots, valid/invalid
   counts, tool-name conflicts, and next inspection commands.
+- Plugin developers can run `/plugin-sdk` or `--plugin-sdk` to see the manifest
+  SDK version, built-in scaffold templates, runtime environment variables, and
+  the shortest local development loop without opening the docs.
 - Plugin tool-name conflicts are now reported in CLI/TUI tool and plugin
   surfaces. Built-ins and earlier discovered plugins keep precedence, while the
   skipped plugin/tool pair is shown to the developer.

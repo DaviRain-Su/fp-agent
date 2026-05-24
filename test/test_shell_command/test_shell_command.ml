@@ -90,6 +90,10 @@ let test_parse () =
     (Shell_command.parse "/plugin-doctor");
   require_command "plugin doctor alias" Shell_command.PluginDoctor ""
     (Shell_command.parse "/plugins-doctor");
+  require_command "plugin sdk" Shell_command.PluginSdk ""
+    (Shell_command.parse "/plugin-sdk");
+  require_command "plugin sdk alias" Shell_command.PluginSdk ""
+    (Shell_command.parse "/plugin-templates");
   require_command "quit alias" Shell_command.Exit ""
     (Shell_command.parse "/quit");
   Alcotest.(check bool)
@@ -194,6 +198,11 @@ let test_metadata () =
   Alcotest.(check string)
     "plugin doctor group" "Plugins" (entry "/plugin-doctor").group;
   Alcotest.(check bool)
+    "palette has plugin sdk" true
+    (List.mem palette "/plugin-sdk" ~equal:String.equal);
+  Alcotest.(check string)
+    "plugin sdk group" "Plugins" (entry "/plugin-sdk").group;
+  Alcotest.(check bool)
     "palette has instructions" true
     (List.mem palette "/instructions" ~equal:String.equal);
   Alcotest.(check bool)
@@ -286,6 +295,8 @@ let test_acceptance () =
   require_acceptance "plugin doctor execute"
     ("execute", "/plugin-doctor")
     (Shell_command.accept (entry "/plugin-doctor"));
+  require_acceptance "plugin sdk execute" ("execute", "/plugin-sdk")
+    (Shell_command.accept (entry "/plugin-sdk"));
   require_acceptance "new session draft" ("draft", "/new")
     (Shell_command.accept (entry "/new"));
   require_acceptance "retry draft" ("draft", "/retry")

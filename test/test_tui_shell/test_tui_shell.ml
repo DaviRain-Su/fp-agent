@@ -201,12 +201,14 @@ let test_palette_input_mapping () =
   Alcotest.(check (option string))
     "enter accepts selected command" (palette_command_at 12)
     (accepted_command result.accepted_command);
+  let selected_command = palette_command_at 12 in
   Alcotest.(check (option string))
-    "enter dispatches no-arg command" (Some "/sessions")
-    result.dispatched_command;
+    "enter dispatches no-arg command" selected_command result.dispatched_command;
   Alcotest.(check (list string))
     "dispatch feedback"
-    [ "[tui] accepted command: /sessions" ]
+    (Option.to_list
+       (Option.map selected_command ~f:(fun command ->
+            "[tui] accepted command: " ^ command)))
     (Tui_shell.feedback_lines result);
   Alcotest.(check string)
     "direct command leaves draft empty" "" result.state.draft.text
@@ -640,7 +642,21 @@ let test_tui_command_plugins_and_tools () =
         (String.is_substring doctor ~substring:"tool_conflicts: 1");
       Alcotest.(check bool)
         "doctor shows next dev command" true
-        (String.is_substring doctor ~substring:"next: /plugin-dev --replace"))
+        (String.is_substring doctor ~substring:"next: /plugin-dev --replace");
+      let sdk = output "/plugin-sdk" context in
+      Alcotest.(check bool)
+        "sdk command header" true
+        (String.is_substring sdk ~substring:"[tui] /plugin-sdk");
+      Alcotest.(check bool)
+        "sdk shows manifest file" true
+        (String.is_substring sdk
+           ~substring:"manifest_file: fp-agent-plugin.json");
+      Alcotest.(check bool)
+        "sdk shows python template" true
+        (String.is_substring sdk ~substring:"python (aliases: python3, py)");
+      Alcotest.(check bool)
+        "sdk shows env" true
+        (String.is_substring sdk ~substring:"FP_AGENT_TOOL_PERMISSIONS"))
 
 let () =
   Alcotest.run "tui_shell"

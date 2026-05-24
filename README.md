@@ -84,6 +84,7 @@ dune exec -- fp-agent
 > /tools             # preview available tools
 > /tool read_file    # inspect a tool's kind/schema/description
 > /plugin-doctor     # show plugin search paths and diagnostics
+> /plugin-sdk        # show SDK contract, env vars, and scaffold templates
 > /plugin echo_json  # inspect a plugin by id or tool name
 > /plugin-new --id local.my-plugin --tool-name my_tool --kind read --template python my-plugin
 > /plugin-dev --replace my-plugin
@@ -153,6 +154,7 @@ export FP_AGENT_PLUGIN_PATH=$PWD/examples/plugins/echo
 dune exec -- fp-agent
 > /plugins
 > /plugin-doctor
+> /plugin-sdk
 > /plugin echo_json
 > /plugin-new --id local.my-plugin --tool-name my_tool --kind read --template python my-plugin
 > /plugin-dev --replace my-plugin
@@ -197,12 +199,14 @@ dune exec -- fp-agent --remove-plugin local.my-plugin
 
 Plugins are discovered from `FP_AGENT_PLUGIN_PATH`, `.fp-agent/plugins`, and
 `FP_AGENT_PLUGIN_HOME` / `~/.local/share/fp-agent/plugins`. See
-`docs/plugins.md` for the SDK contract. `/plugin-doctor` and
-`--doctor-plugins` show the search roots, install home, invalid manifest
+`docs/plugins.md` for the SDK contract. `/plugin-sdk` and `--plugin-sdk` print
+the manifest contract, supported SDK version, runtime environment variables,
+starter templates, and the shortest local development loop. `/plugin-doctor`
+and `--doctor-plugins` show the search roots, install home, invalid manifest
 diagnostics, and tool-name conflicts. `/plugins` and `--list-plugins` also
 surface invalid manifest diagnostics instead of silently hiding broken plugin
-directories, and report tool-name conflicts when a plugin would shadow a
-built-in or earlier discovered plugin tool.
+directories, and report tool-name conflicts when a plugin would shadow a built-in
+or earlier discovered plugin tool.
 Scaffold, install, and dev commands print follow-up `/plugin`, `/tool`, and
 `/plugin-run` commands when the manifest includes runnable example args.
 
@@ -267,6 +271,9 @@ copy. Two consequences:
   removes plugins from the REPL or fullscreen TUI, then reloads the in-process
   tool registry so `/tools`, the status strip, and later model calls see the
   updated plugin set.
+- **Plugin SDK discovery** (`/plugin-sdk`, `--plugin-sdk`) lists the supported
+  manifest SDK version, scaffold templates, runtime environment variables, and
+  next commands for plugin authors.
 - **TUI model/provider switching** lets `/model <id>`, `/model-next`, and
   `/provider <name> [model] [api-base]` change the runtime used by later TUI
   task submissions.
@@ -340,6 +347,8 @@ Options:
 - `--list-plugins` — list plugins installed in the plugin home, then exit
 - `--doctor-plugins` / `--plugin-doctor` — show plugin discovery/install
   diagnostics, then exit
+- `--plugin-sdk` / `--plugin-templates` — show the plugin SDK contract,
+  scaffold templates, runtime env vars, and workflow, then exit
 - `--remove-plugin ID` / `--uninstall-plugin ID` — remove an installed plugin
   from the plugin home, then exit
 

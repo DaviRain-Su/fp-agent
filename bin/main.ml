@@ -2090,6 +2090,9 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
               (Tui_command.plugin_diagnostics_lines ())
               ~f:Stdlib.print_endline;
             loop ()
+        | Command (PluginSdk, _) ->
+            List.iter (Tui_command.plugin_sdk_lines ()) ~f:Stdlib.print_endline;
+            loop ()
         | Command (Sessions, _) ->
             print_sessions sessions_root !session;
             loop ()
@@ -2387,9 +2390,9 @@ let dispatch add_provider provider_base provider_models provider_api
     provider_no_usage_in_streaming provider_max_tokens_field provider_max_tokens
     replace_provider new_plugin plugin_id plugin_tool_name plugin_kind
     plugin_template check_plugin install_plugin smoke_plugin dev_plugin
-    replace_plugin list_plugins doctor_plugins remove_plugin run_plugin_tool
-    plugin_tool plugin_args plugin_args_file task provider api_base model
-    workspace max_steps confirm resume tui yolo =
+    replace_plugin list_plugins doctor_plugins plugin_sdk remove_plugin
+    run_plugin_tool plugin_tool plugin_args plugin_args_file task provider
+    api_base model workspace max_steps confirm resume tui yolo =
   match add_provider with
   | Some name ->
       run_provider_add_cli name provider_base provider_models provider_api
@@ -2407,6 +2410,9 @@ let dispatch add_provider provider_base provider_models provider_api
         "provider add error: provider profile options require --add-provider \
          NAME";
       1
+  | None when plugin_sdk ->
+      List.iter (Tui_command.plugin_sdk_lines ()) ~f:Stdlib.print_endline;
+      0
   | None -> (
       match
         ( new_plugin,
@@ -2625,6 +2631,16 @@ let () =
           ~doc:
             "Show plugin search roots, install home, invalid manifests, and \
              tool-name conflicts, then exit.")
+  in
+  let plugin_sdk =
+    Arg.(
+      value & flag
+      & info
+          [ "plugin-sdk"; "plugin-templates" ]
+          ~doc:
+            "Show the plugin SDK contract, built-in scaffold templates, \
+             runtime environment variables, and suggested development \
+             workflow, then exit.")
   in
   let remove_plugin =
     Arg.(
@@ -2914,7 +2930,7 @@ let () =
       $ provider_max_tokens_field $ provider_max_tokens $ replace_provider
       $ new_plugin $ plugin_id $ plugin_tool_name $ plugin_kind
       $ plugin_template $ check_plugin $ install_plugin $ smoke_plugin
-      $ dev_plugin $ replace_plugin $ list_plugins $ doctor_plugins
+      $ dev_plugin $ replace_plugin $ list_plugins $ doctor_plugins $ plugin_sdk
       $ remove_plugin $ run_plugin_tool $ plugin_tool $ plugin_args
       $ plugin_args_file $ task $ provider $ api_base $ model $ workspace
       $ max_steps $ confirm $ resume $ tui $ yolo)

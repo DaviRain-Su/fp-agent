@@ -160,6 +160,54 @@ let plugin_diagnostics_lines () =
       "next: /plugin-dev --replace <dir>";
     ]
 
+let plugin_sdk_lines () =
+  let template_lines =
+    Plugin.scaffold_templates ()
+    |> List.concat_map ~f:(fun (template : Plugin.scaffold_template_info) ->
+        let aliases =
+          match template.template_aliases with
+          | [] -> ""
+          | aliases ->
+              Printf.sprintf " (aliases: %s)" (String.concat aliases ~sep:", ")
+        in
+        [
+          Printf.sprintf "  - %s%s" template.template_id aliases;
+          "      " ^ template.template_description;
+          "      command: " ^ template.template_command;
+          "      files: " ^ String.concat template.template_files ~sep:", ";
+        ])
+  in
+  [
+    "Plugin SDK";
+    "manifest_file: " ^ Plugin.manifest_file;
+    Printf.sprintf "supported_sdk_version: %d" Plugin.supported_sdk_version;
+    "templates:";
+  ]
+  @ template_lines
+  @ [
+      "";
+      "tool_env:";
+      "  - FP_AGENT_WORKSPACE";
+      "  - FP_AGENT_PLUGIN_DIR";
+      "  - FP_AGENT_PLUGIN_ID";
+      "  - FP_AGENT_PLUGIN_NAME";
+      "  - FP_AGENT_PLUGIN_VERSION";
+      "  - FP_AGENT_PLUGIN_SDK_VERSION";
+      "  - FP_AGENT_TOOL_NAME";
+      "  - FP_AGENT_TOOL_KIND";
+      "  - FP_AGENT_TOOL_PERMISSIONS";
+      "  - FP_AGENT_ARGS_FILE";
+      "";
+      "workflow:";
+      "  /plugin-new --template python --id com.example.echo --tool-name \
+       echo_json my-plugin";
+      "  /plugin-dev --replace my-plugin";
+      "  /plugin-run my-plugin echo_json \
+       @my-plugin/examples/echo_json.args.json";
+      "next: /plugin-new --template python <dir>";
+      "next: /plugin-doctor";
+    ]
+
 let plugin_matches query (plugin : Plugin.manifest) =
   String.equal plugin.id query
   || String.equal plugin.name query
@@ -420,6 +468,8 @@ let run ctx command =
       Some (command_section command (plugin_detail_lines arg))
   | Command (PluginDoctor, _) ->
       Some (command_section command (plugin_diagnostics_lines ()))
+  | Command (PluginSdk, _) ->
+      Some (command_section command (plugin_sdk_lines ()))
   | Command (Sessions, _) -> Some (command_section command (sessions_lines ctx))
   | Command (Tree, _) -> Some (command_section command (tree_lines ctx))
   | Command (Model, "") ->

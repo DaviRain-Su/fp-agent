@@ -12,6 +12,7 @@ type id =
   | PluginSmoke
   | PluginRun
   | PluginDoctor
+  | PluginSdk
   | Sessions
   | Tree
   | NewSession

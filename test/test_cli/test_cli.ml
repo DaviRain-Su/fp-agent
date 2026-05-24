@@ -105,6 +105,14 @@ let test_plugin_lifecycle_cli () =
   let home = Stdlib.Filename.concat root "installed" in
   let bin = fp_agent_bin () in
   let env = isolated_env root @ [ ("FP_AGENT_PLUGIN_HOME", home) ] in
+  let sdk = run ~env [ bin; "--plugin-sdk" ] in
+  assert_success "plugin sdk" sdk;
+  assert_contains "plugin sdk manifest" sdk.stdout
+    "manifest_file: fp-agent-plugin.json";
+  assert_contains "plugin sdk template" sdk.stdout
+    "python (aliases: python3, py)";
+  assert_contains "plugin sdk workflow" sdk.stdout
+    "/plugin-dev --replace my-plugin";
   let created = run ~env [ bin; "--new-plugin"; plugin_dir ] in
   assert_success "new plugin" created;
   assert_contains "new plugin output" created.stdout "created plugin scaffold";
