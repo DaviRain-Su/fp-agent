@@ -41,6 +41,24 @@ export ZAI_API_KEY=...
 dune exec -- fp-agent --provider zhipu "add a docstring to lib/foo.ml"
 ```
 
+### Interactive REPL
+
+Omit the task to start a REPL that keeps context across turns:
+
+```sh
+dune exec -- fp-agent
+> create a file hello.txt with the text hi
+> now add a second line "bye" to it
+> /sessions          # list sessions in this workspace
+> /resume <name>     # switch to a past session
+> /tools             # preview available tools
+> /help
+> /exit
+```
+
+Each turn replays the session's event log as context, so the agent remembers
+earlier turns. Meta-commands start with `/`; anything else is a task.
+
 Options:
 
 - `-p`, `--provider NAME` — `kimi` (default), `zhipu`, or `deepseek`
