@@ -728,7 +728,7 @@ dune exec -- fp-agent --check-plugin .
 ```sh
 dune exec -- fp-agent --run-plugin-tool . \
   --plugin-tool hello_world \
-  --plugin-args "$(cat examples/hello.args.json)"
+  --plugin-args-file examples/hello.args.json
 ```
 
 The tool receives JSON args on stdin and can use:

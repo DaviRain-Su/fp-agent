@@ -113,7 +113,7 @@ dune exec -- fp-agent --check-plugin my-plugin
 dune exec -- fp-agent --check-plugin my-plugin --replace-plugin
 dune exec -- fp-agent --run-plugin-tool my-plugin \
   --plugin-tool hello_world \
-  --plugin-args '{"message":"hi"}'
+  --plugin-args-file my-plugin/examples/hello.args.json
 dune exec -- fp-agent --install-plugin my-plugin
 dune exec -- fp-agent --install-plugin my-plugin --replace-plugin
 dune exec -- fp-agent --list-plugins
@@ -193,6 +193,7 @@ Options:
   compatibility against the currently installed plugin with the same id
 - `--run-plugin-tool DIR --plugin-tool NAME --plugin-args JSON` — run a plugin
   tool locally for development, then exit
+- `--plugin-args-file FILE` — read local plugin tool JSON args from a file
 - `--install-plugin DIR` — validate and install a plugin directory, then exit
 - `--replace-plugin` — allow `--install-plugin` to replace an existing
   installed plugin after staging the new copy

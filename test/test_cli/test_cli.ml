@@ -265,6 +265,56 @@ let test_plugin_tool_debug_cli () =
   assert_success "run plugin tool" ok;
   assert_contains "plugin output prefix" ok.stdout "hello from fp-agent plugin:";
   assert_contains "plugin output args" ok.stdout {|"message":"hi"|};
+  let args_file =
+    Stdlib.Filename.concat plugin_dir
+      (Stdlib.Filename.concat "examples" "hello.args.json")
+  in
+  let ok_file =
+    run ~env
+      [
+        bin;
+        "--run-plugin-tool";
+        plugin_dir;
+        "--plugin-tool";
+        "hello_world";
+        "--plugin-args-file";
+        args_file;
+      ]
+  in
+  assert_success "run plugin tool args file" ok_file;
+  assert_contains "plugin args file output" ok_file.stdout {|"message":"hi"|};
+  let both_args =
+    run ~env
+      [
+        bin;
+        "--run-plugin-tool";
+        plugin_dir;
+        "--plugin-tool";
+        "hello_world";
+        "--plugin-args";
+        {|{"message":"hi"}|};
+        "--plugin-args-file";
+        args_file;
+      ]
+  in
+  assert_failure "both plugin arg sources" both_args;
+  assert_contains "both args stderr" both_args.stderr
+    "use only one of --plugin-args or --plugin-args-file";
+  let missing_args_file =
+    run ~env
+      [
+        bin;
+        "--run-plugin-tool";
+        plugin_dir;
+        "--plugin-tool";
+        "hello_world";
+        "--plugin-args-file";
+        Stdlib.Filename.concat plugin_dir "missing.args.json";
+      ]
+  in
+  assert_failure "missing plugin args file" missing_args_file;
+  assert_contains "missing args file stderr" missing_args_file.stderr
+    "cannot read plugin args file";
   let bad_json =
     run ~env
       [

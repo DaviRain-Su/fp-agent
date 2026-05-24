@@ -131,6 +131,14 @@ dune exec -- fp-agent --run-plugin-tool my-plugin \
   --plugin-args '{"message":"hi"}'
 ```
 
+You can also keep reusable smoke-test inputs in files:
+
+```sh
+dune exec -- fp-agent --run-plugin-tool my-plugin \
+  --plugin-tool hello_world \
+  --plugin-args-file my-plugin/examples/hello.args.json
+```
+
 The command loads the manifest, validates the JSON args, runs the tool from the
 plugin directory, and prints stdout. It uses `--workspace` or `WORKSPACE_ROOT`
 for `FP_AGENT_WORKSPACE` and applies the same path guard used by plugin tools in

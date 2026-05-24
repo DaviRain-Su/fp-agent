@@ -1271,6 +1271,24 @@ let parse_json_arg json =
   | json -> Ok json
   | exception exn -> Error ("invalid plugin args JSON: " ^ Exn.to_string exn)
 
+let read_plugin_args_file path =
+  match Stdlib.In_channel.with_open_bin path Stdlib.In_channel.input_all with
+  | content -> Ok content
+  | exception exn ->
+      Error
+        (Printf.sprintf "cannot read plugin args file %s: %s" path
+           (Exn.to_string exn))
+
+let plugin_args_json args_json args_file =
+  match (args_json, args_file) with
+  | Some _, Some _ ->
+      Error "use only one of --plugin-args or --plugin-args-file"
+  | None, None ->
+      Error
+        "--plugin-args or --plugin-args-file is required with --run-plugin-tool"
+  | Some json, None -> Ok json
+  | None, Some path -> read_plugin_args_file path
+
 let workspace_for_plugin_debug workspace_opt =
   let root =
     Option.value workspace_opt
@@ -1281,20 +1299,23 @@ let workspace_for_plugin_debug workspace_opt =
   in
   Workspace.create ~root
 
-let run_plugin_tool_cli dir tool_name args_json workspace_opt =
-  match (tool_name, args_json, workspace_for_plugin_debug workspace_opt) with
+let run_plugin_tool_cli dir tool_name args_json args_file workspace_opt =
+  match
+    ( tool_name,
+      plugin_args_json args_json args_file,
+      workspace_for_plugin_debug workspace_opt )
+  with
   | None, _, _ ->
       Stdlib.prerr_endline
         "plugin tool error: --plugin-tool is required with --run-plugin-tool";
       1
-  | _, None, _ ->
-      Stdlib.prerr_endline
-        "plugin tool error: --plugin-args is required with --run-plugin-tool";
+  | _, Error e, _ ->
+      Stdlib.prerr_endline ("plugin tool error: " ^ e);
       1
   | _, _, Error e ->
       Stdlib.prerr_endline ("plugin tool error: " ^ e);
       1
-  | Some tool_name, Some args_json, Ok workspace -> (
+  | Some tool_name, Ok args_json, Ok workspace -> (
       match parse_json_arg args_json with
       | Error e ->
           Stdlib.prerr_endline ("plugin tool error: " ^ e);
@@ -1312,8 +1333,8 @@ let run_plugin_tool_cli dir tool_name args_json workspace_opt =
               1))
 
 let dispatch new_plugin check_plugin install_plugin replace_plugin list_plugins
-    remove_plugin run_plugin_tool plugin_tool plugin_args task provider api_base
-    model workspace max_steps confirm resume tui yolo =
+    remove_plugin run_plugin_tool plugin_tool plugin_args plugin_args_file task
+    provider api_base model workspace max_steps confirm resume tui yolo =
   match
     ( new_plugin,
       check_plugin,
@@ -1359,7 +1380,7 @@ let dispatch new_plugin check_plugin install_plugin replace_plugin list_plugins
           Stdlib.prerr_endline ("plugin remove error: " ^ e);
           1)
   | None, None, None, false, None, Some dir ->
-      run_plugin_tool_cli dir plugin_tool plugin_args workspace
+      run_plugin_tool_cli dir plugin_tool plugin_args plugin_args_file workspace
   | None, None, None, false, None, None when replace_plugin ->
       Stdlib.prerr_endline
         "plugin error: --replace-plugin requires --install-plugin DIR or \
@@ -1431,7 +1452,7 @@ let () =
       & info [ "run-plugin-tool" ] ~docv:"DIR"
           ~doc:
             "Run a plugin tool locally from DIR, then exit. Requires \
-             --plugin-tool and --plugin-args.")
+             --plugin-tool and either --plugin-args or --plugin-args-file.")
   in
   let plugin_tool =
     Arg.(
@@ -1446,6 +1467,13 @@ let () =
       & opt (some string) None
       & info [ "plugin-args" ] ~docv:"JSON"
           ~doc:"JSON argument object for --run-plugin-tool.")
+  in
+  let plugin_args_file =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "plugin-args-file" ] ~docv:"FILE"
+          ~doc:"Read the JSON argument object for --run-plugin-tool from FILE.")
   in
   let check_plugin =
     Arg.(
@@ -1537,8 +1565,8 @@ let () =
     Term.(
       const dispatch $ new_plugin $ check_plugin $ install_plugin
       $ replace_plugin $ list_plugins $ remove_plugin $ run_plugin_tool
-      $ plugin_tool $ plugin_args $ task $ provider $ api_base $ model
-      $ workspace $ max_steps $ confirm $ resume $ tui $ yolo)
+      $ plugin_tool $ plugin_args $ plugin_args_file $ task $ provider
+      $ api_base $ model $ workspace $ max_steps $ confirm $ resume $ tui $ yolo)
   in
   let info = Cmd.info "fp-agent" ~version:"0.1.0" ~doc in
   Stdlib.exit (Cmd.eval' (Cmd.v info term))
