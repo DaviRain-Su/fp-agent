@@ -112,6 +112,21 @@ dune exec -- fp-agent --install-plugin examples/plugins/echo
 The installer validates the manifest and copies the plugin into the plugin
 home. It does not overwrite an existing plugin with the same id.
 
+List installed plugins:
+
+```sh
+dune exec -- fp-agent --list-plugins
+```
+
+Remove an installed plugin by id:
+
+```sh
+dune exec -- fp-agent --remove-plugin com.example.echo
+```
+
+Removal is scoped to the plugin home. It does not delete development plugin
+directories referenced by `FP_AGENT_PLUGIN_PATH`.
+
 For tests or local development, use:
 
 ```sh

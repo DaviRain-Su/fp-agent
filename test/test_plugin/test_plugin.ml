@@ -149,7 +149,7 @@ let test_install_plugin_copies_to_home () =
       Unix.putenv "FP_AGENT_PLUGIN_HOME" home;
       match Plugin.install src with
       | Error e -> Alcotest.failf "install failed: %s" e
-      | Ok dst ->
+      | Ok dst -> (
           Alcotest.(check string)
             "installed path"
             (Stdlib.Filename.concat home "com.example.install")
@@ -162,7 +162,22 @@ let test_install_plugin_copies_to_home () =
           Alcotest.(check bool)
             "installed manifest discovered" true
             (List.exists manifests ~f:(fun (m : Plugin.manifest) ->
-                 String.equal m.id "com.example.install")))
+                 String.equal m.id "com.example.install"));
+          let installed = Plugin.installed_manifests () in
+          Alcotest.(check bool)
+            "installed manifest listed" true
+            (List.exists installed ~f:(fun (m : Plugin.manifest) ->
+                 String.equal m.id "com.example.install"));
+          match Plugin.remove "com.example.install" with
+          | Error e -> Alcotest.failf "remove failed: %s" e
+          | Ok removed ->
+              Alcotest.(check string) "removed path" dst removed;
+              Alcotest.(check bool)
+                "installed dir removed" false
+                (Stdlib.Sys.file_exists dst);
+              Alcotest.(check bool)
+                "missing remove rejected" true
+                (Result.is_error (Plugin.remove "com.example.install"))))
 
 let test_run_tool_for_plugin_development () =
   with_temp_dir "fp_agent_plugin_run_tool" (fun root ->
@@ -234,6 +249,7 @@ let test_check_rejects_invalid_manifest () =
               (String.is_substring e ~substring)
       in
       check_error "bad-id" {|{"id":"bad id","tools":[]}|} "plugin id";
+      check_error "dotdot-id" {|{"id":"..","tools":[]}|} "plugin id cannot be";
       check_error "empty-tools" {|{"id":"com.example.empty","tools":[]}|}
         "at least one tool";
       check_error "duplicate-tool"

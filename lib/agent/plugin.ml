@@ -65,6 +65,13 @@ let validate_name ~what ~allow_dot name =
          what name
          (if allow_dot then ", '.'" else ""))
 
+let validate_plugin_id id =
+  match validate_name ~what:"plugin id" ~allow_dot:true id with
+  | Error _ as e -> e
+  | Ok () when String.equal id "." || String.equal id ".." ->
+      Error "plugin id cannot be '.' or '..'"
+  | Ok () -> Ok ()
+
 let kind_of_string = function
   | "read" -> Ok Tool.Read
   | "write" -> Ok Tool.Write
@@ -135,7 +142,7 @@ let load_manifest dir =
           json_member json [ "tools" ] )
       with
       | Ok id, name, version, Some (`List tool_jsons) -> (
-          match validate_name ~what:"plugin id" ~allow_dot:true id with
+          match validate_plugin_id id with
           | Error e -> Error e
           | Ok () -> (
               let tools =
@@ -215,6 +222,16 @@ let manifests () =
       match load_manifest dir with
       | Ok manifest -> Some manifest
       | Error _ -> None)
+
+let installed_manifests () =
+  match install_home () with
+  | None -> []
+  | Some home ->
+      dirs_in_root home
+      |> List.filter_map ~f:(fun dir ->
+          match load_manifest dir with
+          | Ok manifest -> Some manifest
+          | Error _ -> None)
 
 let output_of_result result =
   let stdout = String.strip result.Shell.stdout in
@@ -346,6 +363,29 @@ let install src_dir =
           Ok dst
         with exn -> Error ("plugin install failed: " ^ Exn.to_string exn))
 
+let rec remove_tree path =
+  match Unix.lstat path with
+  | { st_kind = Unix.S_DIR; _ } ->
+      Stdlib.Sys.readdir path
+      |> Array.iter ~f:(fun name ->
+          remove_tree (Stdlib.Filename.concat path name));
+      Unix.rmdir path
+  | _ -> Unix.unlink path
+
+let remove id =
+  match (validate_plugin_id id, install_home ()) with
+  | Error e, _ -> Error e
+  | _, None -> Error "cannot determine plugin install home"
+  | Ok (), Some home -> (
+      let dst = Stdlib.Filename.concat home id in
+      if not (Stdlib.Sys.file_exists dst) then
+        Error ("plugin is not installed: " ^ id)
+      else
+        try
+          remove_tree dst;
+          Ok dst
+        with exn -> Error ("plugin remove failed: " ^ Exn.to_string exn))
+
 let sanitize_id_part s =
   let chars =
     String.to_list s
@@ -363,7 +403,7 @@ let scaffold ?id dir =
         ("local."
         ^ sanitize_id_part (Stdlib.Filename.basename (String.rstrip dir)))
   in
-  match validate_name ~what:"plugin id" ~allow_dot:true id with
+  match validate_plugin_id id with
   | Error e -> Error e
   | Ok () -> (
       let manifest_path = Stdlib.Filename.concat dir manifest_file in

@@ -103,6 +103,8 @@ dune exec -- fp-agent --run-plugin-tool my-plugin \
   --plugin-tool hello_world \
   --plugin-args '{"message":"hi"}'
 dune exec -- fp-agent --install-plugin examples/plugins/echo
+dune exec -- fp-agent --list-plugins
+dune exec -- fp-agent --remove-plugin local.my-plugin
 ```
 
 Plugins are discovered from `FP_AGENT_PLUGIN_PATH`, `.fp-agent/plugins`, and
@@ -146,6 +148,9 @@ Options:
 - `--run-plugin-tool DIR --plugin-tool NAME --plugin-args JSON` — run a plugin
   tool locally for development, then exit
 - `--install-plugin DIR` — validate and install a plugin directory, then exit
+- `--list-plugins` — list plugins installed in the plugin home, then exit
+- `--remove-plugin ID` / `--uninstall-plugin ID` — remove an installed plugin
+  from the plugin home, then exit
 
 On completion the agent prints a status summary and, if the workspace is a git
 repo, `git diff --stat`. Every run also writes a full trace to

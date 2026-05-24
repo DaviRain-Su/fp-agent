@@ -110,6 +110,9 @@ let test_plugin_lifecycle_cli () =
   assert_success "check plugin" checked;
   assert_contains "check output" checked.stdout "plugin manifest ok";
   assert_contains "check tool output" checked.stdout "hello_world";
+  let empty = run ~env [ bin; "--list-plugins" ] in
+  assert_success "list plugins before install" empty;
+  assert_contains "empty plugin list" empty.stdout "(no installed plugins)";
   let installed = run ~env [ bin; "--install-plugin"; plugin_dir ] in
   assert_success "install plugin" installed;
   assert_contains "install output" installed.stdout "installed plugin:";
@@ -117,7 +120,23 @@ let test_plugin_lifecycle_cli () =
     "installed manifest" true
     (Stdlib.Sys.file_exists
        (Stdlib.Filename.concat home
-          (Stdlib.Filename.concat "local.my-plugin" "fp-agent-plugin.json")))
+          (Stdlib.Filename.concat "local.my-plugin" "fp-agent-plugin.json")));
+  let listed = run ~env [ bin; "--list-plugins" ] in
+  assert_success "list plugins after install" listed;
+  assert_contains "list plugin id" listed.stdout "local.my-plugin";
+  assert_contains "list plugin tool" listed.stdout "hello_world";
+  let removed = run ~env [ bin; "--remove-plugin"; "local.my-plugin" ] in
+  assert_success "remove plugin" removed;
+  assert_contains "remove output" removed.stdout "removed plugin:";
+  Alcotest.(check bool)
+    "removed manifest" false
+    (Stdlib.Sys.file_exists
+       (Stdlib.Filename.concat home
+          (Stdlib.Filename.concat "local.my-plugin" "fp-agent-plugin.json")));
+  let missing = run ~env [ bin; "--remove-plugin"; "local.my-plugin" ] in
+  assert_failure "remove missing plugin" missing;
+  assert_contains "remove missing stderr" missing.stderr
+    "plugin is not installed"
 
 let test_plugin_tool_debug_cli () =
   let root = tmp_dir "fp-agent-cli-plugin-run-" in

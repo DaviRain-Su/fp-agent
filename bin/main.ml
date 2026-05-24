@@ -845,6 +845,13 @@ let print_plugin_summary (plugin : Plugin.manifest) =
         (tool_kind_label tool.tool_kind)
         tool.tool_description)
 
+let print_installed_plugins () =
+  match Plugin.installed_manifests () with
+  | [] -> Stdlib.print_endline "(no installed plugins)"
+  | plugins ->
+      Stdlib.print_endline "installed plugins:";
+      List.iter plugins ~f:print_plugin_summary
+
 let parse_json_arg json =
   match Yojson.Safe.from_string json with
   | json -> Ok json
@@ -890,11 +897,18 @@ let run_plugin_tool_cli dir tool_name args_json workspace_opt =
               Stdlib.prerr_endline ("plugin tool error: " ^ message);
               1))
 
-let dispatch new_plugin check_plugin install_plugin run_plugin_tool plugin_tool
-    plugin_args task provider api_base model workspace max_steps confirm resume
-    tui yolo =
-  match (new_plugin, check_plugin, install_plugin, run_plugin_tool) with
-  | Some path, _, _, _ -> (
+let dispatch new_plugin check_plugin install_plugin list_plugins remove_plugin
+    run_plugin_tool plugin_tool plugin_args task provider api_base model
+    workspace max_steps confirm resume tui yolo =
+  match
+    ( new_plugin,
+      check_plugin,
+      install_plugin,
+      list_plugins,
+      remove_plugin,
+      run_plugin_tool )
+  with
+  | Some path, _, _, _, _, _ -> (
       match Plugin.scaffold path with
       | Ok dst ->
           Stdlib.Printf.printf "created plugin scaffold: %s\n" dst;
@@ -902,7 +916,7 @@ let dispatch new_plugin check_plugin install_plugin run_plugin_tool plugin_tool
       | Error e ->
           Stdlib.prerr_endline ("plugin scaffold error: " ^ e);
           1)
-  | None, Some path, _, _ -> (
+  | None, Some path, _, _, _, _ -> (
       match Plugin.check path with
       | Ok manifest ->
           Stdlib.print_endline "plugin manifest ok:";
@@ -911,7 +925,7 @@ let dispatch new_plugin check_plugin install_plugin run_plugin_tool plugin_tool
       | Error e ->
           Stdlib.prerr_endline ("plugin check error: " ^ e);
           1)
-  | None, None, Some path, _ -> (
+  | None, None, Some path, _, _, _ -> (
       match Plugin.install path with
       | Ok dst ->
           Stdlib.Printf.printf "installed plugin: %s\n" dst;
@@ -919,9 +933,20 @@ let dispatch new_plugin check_plugin install_plugin run_plugin_tool plugin_tool
       | Error e ->
           Stdlib.prerr_endline ("plugin install error: " ^ e);
           1)
-  | None, None, None, Some dir ->
+  | None, None, None, true, _, _ ->
+      print_installed_plugins ();
+      0
+  | None, None, None, false, Some id, _ -> (
+      match Plugin.remove id with
+      | Ok dst ->
+          Stdlib.Printf.printf "removed plugin: %s\n" dst;
+          0
+      | Error e ->
+          Stdlib.prerr_endline ("plugin remove error: " ^ e);
+          1)
+  | None, None, None, false, None, Some dir ->
       run_plugin_tool_cli dir plugin_tool plugin_args workspace
-  | None, None, None, None -> (
+  | None, None, None, false, None, None -> (
       match task with
       | Some _ when confirm && tui ->
           Stdlib.prerr_endline
@@ -957,6 +982,22 @@ let () =
           ~doc:
             "Install a plugin directory containing fp-agent-plugin.json into \
              the plugin home, then exit.")
+  in
+  let list_plugins =
+    Arg.(
+      value & flag
+      & info [ "list-plugins" ]
+          ~doc:"List plugins installed in the plugin home, then exit.")
+  in
+  let remove_plugin =
+    Arg.(
+      value
+      & opt (some string) None
+      & info
+          [ "remove-plugin"; "uninstall-plugin" ]
+          ~docv:"ID"
+          ~doc:
+            "Remove an installed plugin by id from the plugin home, then exit.")
   in
   let run_plugin_tool =
     Arg.(
@@ -1068,9 +1109,10 @@ let () =
   let doc = "A type-safe local CLI code agent harness." in
   let term =
     Term.(
-      const dispatch $ new_plugin $ check_plugin $ install_plugin
-      $ run_plugin_tool $ plugin_tool $ plugin_args $ task $ provider $ api_base
-      $ model $ workspace $ max_steps $ confirm $ resume $ tui $ yolo)
+      const dispatch $ new_plugin $ check_plugin $ install_plugin $ list_plugins
+      $ remove_plugin $ run_plugin_tool $ plugin_tool $ plugin_args $ task
+      $ provider $ api_base $ model $ workspace $ max_steps $ confirm $ resume
+      $ tui $ yolo)
   in
   let info = Cmd.info "fp-agent" ~version:"0.1.0" ~doc in
   Stdlib.exit (Cmd.eval' (Cmd.v info term))

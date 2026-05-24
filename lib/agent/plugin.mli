@@ -32,6 +32,13 @@ val install : string -> (string, string) result
 (** Install a plugin directory into the user plugin home and return the
     installed path. *)
 
+val installed_manifests : unit -> manifest list
+(** Load valid manifests installed directly under the plugin home. *)
+
+val remove : string -> (string, string) result
+(** Remove an installed plugin by id from the plugin home and return the removed
+    directory path. *)
+
 val check : string -> (manifest, string) result
 (** Validate a plugin directory and return its parsed manifest. *)
 
