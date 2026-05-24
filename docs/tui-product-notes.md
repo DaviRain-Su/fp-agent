@@ -53,6 +53,10 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - `Tui_shell` centralizes prompt submission, command palette movement, and
   event inspection selection in a pure controller. The current TUI already uses
   it for palette and event-selection actions.
+- `Tui_shell` now also owns the abstract keyboard/mouse input mapping for
+  palette priority, multiline prompt composition, Ctrl+Enter submission, and
+  event browsing. The Notty renderer translates terminal events into those
+  inputs instead of carrying shell behavior itself.
 - The REPL exposes the same inspector through `/inspect [index]`, so event-log
   review works even outside a full-screen TUI and can target historical events.
 - The REPL exposes plugin inspection through `/plugin <id|tool>`, showing

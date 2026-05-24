@@ -136,6 +136,9 @@ copy. Two consequences:
   rendering with a visible cursor.
 - **TUI shell controller groundwork** centralizes prompt submission, command
   palette movement, and event inspection selection in a pure state machine.
+  It also owns the abstract keyboard/mouse input mapping, including palette
+  priority, event browsing, multiline prompt editing, and Ctrl+Enter submit
+  semantics for the future interactive shell.
 
 Options:
 

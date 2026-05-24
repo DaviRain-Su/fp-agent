@@ -135,48 +135,41 @@ let make_tui_reporter ~provider ~model ~session ~header =
       lines := !lines @ View.display_lines !current_delta;
       current_delta := "")
   in
+  let has_key_modifier mods modifier =
+    List.mem mods modifier ~equal:Poly.equal
+  in
+  let input_of_term_event = function
+    | `Key (`Escape, _) -> Some Tui_shell.Escape
+    | `Key (`Enter, mods) ->
+        if has_key_modifier mods `Ctrl then Some Tui_shell.Ctrl_enter
+        else if has_key_modifier mods `Shift then Some Tui_shell.Shift_enter
+        else Some Tui_shell.Enter
+    | `Key (`Backspace, _) -> Some Tui_shell.Backspace_key
+    | `Key (`Delete, _) -> Some Tui_shell.Delete_key
+    | `Key (`Arrow `Left, _) -> Some Tui_shell.Left
+    | `Key (`Arrow `Right, _) -> Some Tui_shell.Right
+    | `Key (`Arrow `Up, _) | `Key (`ASCII 'k', _) -> Some Tui_shell.Up
+    | `Key (`Arrow `Down, _) | `Key (`ASCII 'j', _) -> Some Tui_shell.Down
+    | `Key (`Page `Up, _) -> Some Tui_shell.Page_up
+    | `Key (`Page `Down, _) -> Some Tui_shell.Page_down
+    | `Key (`Home, _) -> Some Tui_shell.Home
+    | `Key (`End, _) | `Key (`ASCII 'G', _) -> Some Tui_shell.End
+    | `Key (`ASCII '/', _) -> Some Tui_shell.Slash
+    | `Key (`ASCII '?', _) -> Some Tui_shell.Question
+    | `Mouse (`Press (`Scroll `Up), _, _) -> Some Tui_shell.Mouse_scroll_up
+    | `Mouse (`Press (`Scroll `Down), _, _) -> Some Tui_shell.Mouse_scroll_down
+    | `Resize _ | `End | `Paste _ | `Key _ | `Mouse _ -> None
+  in
   let drain_input ~page_size =
-    let palette_open () = Tui_shell.palette_open !shell in
-    let apply action =
-      let result = Tui_shell.handle !shell action in
+    let apply input =
+      let result = Tui_shell.handle_input ~page_size !shell input in
       shell := result.state
     in
     let rec loop () =
       if Notty_unix.Term.pending term then (
-        (match Notty_unix.Term.event term with
-        | `Key (`Escape, _) when palette_open () ->
-            apply Tui_shell.Close_palette
-        | `Key (`Enter, _) when palette_open () -> apply Tui_shell.Close_palette
-        | `Key (`ASCII '/', _) | `Key (`ASCII '?', _) ->
-            apply Tui_shell.Toggle_palette
-        | (`Key (`Arrow `Up, _) | `Key (`ASCII 'k', _)) when palette_open () ->
-            apply (Tui_shell.Move_palette (-1))
-        | (`Key (`Arrow `Down, _) | `Key (`ASCII 'j', _)) when palette_open ()
-          ->
-            apply (Tui_shell.Move_palette 1)
-        | `Key (`Page `Up, _) when palette_open () ->
-            apply (Tui_shell.Move_palette (-page_size))
-        | `Key (`Page `Down, _) when palette_open () ->
-            apply (Tui_shell.Move_palette page_size)
-        | `Key (`Home, _) when palette_open () -> apply Tui_shell.Palette_home
-        | `Key (`End, _) when palette_open () -> apply Tui_shell.Palette_end
-        | `Mouse (`Press (`Scroll `Up), _, _) when palette_open () ->
-            apply (Tui_shell.Move_palette (-1))
-        | `Mouse (`Press (`Scroll `Down), _, _) when palette_open () ->
-            apply (Tui_shell.Move_palette 1)
-        | `Key (`Arrow `Up, _) | `Key (`ASCII 'k', _) ->
-            apply (Tui_shell.Move_event (-1))
-        | `Key (`Arrow `Down, _) | `Key (`ASCII 'j', _) ->
-            apply (Tui_shell.Move_event 1)
-        | `Key (`Page `Up, _) -> apply (Tui_shell.Move_event (-page_size))
-        | `Key (`Page `Down, _) -> apply (Tui_shell.Move_event page_size)
-        | `Key (`Home, _) -> apply Tui_shell.Event_home
-        | `Key (`End, _) | `Key (`ASCII 'G', _) -> apply Tui_shell.Event_end
-        | `Mouse (`Press (`Scroll `Up), _, _) ->
-            apply (Tui_shell.Move_event (-1))
-        | `Mouse (`Press (`Scroll `Down), _, _) ->
-            apply (Tui_shell.Move_event 1)
-        | `Resize _ | `End | `Paste _ | `Key _ | `Mouse _ -> ());
+        (match input_of_term_event (Notty_unix.Term.event term) with
+        | None -> ()
+        | Some input -> apply input);
         loop ())
     in
     loop ()

@@ -27,6 +27,28 @@ type action =
   | Event_home
   | Event_end
 
+type input =
+  | Text of string
+  | Enter
+  | Ctrl_enter
+  | Shift_enter
+  | Backspace_key
+  | Delete_key
+  | Left
+  | Right
+  | Up
+  | Down
+  | Page_up
+  | Page_down
+  | Home
+  | End
+  | Escape
+  | Slash
+  | Question
+  | Mouse_scroll_up
+  | Mouse_scroll_down
+  | Unknown
+
 type result = { state : t; submitted : string option }
 
 val create : ?command_count:int -> unit -> t
@@ -54,3 +76,13 @@ val palette_label : t -> string
 val handle : t -> action -> result
 (** Apply one input action. [Submit_prompt] returns the submitted prompt and
     clears the draft when the draft is not empty. *)
+
+val action_of_input : page_size:int -> t -> input -> action option
+(** Translate abstract terminal input into a shell action. Palette navigation
+    has priority while the palette is open; otherwise text edits the prompt and
+    navigation keys inspect events, with Home/End targeting the draft when one
+    is active. *)
+
+val handle_input : page_size:int -> t -> input -> result
+(** Translate and apply one abstract terminal input. Unknown or context-invalid
+    input leaves the state unchanged. *)
