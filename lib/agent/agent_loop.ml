@@ -124,6 +124,11 @@ let tool_use_ids content =
     | Llm.Tool_use { id; _ } -> Some id
     | _ -> None)
 
+let update_plan_tool_name = "update_plan"
+
+let is_update_plan_tool (tc : Tool_call.t) =
+  String.equal tc.name update_plan_tool_name
+
 let is_tool_result_turn_for ids (turn : Llm.turn) =
   match turn.role with
   | Llm.Assistant -> false
@@ -356,12 +361,25 @@ let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
       | Permission.Allow ->
           Tool_result.Error { message = "internal error: expected denial" }
     in
+    let update_plan_result tc =
+      match Event.plan_items_of_json tc.Tool_call.args with
+      | Error message -> Tool_result.Error { message }
+      | Ok items ->
+          emit (Event.Plan_updated { items });
+          Tool_result.Success
+            {
+              output =
+                Printf.sprintf "plan updated: %d item(s)" (List.length items);
+            }
+    in
     let prepare_tool_call (id, tc) =
       emit (Event.Tool_call tc);
       let permission = Policy.check ~yolo ~workspace ~tool_call:tc () in
       emit (Event.Policy_decision { tool_call = tc; permission });
       if not (Permission.is_allow permission) then
         Lwt.return (id, fun () -> Lwt.return (denied_result permission))
+      else if is_update_plan_tool tc then
+        Lwt.return (id, fun () -> Lwt.return (update_plan_result tc))
       else
         match Policy.approval_reason policy tc with
         | None ->

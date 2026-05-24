@@ -21,3 +21,4 @@ val search : ?path:string -> string -> t
 val make_dir : string -> t
 val apply_patch : string -> t
 val multi_edit : (string * string * string) list -> t
+val update_plan : (string * string) list -> t

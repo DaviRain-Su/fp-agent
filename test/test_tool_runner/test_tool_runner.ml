@@ -141,6 +141,24 @@ let test_run_command () =
         (String.is_substring (output r) ~substring:"hi"
         && String.is_substring (output r) ~substring:"exit_code=0"))
 
+let test_update_plan_tool () =
+  with_workspace (fun ws _ ->
+      let r =
+        run ws
+          (Tool_call.update_plan
+             [ ("todo", "inspect code"); ("doing", "run focused tests") ])
+      in
+      Alcotest.(check bool) "plan tool ok" true (is_success r);
+      Alcotest.(check bool)
+        "plan output" true
+        (String.is_substring (output r) ~substring:"plan updated: 2 item(s)");
+      let invalid =
+        run ws
+          (Tool_call.make ~name:"update_plan"
+             ~args:(`Assoc [ ("plan", `String "bad") ]))
+      in
+      Alcotest.(check bool) "invalid plan denied" true (is_error invalid))
+
 let test_policy_denied () =
   with_workspace (fun ws _ ->
       let d = run ws (Tool_call.write_file ~path:".git/x" ~content:"y") in
@@ -195,6 +213,7 @@ let () =
           Alcotest.test_case "multi_edit" `Quick test_multi_edit;
           Alcotest.test_case "multi_edit_atomic" `Quick test_multi_edit_atomic;
           Alcotest.test_case "run_command" `Quick test_run_command;
+          Alcotest.test_case "update_plan" `Quick test_update_plan_tool;
           Alcotest.test_case "policy_denied" `Quick test_policy_denied;
         ] );
       ("event_log", [ Alcotest.test_case "event_log" `Quick test_event_log ]);

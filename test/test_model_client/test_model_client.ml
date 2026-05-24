@@ -104,6 +104,29 @@ let test_parse_flat_new_tools () =
       | _ -> Alcotest.fail "expected one multi_edit item")
   | _ -> Alcotest.fail "expected flat multi_edit"
 
+let test_parse_update_plan () =
+  match
+    parse
+      {|{"action":"tool_call","tool":"update_plan","args":{"plan":[{"step":"inspect code","status":"pending"},{"step":"run tests","status":"in_progress"}],"explanation":"starting"}}|}
+  with
+  | Ok (Model_action.Tool_call tc) -> (
+      check_tool tc ~name:"update_plan";
+      match Event.plan_items_of_json tc.args with
+      | Error e -> Alcotest.failf "plan args did not parse: %s" e
+      | Ok [ first; second ] ->
+          Alcotest.(check string) "first step" "inspect code" first.text;
+          Alcotest.(check string)
+            "first status" "todo"
+            (Event.plan_status_to_string first.status);
+          Alcotest.(check string) "second step" "run tests" second.text;
+          Alcotest.(check string)
+            "second status" "doing"
+            (Event.plan_status_to_string second.status)
+      | Ok items ->
+          Alcotest.failf "unexpected plan item count: %d" (List.length items))
+  | Ok _ -> Alcotest.fail "expected update_plan tool call"
+  | Error e -> Alcotest.failf "unexpected update_plan parse error: %s" e
+
 let test_parse_tool_calls_batch () =
   match
     parse
@@ -649,6 +672,7 @@ let () =
           Alcotest.test_case "bare_tool_field" `Quick test_parse_bare_tool_field;
           Alcotest.test_case "search" `Quick test_parse_search;
           Alcotest.test_case "flat_new_tools" `Quick test_parse_flat_new_tools;
+          Alcotest.test_case "update_plan" `Quick test_parse_update_plan;
           Alcotest.test_case "tool_calls_batch" `Quick
             test_parse_tool_calls_batch;
           Alcotest.test_case "array_tool_batch" `Quick

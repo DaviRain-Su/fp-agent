@@ -87,3 +87,10 @@ let multi_edit edits =
           ])
   in
   make ~name:"multi_edit" ~args:(obj [ ("edits", `List items) ])
+
+let update_plan plan =
+  let items =
+    List.map plan ~f:(fun (status, step) ->
+        obj [ ("status", `String status); ("step", `String step) ])
+  in
+  make ~name:"update_plan" ~args:(obj [ ("plan", `List items) ])

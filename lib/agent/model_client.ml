@@ -37,6 +37,7 @@ Available tools and their args:
 - make_dir    {"path": string}
 - apply_patch {"patch": string}   (a unified diff applied with git apply)
 - multi_edit  {"edits": [{"path": string, "old": string, "new": string}, ...]}   (applied atomically)
+- update_plan {"plan": [{"step": string, "status": "todo"|"doing"|"done"}], "explanation": string (optional)}
 
 Fallback final answer:
 {"action":"final_answer","summary": string, "details": string (optional)}
@@ -46,6 +47,7 @@ Rules:
 - You cannot modify the .git directory. Dangerous shell commands are rejected.
 - Prefer small, verifiable steps. Inspect files before editing them.
 - Batch independent read-only inspection calls in one turn when possible.
+- For multi-step work, call update_plan to keep a short visible plan current.
 - For code review tasks, start with git status --short and git diff --stat, then inspect only changed or directly related files/diffs. Prefer git diff <path> over reading whole files. Report findings with file paths and concrete evidence; do not scan the entire repository unless the diff demands it.
 - For codebase tasks, you MUST inspect relevant files with tools before giving a final answer. Do not answer "Hello" or ask how to help after the user has already given a task.
 - If the provider offers native tool calling, use native tool calls; otherwise use the JSON action format above.|}
@@ -269,6 +271,30 @@ let object_schema ?(required = []) properties =
       ("additionalProperties", `Bool true);
     ]
 
+let plan_item_schema =
+  object_schema ~required:[ "status"; "step" ]
+    (`Assoc
+       [
+         ("status", `Assoc [ ("type", `String "string") ]);
+         ("step", `Assoc [ ("type", `String "string") ]);
+       ])
+
+let plan_schema =
+  `Assoc
+    [
+      ("type", `String "object");
+      ( "properties",
+        `Assoc
+          [
+            ( "plan",
+              `Assoc [ ("type", `String "array"); ("items", plan_item_schema) ]
+            );
+            ("explanation", `Assoc [ ("type", `String "string") ]);
+          ] );
+      ("required", `List [ `String "plan" ]);
+      ("additionalProperties", `Bool true);
+    ]
+
 let tool_parameters name =
   match name with
   | "read_file" | "list_files" | "make_dir" ->
@@ -301,6 +327,7 @@ let tool_parameters name =
               ] );
           ("required", `List [ `String "edits" ]);
         ]
+  | "update_plan" -> plan_schema
   | _ -> object_schema (`Assoc [])
 
 let schema_for_tool (tool : Tool.t) =

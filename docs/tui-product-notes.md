@@ -125,6 +125,10 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   log. `/status`, the fullscreen status strip, and the inspector also surface
   plan completion progress. Plan state survives resume/fork because it is data,
   not transient UI state.
+- The model can now call the built-in `update_plan` meta-tool during an agent
+  run. The loop validates the requested plan, appends the same `Plan_updated`
+  event used by manual slash commands, and returns a tool result so long tasks
+  keep visible progress in the session timeline.
 - The command palette now groups commands by workflow area such as Tools,
   Plugins, Sessions, Models, Context, and Run Control. Filtering also matches
   those group labels, so queries like `plugins install` can jump directly to

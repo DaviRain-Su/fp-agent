@@ -172,6 +172,58 @@ let test_parallel_tool_batch_then_final () =
         "two tool result events" 2
         (count "\"Tool_result_message\""))
 
+let test_update_plan_tool_emits_plan_event () =
+  with_env (fun config workspace event_log session_dir ->
+      let client =
+        scripted
+          [
+            Model_action.Tool_call
+              (Tool_call.update_plan
+                 [
+                   ("pending", "inspect implementation");
+                   ("in_progress", "add regression tests");
+                   ("completed", "summarize result");
+                 ]);
+            Model_action.Final_answer { answer = "done" };
+          ]
+      in
+      let outcome = run config workspace event_log client "work in stages" in
+      Alcotest.(check string)
+        "status completed" "completed"
+        (Agent_loop.status_to_string outcome.status);
+      match Journal.read ~session_dir with
+      | Error e -> Alcotest.failf "read event log: %s" e
+      | Ok events -> (
+          let plan =
+            List.find_map events ~f:(function
+              | Event.Plan_updated { items } -> Some items
+              | _ -> None)
+          in
+          match plan with
+          | None -> Alcotest.fail "expected Plan_updated event"
+          | Some [ first; second; third ] ->
+              Alcotest.(check string)
+                "first plan text" "inspect implementation" first.text;
+              Alcotest.(check string)
+                "first plan status" "todo"
+                (Event.plan_status_to_string first.status);
+              Alcotest.(check string)
+                "second plan status" "doing"
+                (Event.plan_status_to_string second.status);
+              Alcotest.(check string)
+                "third plan status" "done"
+                (Event.plan_status_to_string third.status);
+              Alcotest.(check bool)
+                "tool result is logged" true
+                (List.exists events ~f:(function
+                  | Event.Tool_result_message
+                      { result = Tool_result.Success { output }; _ } ->
+                      String.is_substring output
+                        ~substring:"plan updated: 3 item(s)"
+                  | _ -> false))
+          | Some items ->
+              Alcotest.failf "unexpected plan length: %d" (List.length items)))
+
 let test_history_truncation_keeps_tool_exchange_atomic () =
   let big_result =
     String.make (Agent_loop.max_history_chars_for_test - 100) 'x'
@@ -501,6 +553,8 @@ let () =
           Alcotest.test_case "tool_then_final" `Quick test_tool_then_final;
           Alcotest.test_case "parallel_tool_batch" `Quick
             test_parallel_tool_batch_then_final;
+          Alcotest.test_case "update_plan_tool" `Quick
+            test_update_plan_tool_emits_plan_event;
           Alcotest.test_case "history_truncation_atomic" `Quick
             test_history_truncation_keeps_tool_exchange_atomic;
           Alcotest.test_case "auto_compaction" `Quick

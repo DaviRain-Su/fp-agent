@@ -253,7 +253,9 @@ copy. Two consequences:
 - **Session plan** (`/plan`, `/plan-set`, `/plan-add`, `/plan-update`,
   `/plan-clear`) stores a visible todo/doing/done plan as an event-log entry, so
   long tasks can carry an auditable working plan across REPL/TUI resume, fork,
-  status, inspect, and log views.
+  status, inspect, and log views. The model can also call the built-in
+  `update_plan` tool, so automatic long-running tasks update the same
+  event-sourced plan instead of keeping progress only in hidden reasoning.
 - **Compaction** (`/compact`) appends a `Context_compacted` event that replaces
   older model-visible turns with a bounded summary while preserving the recent
   turns needed to continue safely. The raw event log remains intact.
@@ -523,7 +525,7 @@ the active view instead of stdin.
 | `model_client` | OpenAI/Anthropic HTTP client + action parsing |
 | `policy` / `tool_runner` | Deny-list/approval and tool execution |
 | `session_state` / `transcript` | Event-sourced state (fold over the log) |
-| `agent_loop` | The model↔tool loop |
+| `agent_loop` | The model↔tool loop, including eventful meta-tools such as `update_plan` |
 | `graph_runtime` | P4 graph runtime skeleton: Agent/Tool/Parallel/Sequence/Router nodes |
 
 **`lib/ui/`** — `view` (pure TUI helpers: windowing, line classification).

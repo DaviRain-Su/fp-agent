@@ -30,3 +30,9 @@ val describe_tool : Tool_call.t -> string
 val plan_status_to_string : plan_status -> string
 val plan_status_of_string : string -> plan_status option
 val plan_item_line : plan_item -> string
+
+val plan_items_of_json : Yojson.Safe.t -> (plan_item list, string) result
+(** Parse model/tool args for an event-sourced plan update. Accepts either
+    [\{"plan":[\{"step":...,"status":...\}]\}] or
+    [\{"items":[\{"text":...,"status":...\}]\}], with status aliases such as
+    [pending], [in_progress], and [completed]. *)

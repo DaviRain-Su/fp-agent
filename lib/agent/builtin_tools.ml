@@ -29,6 +29,30 @@ let object_schema ?(required = []) properties =
       ("additionalProperties", `Bool true);
     ]
 
+let plan_item_schema =
+  object_schema ~required:[ "status"; "step" ]
+    (`Assoc
+       [
+         ("status", `Assoc [ ("type", `String "string") ]);
+         ("step", `Assoc [ ("type", `String "string") ]);
+       ])
+
+let plan_schema =
+  `Assoc
+    [
+      ("type", `String "object");
+      ( "properties",
+        `Assoc
+          [
+            ( "plan",
+              `Assoc [ ("type", `String "array"); ("items", plan_item_schema) ]
+            );
+            ("explanation", `Assoc [ ("type", `String "string") ]);
+          ] );
+      ("required", `List [ `String "plan" ]);
+      ("additionalProperties", `Bool true);
+    ]
+
 let schema_for = function
   | "read_file" | "list_files" | "make_dir" ->
       object_schema ~required:[ "path" ] (props [ "path" ])
@@ -60,6 +84,7 @@ let schema_for = function
               ] );
           ("required", `List [ `String "edits" ]);
         ]
+  | "update_plan" -> plan_schema
   | _ -> object_schema (`Assoc [])
 
 let tool ~name ~kind ~description ~check ~run =
@@ -447,6 +472,15 @@ let multi_edit_run ws args =
                 }
           | Error e -> err e))
 
+let update_plan_run _ws args =
+  match Event.plan_items_of_json args with
+  | Error e -> err e
+  | Ok items ->
+      Tool_result.Success
+        {
+          output = Printf.sprintf "plan updated: %d item(s)" (List.length items);
+        }
+
 (* --- descriptors --- *)
 let tools : Tool.t list =
   [
@@ -488,6 +522,14 @@ let tools : Tool.t list =
             | Some reason -> Permission.Deny reason
             | None -> Permission.Allow))
       ~run:multi_edit_run;
+    tool ~name:"update_plan" ~kind:Read
+      ~description:
+        {|{"plan": [{"step": string, "status": "todo"|"doing"|"done"}], "explanation": string (optional)}|}
+      ~check:(fun _ws args ->
+        match Event.plan_items_of_json args with
+        | Ok _ -> Permission.Allow
+        | Error reason -> Permission.Deny reason)
+      ~run:update_plan_run;
     tool ~name:"run_command" ~kind:Exec
       ~description:{|{"command": string, "cwd": string (optional)}|}
       ~check:(fun _ws args ->
