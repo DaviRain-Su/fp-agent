@@ -357,7 +357,7 @@ let test_plugin_inspector_lines () =
             tool_permissions =
               Some
                 (`Assoc
-                   [ ("workspace", `String "read"); ("network", `Bool false) ]);
+                   [ ("workspace", `String "read"); ("network", `Bool true) ]);
             tool_input_schema =
               Some
                 (`Assoc
@@ -389,6 +389,12 @@ let test_plugin_inspector_lines () =
   Alcotest.(check bool)
     "shows permissions" true
     (String.is_substring joined ~substring:"permissions: workspace=read");
+  Alcotest.(check bool)
+    "shows approval" true
+    (String.is_substring joined ~substring:"approval:");
+  Alcotest.(check bool)
+    "shows approval reason" true
+    (String.is_substring joined ~substring:"network permission");
   Alcotest.(check bool)
     "shows schema" true
     (String.is_substring joined ~substring:"input_schema:")

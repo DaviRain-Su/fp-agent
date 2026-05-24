@@ -133,7 +133,8 @@ details, and next inspection commands. Use it when a plugin was installed but a
 tool is missing from `/tools`.
 
 `/plugin <plugin-id|tool-name>` prints the manifest details for one plugin:
-directory, version, tool kind, permissions, command, timeout, and input schema.
+directory, version, tool kind, permissions, approval reason, command, timeout,
+and input schema.
 
 `/tool <tool-name>` prints the registered tool descriptor exactly as the model
 sees it: kind, description, and input schema. This works for both built-in and

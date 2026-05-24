@@ -35,6 +35,10 @@ val supported_sdk_version : int
 val permissions_label : Yojson.Safe.t option -> string
 (** Render plugin tool permissions as a compact human-facing label. *)
 
+val approval_reason : plugin_tool -> string option
+(** Return the confirmation reason implied by a plugin tool's permission
+    metadata, if any. *)
+
 val load_manifest : string -> (manifest, string) result
 (** Load and validate [fp-agent-plugin.json] from a plugin directory. *)
 

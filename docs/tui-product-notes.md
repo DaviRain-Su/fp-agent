@@ -115,7 +115,8 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   manifest loader validates it, plugin/tool surfaces show it, registered tool
   descriptions carry it, runtime commands receive the raw JSON via
   `FP_AGENT_TOOL_PERMISSIONS`, and sensitive declarations participate in
-  `--confirm` approval prompts for model-triggered plugin calls.
+  `--confirm` approval prompts for model-triggered plugin calls. `/plugin`
+  now shows the exact approval reason next to the permission metadata.
 - Plugin `input_schema` validation now supports JSON Schema `enum`, so local
   runs, smoke checks, and model-triggered plugin calls reject invalid option
   values before executing plugin code.

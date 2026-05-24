@@ -433,6 +433,9 @@ let plugin_approval_reason tool_name permissions =
       | None -> None)
   | _ -> None
 
+let approval_reason (tool : plugin_tool) =
+  plugin_approval_reason tool.tool_name tool.tool_permissions
+
 let parse_tool json : (plugin_tool, string) Result.t =
   let timeout_sec =
     Option.value
@@ -911,9 +914,7 @@ let register_manifest (manifest : manifest) =
             name = plugin_tool.tool_name;
             kind = plugin_tool.tool_kind;
             description;
-            approval_reason =
-              plugin_approval_reason plugin_tool.tool_name
-                plugin_tool.tool_permissions;
+            approval_reason = approval_reason plugin_tool;
             input_schema = plugin_tool.tool_input_schema;
             check = plugin_check plugin_tool.tool_kind;
             run = run_plugin_tool manifest plugin_tool;

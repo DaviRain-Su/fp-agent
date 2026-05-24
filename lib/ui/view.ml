@@ -447,6 +447,8 @@ let plugin_tool_lines (tool : Plugin.plugin_tool) =
     "  description: " ^ tool.tool_description;
     "  command: " ^ tool.tool_command;
     "  permissions: " ^ Plugin.permissions_label tool.tool_permissions;
+    "  approval: "
+    ^ Option.value (Plugin.approval_reason tool) ~default:"<none>";
     Printf.sprintf "  timeout: %ds" tool.tool_timeout_sec;
   ]
   @
