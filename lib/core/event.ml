@@ -46,7 +46,6 @@ let to_display (t : t) =
       Some ("  ✗ policy denied: " ^ reason)
   | Policy_decision { permission = Permission.Ask_user reason; _ } ->
       Some ("  ? needs approval: " ^ reason)
-  | Model_delta { content } -> Some content
-  | User_message _ | Model_response _ | Policy_decision _ | State_transition _
-    ->
+  | User_message _ | Model_delta _ | Model_response _ | Policy_decision _
+  | State_transition _ ->
       None

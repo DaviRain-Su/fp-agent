@@ -46,7 +46,8 @@ let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
   let system = Message.system Model_client.system_prompt in
   let messages () = truncate_history ~system (Session_state.messages !st) in
   let emit_delta content =
-    if not (String.is_empty content) then on_event (Event.Model_delta { content })
+    if not (String.is_empty content) then
+      on_event (Event.Model_delta { content })
   in
   emit (Event.User_message { content = task });
   goto Agent_state.Waiting_for_model;
@@ -59,7 +60,8 @@ let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
     else send_with_retry 0 n
   and send_with_retry retries n =
     Lwt.bind
-      (Model_client.send model_client ~on_delta:emit_delta ~messages:(messages ()))
+      (Model_client.send model_client ~on_delta:emit_delta
+         ~messages:(messages ()))
       (fun result ->
         match result with
         | Error e ->

@@ -150,10 +150,11 @@ top-level provider map or `{ "providers": { ... } }`. A pi-style subset works:
 }
 ```
 
-The current implementation uses `baseUrl`, `api`, `apiKey`, and `models[].id`
-or `models[].name`; unsupported `compat` fields are accepted but ignored. In
-the REPL, `/models` lists built-in providers plus custom providers from these
-files, and `/provider <name> <model>` switches to one of them.
+The implementation uses `baseUrl`, `api`, `apiKey`, `models[].id` or
+`models[].name`, `models[].maxTokens`, `compat.supportsUsageInStreaming`, and
+`compat.maxTokensField`. In the REPL, `/models` lists built-in providers plus
+custom providers from these files, and `/provider <name> <model>` switches to
+one of them.
 
 ### Environment variables
 

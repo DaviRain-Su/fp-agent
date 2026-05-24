@@ -1,3 +1,10 @@
+type provider_compat = {
+  supports_developer_role : bool;
+  supports_reasoning_effort : bool;
+  supports_usage_in_streaming : bool;
+  max_tokens_field : string option;
+}
+
 type t = {
   provider : string;
   api_key : string;
@@ -5,6 +12,8 @@ type t = {
   model : string;
   models : string list;
   protocol : Provider.protocol;
+  compat : provider_compat;
+  max_tokens : int option;
   max_steps : int;
   workspace_root : string;
 }
@@ -35,3 +44,7 @@ val available_providers : unit -> provider_catalog_entry list
 (** Return the built-in provider/model catalog plus custom providers found in
     [FP_AGENT_CONFIG] or the default provider config files. API keys are not
     required for catalog listing. *)
+
+val default_compat : provider_compat
+(** Conservative OpenAI-compatible defaults used by tests and providers without
+    explicit compatibility metadata. *)

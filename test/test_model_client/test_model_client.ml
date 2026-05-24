@@ -186,7 +186,9 @@ let test_parse_name_args_tool_calls () =
   | Error e -> Alcotest.failf "unexpected name+args parse error: %s" e
 
 let test_parse_ppx_variant_tool_call () =
-  match parse {|["Tool_call",{"name":"read_file","args":{"path":"README.md"}}]|} with
+  match
+    parse {|["Tool_call",{"name":"read_file","args":{"path":"README.md"}}]|}
+  with
   | Ok (Model_action.Tool_call tc) ->
       check_tool tc ~name:"read_file";
       check_arg tc "path" "README.md"
@@ -289,10 +291,11 @@ let test_config_providers () =
     "apiKey": "dummy",
     "compat": {
       "supportsDeveloperRole": false,
+      "supportsUsageInStreaming": false,
       "maxTokensField": "max_tokens"
     },
     "models": [
-      { "id": "qwen36-rtx", "name": "qwen36-rtx" },
+      { "id": "qwen36-rtx", "name": "qwen36-rtx", "maxTokens": 8192 },
       { "id": "qwen-coder" }
     ]
   }
@@ -306,10 +309,28 @@ let test_config_providers () =
         "custom base" "http://101.132.142.56:18080/v1" cfg.api_base;
       Alcotest.(check string) "custom key" "dummy" cfg.api_key;
       Alcotest.(check string) "first custom model" "qwen36-rtx" cfg.model;
+      Alcotest.(check (option int))
+        "custom max tokens" (Some 8192) cfg.max_tokens;
+      Alcotest.(check bool)
+        "custom disables usage streaming" false
+        cfg.compat.supports_usage_in_streaming;
+      Alcotest.(check (option string))
+        "custom max token field" (Some "max_tokens") cfg.compat.max_tokens_field;
       Alcotest.(check (list string))
         "custom models"
         [ "qwen36-rtx"; "qwen-coder" ]
-        cfg.models
+        cfg.models;
+      let body =
+        Model_client.request_body_for_test ~config:cfg
+          ~messages:[ Message.system "sys"; Message.user "hi" ]
+      in
+      let member = Yojson.Safe.Util.member in
+      Alcotest.(check bool)
+        "custom omits stream usage option" true
+        (match member "stream_options" body with `Null -> true | _ -> false);
+      Alcotest.(check (option int))
+        "custom request max_tokens" (Some 8192)
+        (match member "max_tokens" body with `Int n -> Some n | _ -> None)
   | Error e -> Alcotest.failf "custom provider load: %s" e);
   let catalog = Config.available_providers () in
   let find_provider name =

@@ -105,7 +105,7 @@ let args_object json =
       | `Assoc _ as a -> a
       | `String s -> (
           match Yojson.Safe.from_string s with
-          | (`Assoc _ as a) -> a
+          | `Assoc _ as a -> a
           | _ -> `Assoc []
           | exception _ -> `Assoc [])
       | _ -> (
@@ -179,8 +179,9 @@ let action_of_tool_calls_json items =
 let parse_object json : (Model_action.t, string) Result.t =
   let member = Yojson.Safe.Util.member in
   let as_tool tool =
-    Result.map (build_tool tool (args_object json)) ~f:(fun tc ->
-        Model_action.Tool_call tc)
+    Result.map
+      (build_tool tool (args_object json))
+      ~f:(fun tc -> Model_action.Tool_call tc)
   in
   let final () =
     let summary = Option.value (get_string_opt json "summary") ~default:"" in
@@ -218,8 +219,10 @@ let parse_object json : (Model_action.t, string) Result.t =
 
 let parse_ppx_variant = function
   | `List [ `String "Tool_call"; json ] ->
-      Result.map (parse_tool_object json) ~f:(fun tc -> Model_action.Tool_call tc)
-  | `List [ `String "Tool_calls"; `List items ] -> action_of_tool_calls_json items
+      Result.map (parse_tool_object json) ~f:(fun tc ->
+          Model_action.Tool_call tc)
+  | `List [ `String "Tool_calls"; `List items ] ->
+      action_of_tool_calls_json items
   | `List [ `String "Final_answer"; obj ] -> (
       match get_string_opt obj "answer" with
       | Some answer -> Ok (Model_action.Final_answer { answer })
@@ -238,13 +241,15 @@ let parse_action content : (Model_action.t, string) Result.t =
           try
             match raw with
             | `List [] -> Error "empty JSON array from model"
-            | `List [ `String s ] -> Ok (Model_action.Final_answer { answer = s })
+            | `List [ `String s ] ->
+                Ok (Model_action.Final_answer { answer = s })
             | `List [ x ] -> (
                 match (is_tool_like x, text_block_text x) with
                 | true, _ -> parse_object x
                 | false, Some text ->
                     Ok (Model_action.Final_answer { answer = text })
-                | false, None -> Error "single-item JSON array is not an action")
+                | false, None -> Error "single-item JSON array is not an action"
+                )
             | `List xs -> action_of_tool_calls_json xs
             | `String s -> Ok (Model_action.Final_answer { answer = s })
             | json -> parse_object json
@@ -352,13 +357,22 @@ let next_tool_id counter =
   id
 
 let queue_push q x = q := !q @ [ x ]
-let queue_pop q = match !q with x :: xs -> q := xs; Some x | [] -> None
+
+let queue_pop q =
+  match !q with
+  | x :: xs ->
+      q := xs;
+      Some x
+  | [] -> None
 
 let split_system messages =
   let system, rest =
-    List.partition_tf messages ~f:(fun (m : Message.t) -> String.equal m.role "system")
+    List.partition_tf messages ~f:(fun (m : Message.t) ->
+        String.equal m.role "system")
   in
-  (List.map system ~f:(fun (m : Message.t) -> m.content) |> String.concat ~sep:"\n\n", rest)
+  ( List.map system ~f:(fun (m : Message.t) -> m.content)
+    |> String.concat ~sep:"\n\n",
+    rest )
 
 let turns_of_messages messages =
   let _system, messages = split_system messages in
@@ -371,7 +385,11 @@ let turns_of_messages messages =
           | Ok action -> (
               match tool_calls_of_action action with
               | [] ->
-                  let text = Option.value (final_answer_of_action action) ~default:m.content in
+                  let text =
+                    Option.value
+                      (final_answer_of_action action)
+                      ~default:m.content
+                  in
                   { role = Assistant; content = [ Text text ] }
               | calls ->
                   let content =
@@ -384,13 +402,18 @@ let turns_of_messages messages =
           | Error _ -> { role = Assistant; content = [ Text m.content ] })
       | "user" when is_tool_observation m.content -> (
           match queue_pop pending_ids with
-          | Some id -> { role = User; content = [ Tool_result { id; content = m.content } ] }
+          | Some id ->
+              {
+                role = User;
+                content = [ Tool_result { id; content = m.content } ];
+              }
           | None -> { role = User; content = [] })
       | _ -> { role = User; content = [ Text m.content ] })
 
 let anthropic_block = function
   | Text s -> `Assoc [ ("type", `String "text"); ("text", `String s) ]
-  | Thinking s -> `Assoc [ ("type", `String "thinking"); ("thinking", `String s) ]
+  | Thinking s ->
+      `Assoc [ ("type", `String "thinking"); ("thinking", `String s) ]
   | Tool_use { id; name; input } ->
       `Assoc
         [
@@ -420,7 +443,9 @@ let anthropic_messages turns =
         ])
 
 let openai_messages ~system turns =
-  let sys_msg = `Assoc [ ("role", `String "system"); ("content", `String system) ] in
+  let sys_msg =
+    `Assoc [ ("role", `String "system"); ("content", `String system) ]
+  in
   let turn_to_messages t =
     match t.role with
     | User ->
@@ -430,18 +455,19 @@ let openai_messages ~system turns =
         let user_messages =
           match String.concat ~sep:"\n" user_texts with
           | "" -> []
-          | text -> [ `Assoc [ ("role", `String "user"); ("content", `String text) ] ]
+          | text ->
+              [ `Assoc [ ("role", `String "user"); ("content", `String text) ] ]
         in
         let tool_messages =
           List.filter_map t.content ~f:(function
             | Tool_result { id; content } ->
                 Some
                   (`Assoc
-                    [
-                      ("role", `String "tool");
-                      ("tool_call_id", `String id);
-                      ("content", `String content);
-                    ])
+                     [
+                       ("role", `String "tool");
+                       ("tool_call_id", `String id);
+                       ("content", `String content);
+                     ])
             | _ -> None)
         in
         user_messages @ tool_messages
@@ -455,22 +481,28 @@ let openai_messages ~system turns =
             | Tool_use { id; name; input } ->
                 Some
                   (`Assoc
-                    [
-                      ("id", `String id);
-                      ("type", `String "function");
-                      ( "function",
-                        `Assoc
-                          [
-                            ("name", `String name);
-                            ("arguments", `String (Yojson.Safe.to_string input));
-                          ] );
-                    ])
+                     [
+                       ("id", `String id);
+                       ("type", `String "function");
+                       ( "function",
+                         `Assoc
+                           [
+                             ("name", `String name);
+                             ("arguments", `String (Yojson.Safe.to_string input));
+                           ] );
+                     ])
             | _ -> None)
         in
         let fields =
-          [ ("role", `String "assistant"); ("content", if String.is_empty text then `Null else `String text) ]
+          [
+            ("role", `String "assistant");
+            ("content", if String.is_empty text then `Null else `String text);
+          ]
         in
-        let fields = if List.is_empty tool_calls then fields else fields @ [ ("tool_calls", `List tool_calls) ] in
+        let fields =
+          if List.is_empty tool_calls then fields
+          else fields @ [ ("tool_calls", `List tool_calls) ]
+        in
         [ `Assoc fields ]
   in
   sys_msg :: List.concat_map turns ~f:turn_to_messages
@@ -479,8 +511,10 @@ let openai_messages ~system turns =
 
 let sse_data line =
   let line = String.strip line in
-  if String.is_prefix line ~prefix:"data: " then Some (String.drop_prefix line 6)
-  else if String.is_prefix line ~prefix:"data:" then Some (String.drop_prefix line 5)
+  if String.is_prefix line ~prefix:"data: " then
+    Some (String.drop_prefix line 6)
+  else if String.is_prefix line ~prefix:"data:" then
+    Some (String.drop_prefix line 5)
   else None
 
 type delta_visibility = Unknown | Visible | Hidden
@@ -513,7 +547,8 @@ let feed_delta filter chunk =
       let pending = Buffer.contents filter.pending in
       let stripped = String.strip pending in
       if String.is_empty stripped then ()
-      else if looks_like_internal_action_text stripped then filter.visibility <- Hidden
+      else if looks_like_internal_action_text stripped then
+        filter.visibility <- Hidden
       else (
         filter.visibility <- Visible;
         Buffer.clear filter.pending;
@@ -523,7 +558,8 @@ let flush_delta filter final_text =
   match filter.visibility with
   | Visible | Hidden -> ()
   | Unknown ->
-      if not (looks_like_internal_action_text final_text) then filter.on_delta final_text
+      if not (looks_like_internal_action_text final_text) then
+        filter.on_delta final_text
 
 let split_sse_lines chunks ~on_line =
   let buf = Buffer.create 256 in
@@ -571,7 +607,8 @@ let action_of_content_blocks blocks =
         List.filter_map blocks ~f:(function Text s -> Some s | _ -> None)
         |> String.concat ~sep:""
       in
-      if String.is_empty text then Error "provider returned no text or tool_use blocks"
+      if String.is_empty text then
+        Error "provider returned no text or tool_use blocks"
       else if looks_like_internal_action_text text then parse_action text
       else Ok (Model_action.Final_answer { answer = text })
 
@@ -599,15 +636,16 @@ let anthropic_request (config : Config.t) messages =
         ("Content-Type", "application/json");
       ]
   in
+  let max_tokens = Option.value config.max_tokens ~default:4096 in
   let body_json =
     `Assoc
       [
         ("model", `String config.model);
-        ("max_tokens", `Int 4096);
+        ("max_tokens", `Int max_tokens);
         ("system", `String system);
         ("stream", `Bool true);
         ("messages", `List (anthropic_messages turns));
-        ("tools", `List (anthropic_tools ())); 
+        ("tools", `List (anthropic_tools ()));
       ]
   in
   (uri, headers, body_json)
@@ -641,8 +679,10 @@ let anthropic_complete ~on_delta payloads =
               let idx = json |> member "index" |> to_int in
               let block = json |> member "content_block" in
               match member "type" block with
-              | `String "text" -> assoc_set builders idx (BText (Buffer.create 256))
-              | `String "thinking" -> assoc_set builders idx (BThinking (Buffer.create 256))
+              | `String "text" ->
+                  assoc_set builders idx (BText (Buffer.create 256))
+              | `String "thinking" ->
+                  assoc_set builders idx (BThinking (Buffer.create 256))
               | `String "tool_use" ->
                   assoc_set builders idx
                     (BTool
@@ -661,13 +701,15 @@ let anthropic_complete ~on_delta payloads =
                   Buffer.add_string b s;
                   feed_delta delta_filter s
               | `String "thinking_delta", Some (BThinking b) ->
-                  Buffer.add_string b (json_string_or_empty (member "thinking" delta))
+                  Buffer.add_string b
+                    (json_string_or_empty (member "thinking" delta))
               | `String "input_json_delta", Some (BTool t) ->
-                  Buffer.add_string t.json (json_string_or_empty (member "partial_json" delta))
+                  Buffer.add_string t.json
+                    (json_string_or_empty (member "partial_json" delta))
               | _ -> ())
-          | `String "content_block_stop" -> finish (json |> member "index" |> to_int)
-          | _ -> ()))
-  ;
+          | `String "content_block_stop" ->
+              finish (json |> member "index" |> to_int)
+          | _ -> ()));
   let blocks = List.rev !blocks in
   let final_text =
     List.filter_map blocks ~f:(function Text s -> Some s | _ -> None)
@@ -686,19 +728,30 @@ let openai_request (config : Config.t) messages =
     if String.is_empty config.api_key then []
     else [ ("Authorization", "Bearer " ^ config.api_key) ]
   in
-  let headers = Cohttp.Header.of_list (auth @ [ ("Content-Type", "application/json") ]) in
-  let body_json =
-    `Assoc
-      [
-        ("model", `String config.model);
-        ("messages", `List (openai_messages ~system turns));
-        ("temperature", `Float 0.0);
-        ("stream", `Bool true);
-        ("stream_options", `Assoc [ ("include_usage", `Bool true) ]);
-        ("tools", `List (openai_tools ()));
-        ("tool_choice", `String "auto");
-      ]
+  let headers =
+    Cohttp.Header.of_list (auth @ [ ("Content-Type", "application/json") ])
   in
+  let fields =
+    [
+      ("model", `String config.model);
+      ("messages", `List (openai_messages ~system turns));
+      ("temperature", `Float 0.0);
+      ("stream", `Bool true);
+      ("tools", `List (openai_tools ()));
+      ("tool_choice", `String "auto");
+    ]
+  in
+  let fields =
+    if config.compat.supports_usage_in_streaming then
+      fields @ [ ("stream_options", `Assoc [ ("include_usage", `Bool true) ]) ]
+    else fields
+  in
+  let fields =
+    match (config.compat.max_tokens_field, config.max_tokens) with
+    | Some field, Some max_tokens -> fields @ [ (field, `Int max_tokens) ]
+    | _ -> fields
+  in
+  let body_json = `Assoc fields in
   (uri, headers, body_json)
 
 type openai_tool_builder = {
@@ -734,12 +787,15 @@ let openai_complete ~on_delta payloads =
                   feed_delta delta_filter s
               | _ -> ());
               (match member "reasoning_content" delta with
-              | `String s when not (String.is_empty s) -> Buffer.add_string reasoning s
+              | `String s when not (String.is_empty s) ->
+                  Buffer.add_string reasoning s
               | _ -> ());
               match member "tool_calls" delta with
               | `List calls ->
                   List.iter calls ~f:(fun call ->
-                      let idx = match member "index" call with `Int i -> i | _ -> 0 in
+                      let idx =
+                        match member "index" call with `Int i -> i | _ -> 0
+                      in
                       let tool = get_tool idx in
                       (match member "id" call with
                       | `String s when not (String.is_empty s) -> tool.id := s
@@ -752,13 +808,13 @@ let openai_complete ~on_delta payloads =
                       | `String s -> Buffer.add_string tool.args s
                       | _ -> ())
               | _ -> ())
-          | _ -> ()))
-  ;
+          | _ -> ()));
   let text_blocks =
     if Buffer.length text > 0 then [ Text (Buffer.contents text) ] else []
   in
   let reasoning_blocks =
-    if Buffer.length reasoning > 0 then [ Thinking (Buffer.contents reasoning) ] else []
+    if Buffer.length reasoning > 0 then [ Thinking (Buffer.contents reasoning) ]
+    else []
   in
   let tool_blocks =
     !tools
@@ -794,13 +850,17 @@ let collect_sse_payloads body =
       List.rev !payloads)
     (Lwt_stream.to_list (Cohttp_lwt.Body.to_stream body))
 
-let post_and_complete ?(on_delta = fun _ -> ()) (uri, headers, body_json) ~complete =
+let post_and_complete ?(on_delta = fun _ -> ()) (uri, headers, body_json)
+    ~complete =
   let body = Cohttp_lwt.Body.of_string (Yojson.Safe.to_string body_json) in
   Lwt.bind
     (Lwt.catch
        (fun () ->
-         Lwt.map (fun x -> Ok x) (Cohttp_lwt_unix.Client.post ~headers ~body uri))
-       (fun exn -> Lwt.return (Error ("HTTP request failed: " ^ Exn.to_string exn))))
+         Lwt.map
+           (fun x -> Ok x)
+           (Cohttp_lwt_unix.Client.post ~headers ~body uri))
+       (fun exn ->
+         Lwt.return (Error ("HTTP request failed: " ^ Exn.to_string exn))))
     (function
       | Error e -> Lwt.return (Error e)
       | Ok (resp, rbody) ->
@@ -811,7 +871,8 @@ let post_and_complete ?(on_delta = fun _ -> ()) (uri, headers, body_json) ~compl
                   let s = String.strip body_str in
                   if String.length s > 400 then String.prefix s 400 ^ "…" else s
                 in
-                Lwt.return (Error (Printf.sprintf "model API HTTP %d: %s" code snippet)))
+                Lwt.return
+                  (Error (Printf.sprintf "model API HTTP %d: %s" code snippet)))
           else
             Lwt.map
               (fun payloads -> complete ~on_delta payloads)
@@ -820,12 +881,24 @@ let post_and_complete ?(on_delta = fun _ -> ()) (uri, headers, body_json) ~compl
 let real_send (config : Config.t) ~on_delta messages =
   match config.protocol with
   | Provider.Openai ->
-      post_and_complete ~on_delta (openai_request config messages) ~complete:openai_complete
+      post_and_complete ~on_delta
+        (openai_request config messages)
+        ~complete:openai_complete
   | Provider.Anthropic ->
-      post_and_complete ~on_delta (anthropic_request config messages) ~complete:anthropic_complete
+      post_and_complete ~on_delta
+        (anthropic_request config messages)
+        ~complete:anthropic_complete
 
 let create ~config =
   { send = (fun ~on_delta messages -> real_send config ~on_delta messages) }
 
 let create_mock ~send = { send = (fun ~on_delta:_ messages -> send messages) }
 let send ?(on_delta = fun _ -> ()) t ~messages = t.send ~on_delta messages
+
+let request_body_for_test ~config ~messages =
+  let _, _, body =
+    match config.Config.protocol with
+    | Provider.Openai -> openai_request config messages
+    | Provider.Anthropic -> anthropic_request config messages
+  in
+  body

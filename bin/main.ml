@@ -65,14 +65,27 @@ let phase_label = function
 let make_plain_reporter () =
   let phase = make_phase () in
   let i = ref 0 in
+  let streaming = ref false in
   let clear () = Stdlib.Printf.eprintf "\r\027[K" in
+  let finish_stream_if_needed () =
+    if !streaming then (
+      Stdlib.Printf.eprintf "\n%!";
+      streaming := false)
+  in
   let on_event e =
     update_phase phase e;
-    match Event.to_display e with
-    | Some line ->
+    match e with
+    | Model_delta { content } ->
         clear ();
-        Stdlib.Printf.eprintf "%s\n%!" line
-    | None -> ()
+        streaming := true;
+        Stdlib.Printf.eprintf "%s%!" content
+    | _ -> (
+        match Event.to_display e with
+        | Some line ->
+            clear ();
+            finish_stream_if_needed ();
+            Stdlib.Printf.eprintf "%s\n%!" line
+        | None -> ())
   in
   let tick () =
     match phase_label !(fst phase) with
@@ -96,12 +109,22 @@ let make_tui_reporter ~header =
   let module A = Notty.A in
   let term = Notty_unix.Term.create () in
   let lines = ref [] in
+  let current_delta = ref "" in
   let phase = make_phase () in
   let i = ref 0 in
+  let visible_lines () =
+    if String.is_empty !current_delta then !lines
+    else !lines @ [ !current_delta ]
+  in
+  let flush_delta () =
+    if not (String.is_empty !current_delta) then (
+      lines := !lines @ [ !current_delta ];
+      current_delta := "")
+  in
   let redraw () =
     let w, h = Notty_unix.Term.size term in
     let body_rows = Int.max 1 (h - 4) in
-    let shown = View.window ~rows:body_rows !lines in
+    let shown = View.window ~rows:body_rows (visible_lines ()) in
     let colored s =
       let attr =
         match View.classify s with
@@ -131,9 +154,14 @@ let make_tui_reporter ~header =
   redraw ();
   let on_event e =
     update_phase phase e;
-    (match Event.to_display e with
-    | Some line -> lines := !lines @ [ line ]
-    | None -> ());
+    (match e with
+    | Model_delta { content } -> current_delta := !current_delta ^ content
+    | _ -> (
+        match Event.to_display e with
+        | Some line ->
+            flush_delta ();
+            lines := !lines @ [ line ]
+        | None -> ()));
     redraw ()
   in
   let tick () =

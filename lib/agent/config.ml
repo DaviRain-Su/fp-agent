@@ -1,5 +1,12 @@
 open! Base
 
+type provider_compat = {
+  supports_developer_role : bool;
+  supports_reasoning_effort : bool;
+  supports_usage_in_streaming : bool;
+  max_tokens_field : string option;
+}
+
 type t = {
   provider : string;
   api_key : string;
@@ -7,6 +14,8 @@ type t = {
   model : string;
   models : string list;
   protocol : Provider.protocol;
+  compat : provider_compat;
+  max_tokens : int option;
   max_steps : int;
   workspace_root : string;
 }
@@ -19,6 +28,27 @@ type provider_catalog_entry = {
 }
 
 let default_max_steps = 30
+
+let default_compat =
+  {
+    supports_developer_role = true;
+    supports_reasoning_effort = true;
+    supports_usage_in_streaming = true;
+    max_tokens_field = None;
+  }
+
+let local_compat =
+  {
+    supports_developer_role = false;
+    supports_reasoning_effort = false;
+    supports_usage_in_streaming = false;
+    max_tokens_field = Some "max_tokens";
+  }
+
+let builtin_compat = function
+  | Provider.Local -> local_compat
+  | _ -> default_compat
+
 let getenv name = Stdlib.Sys.getenv_opt name
 
 (* Treat an empty value the same as unset, so a stray empty env var does not
@@ -47,9 +77,12 @@ type custom_provider = {
   api_key : string;
   api_base : string;
   protocol : Provider.protocol;
+  compat : provider_compat;
   default_model : string option;
-  models : string list;
+  models : model_spec list;
 }
+
+and model_spec = { id : string; max_tokens : int option }
 
 let json_member obj names =
   List.find_map names ~f:(fun name ->
@@ -57,6 +90,12 @@ let json_member obj names =
 
 let json_string obj names =
   match json_member obj names with Some (`String s) -> Some s | _ -> None
+
+let json_bool obj names ~default =
+  match json_member obj names with Some (`Bool b) -> b | _ -> default
+
+let json_int obj names =
+  match json_member obj names with Some (`Int i) -> Some i | _ -> None
 
 let protocol_of_api = function
   | "openai" | "openai-chat" | "openai-completions" | "openai-compatible" ->
@@ -71,12 +110,52 @@ let api_key_from_spec spec =
     getenv_nonempty (String.drop_prefix spec 1) |> Option.value ~default:""
   else spec
 
-let model_id json = json_string json [ "id"; "name"; "model" ]
+let compat_of_json obj =
+  match json_member obj [ "compat" ] with
+  | Some (`Assoc _ as compat) ->
+      {
+        supports_developer_role =
+          json_bool compat
+            [ "supportsDeveloperRole"; "supports_developer_role" ]
+            ~default:default_compat.supports_developer_role;
+        supports_reasoning_effort =
+          json_bool compat
+            [ "supportsReasoningEffort"; "supports_reasoning_effort" ]
+            ~default:default_compat.supports_reasoning_effort;
+        supports_usage_in_streaming =
+          json_bool compat
+            [ "supportsUsageInStreaming"; "supports_usage_in_streaming" ]
+            ~default:default_compat.supports_usage_in_streaming;
+        max_tokens_field =
+          json_string compat [ "maxTokensField"; "max_tokens_field" ];
+      }
+  | _ -> default_compat
 
-let model_ids obj =
+let model_spec = function
+  | `String id -> Some { id; max_tokens = None }
+  | json -> (
+      match json_string json [ "id"; "name"; "model" ] with
+      | None -> None
+      | Some id ->
+          Some
+            {
+              id;
+              max_tokens =
+                json_int json
+                  [
+                    "maxTokens";
+                    "max_tokens";
+                    "maxOutputTokens";
+                    "max_output_tokens";
+                  ];
+            })
+
+let model_specs obj =
   match json_member obj [ "models" ] with
-  | Some (`List models) -> List.filter_map models ~f:model_id
+  | Some (`List models) -> List.filter_map models ~f:model_spec
   | _ -> []
+
+let model_ids specs = List.map specs ~f:(fun spec -> spec.id)
 
 let provider_fields json =
   match Yojson.Safe.Util.member "providers" json with
@@ -119,7 +198,7 @@ let load_custom_provider name =
                 protocol_of_api api )
             with
             | Some api_base, Some protocol ->
-                let models = model_ids obj in
+                let models = model_specs obj in
                 let api_key =
                   json_string obj [ "apiKey"; "api_key" ]
                   |> Option.value_map ~default:"" ~f:api_key_from_spec
@@ -128,10 +207,18 @@ let load_custom_provider name =
                   Option.first_some
                     (json_string obj
                        [ "defaultModel"; "default_model"; "model" ])
-                    (List.hd models)
+                    (List.hd (model_ids models))
                 in
                 Some
-                  { name; api_key; api_base; protocol; default_model; models }
+                  {
+                    name;
+                    api_key;
+                    api_base;
+                    protocol;
+                    compat = compat_of_json obj;
+                    default_model;
+                    models;
+                  }
             | _ -> None))
   in
   List.find_map (candidate_config_paths ()) ~f:parse
@@ -149,7 +236,11 @@ let custom_provider_names () =
 let custom_models custom =
   match custom.models with
   | [] -> Option.to_list custom.default_model
-  | models -> models
+  | models -> model_ids models
+
+let selected_model_max_tokens models selected_model =
+  List.find_map models ~f:(fun spec ->
+      if String.equal spec.id selected_model then spec.max_tokens else None)
 
 let builtin_models = function
   | Provider.Local -> Provider.models Provider.Local @ env_models "LOCAL_MODELS"
@@ -230,6 +321,8 @@ let load ?provider ?api_base ?model () =
               model;
               models = dedupe_nonempty (builtin_models prov);
               protocol;
+              compat = builtin_compat prov;
+              max_tokens = None;
               max_steps;
               workspace_root;
             })
@@ -269,8 +362,10 @@ let load ?provider ?api_base ?model () =
                   api_key = custom.api_key;
                   api_base;
                   model;
-                  models = custom.models;
+                  models = custom_models custom;
                   protocol = custom.protocol;
+                  compat = custom.compat;
+                  max_tokens = selected_model_max_tokens custom.models model;
                   max_steps;
                   workspace_root;
                 }))

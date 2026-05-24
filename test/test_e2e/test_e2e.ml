@@ -27,6 +27,8 @@ let test_edit_readme_e2e () =
           model = "m";
           models = [];
           protocol = Provider.Openai;
+          compat = Config.default_compat;
+          max_tokens = None;
           max_steps = 10;
           workspace_root = root;
         }
