@@ -51,6 +51,15 @@ let check ?(yolo = false) ~workspace ~tool_call () =
       | None -> Permission.Allow)
   (* git apply itself rejects paths that escape the tree. *)
   | Apply_patch _ -> Permission.Allow
+  | Multi_edit { edits } -> (
+      match
+        List.find_map edits ~f:(fun e ->
+            match Workspace.validate_write_path workspace e.Tool_call.path with
+            | Error reason -> Some reason
+            | Ok _ -> None)
+      with
+      | Some reason -> Permission.Deny reason
+      | None -> Permission.Allow)
 
 (* Approval policy: which already-safe tool calls additionally require explicit
    human confirmation. Independent of the deny-list above. *)
@@ -62,7 +71,7 @@ let approval_reason t (tool_call : Tool_call.t) =
   match tool_call with
   | Run_command _ when t.approve_commands ->
       Some "shell command requires approval"
-  | (Write_file _ | Edit_file _ | Make_dir _ | Apply_patch _)
+  | (Write_file _ | Edit_file _ | Make_dir _ | Apply_patch _ | Multi_edit _)
     when t.approve_writes ->
       Some "file modification requires approval"
   | _ -> None

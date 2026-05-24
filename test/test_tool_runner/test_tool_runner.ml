@@ -113,6 +113,49 @@ let test_apply_patch () =
         (String.is_substring (output read) ~substring:"beta"
         && not (String.is_substring (output read) ~substring:"alpha")))
 
+let test_multi_edit () =
+  with_workspace (fun ws _ ->
+      ignore (run ws (Tool_call.Write_file { path = "a.txt"; content = "one" }));
+      ignore (run ws (Tool_call.Write_file { path = "b.txt"; content = "two" }));
+      let r =
+        run ws
+          (Tool_call.Multi_edit
+             {
+               edits =
+                 [
+                   { path = "a.txt"; old_text = "one"; new_text = "1" };
+                   { path = "b.txt"; old_text = "two"; new_text = "2" };
+                 ];
+             })
+      in
+      Alcotest.(check bool) "multi_edit ok" true (is_success r);
+      Alcotest.(check string)
+        "a edited" "1"
+        (output (run ws (Tool_call.Read_file { path = "a.txt" })));
+      Alcotest.(check string)
+        "b edited" "2"
+        (output (run ws (Tool_call.Read_file { path = "b.txt" }))))
+
+let test_multi_edit_atomic () =
+  with_workspace (fun ws _ ->
+      ignore (run ws (Tool_call.Write_file { path = "a.txt"; content = "one" }));
+      let r =
+        run ws
+          (Tool_call.Multi_edit
+             {
+               edits =
+                 [
+                   { path = "a.txt"; old_text = "one"; new_text = "1" };
+                   { path = "a.txt"; old_text = "ZZZ"; new_text = "x" };
+                 ];
+             })
+      in
+      Alcotest.(check bool) "fails on bad edit" true (is_error r);
+      (* first edit must not have been written (atomic) *)
+      Alcotest.(check string)
+        "unchanged on abort" "one"
+        (output (run ws (Tool_call.Read_file { path = "a.txt" }))))
+
 let test_run_command () =
   with_workspace (fun ws _ ->
       let r =
@@ -179,6 +222,8 @@ let () =
           Alcotest.test_case "search" `Quick test_search;
           Alcotest.test_case "make_dir" `Quick test_make_dir;
           Alcotest.test_case "apply_patch" `Quick test_apply_patch;
+          Alcotest.test_case "multi_edit" `Quick test_multi_edit;
+          Alcotest.test_case "multi_edit_atomic" `Quick test_multi_edit_atomic;
           Alcotest.test_case "run_command" `Quick test_run_command;
           Alcotest.test_case "policy_denied" `Quick test_policy_denied;
         ] );

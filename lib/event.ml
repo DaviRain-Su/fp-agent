@@ -27,6 +27,8 @@ let describe_tool (tc : Tool_call.t) =
   | Search { query; _ } -> "search " ^ query
   | Make_dir { path } -> "make_dir " ^ path
   | Apply_patch _ -> "apply_patch"
+  | Multi_edit { edits } ->
+      Printf.sprintf "multi_edit (%d edits)" (List.length edits)
 
 let first_line s =
   let line =

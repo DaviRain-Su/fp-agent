@@ -120,8 +120,12 @@ checked by the policy layer, executed by the tool runner, and the result is fed
 back as an observation.
 
 Tools: `read_file`, `write_file`, `edit_file`, `list_files`, `run_command`,
-`search` (substring search across workspace files), `make_dir`, and
-`apply_patch` (a unified diff applied with `git apply`).
+`search` (substring search across workspace files), `make_dir`,
+`apply_patch` (a unified diff applied with `git apply`), and `multi_edit`
+(several edits applied atomically across files).
+
+`--yolo` bypasses the dangerous-command deny-list (workspace bounds still
+apply) — use with care.
 
 Use `--confirm` to require interactive approval before each shell command or
 file modification.

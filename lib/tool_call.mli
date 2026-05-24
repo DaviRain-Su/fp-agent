@@ -1,3 +1,5 @@
+type edit = { path : string; old_text : string; new_text : string }
+
 type t =
   | Read_file of { path : string }
   | Write_file of { path : string; content : string }
@@ -7,6 +9,7 @@ type t =
   | Search of { query : string; path : string option }
   | Make_dir of { path : string }
   | Apply_patch of { patch : string }
+  | Multi_edit of { edits : edit list }
 
 val yojson_of_t : t -> Yojson.Safe.t
 val t_of_yojson : Yojson.Safe.t -> t

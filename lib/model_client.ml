@@ -19,6 +19,7 @@ Available tools and their args:
 - search      {"query": string, "path": string (optional)}   (substring search across workspace files)
 - make_dir    {"path": string}
 - apply_patch {"patch": string}   (a unified diff applied with git apply)
+- multi_edit  {"edits": [{"path": string, "old": string, "new": string}, ...]}   (applied atomically)
 
 When the task is complete, finish with:
 {"action":"final_answer","summary": string, "details": string (optional)}
@@ -83,6 +84,22 @@ let build_tool tool args : (Tool_call.t, string) Result.t =
   | "apply_patch" ->
       Result.map (get_string args "patch") ~f:(fun patch ->
           Tool_call.Apply_patch { patch })
+  | "multi_edit" -> (
+      let parse_edit j =
+        match (get_string j "path", get_string j "old", get_string j "new") with
+        | Ok path, Ok old_text, Ok new_text ->
+            Ok { Tool_call.path; old_text; new_text }
+        | Error e, _, _ | _, Error e, _ | _, _, Error e -> Error e
+      in
+      match Yojson.Safe.Util.member "edits" args with
+      | `List items ->
+          List.fold items ~init:(Ok []) ~f:(fun acc j ->
+              match acc with
+              | Error _ as e -> e
+              | Ok xs -> Result.map (parse_edit j) ~f:(fun x -> x :: xs))
+          |> Result.map ~f:(fun xs ->
+              Tool_call.Multi_edit { edits = List.rev xs })
+      | _ -> Error "multi_edit requires an 'edits' array")
   | other -> Error ("unknown tool: " ^ other)
 
 let tool_names =

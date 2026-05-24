@@ -190,6 +190,62 @@ let exec_apply_patch ws patch =
             (Printf.sprintf "git apply failed (exit %d): %s" exit_code
                (truncate stderr)))
 
+(* Apply several edits atomically: compute all results in memory (so multiple
+   edits to the same file compose), and only then write each file. Any failure
+   aborts before anything is written. *)
+let exec_multi_edit ws (edits : Tool_call.edit list) =
+  let tbl = Hashtbl.create (module String) in
+  let load abs =
+    match Hashtbl.find tbl abs with
+    | Some c -> Ok c
+    | None -> (
+        match read_file abs with
+        | Ok c ->
+            Hashtbl.set tbl ~key:abs ~data:c;
+            Ok c
+        | Error e -> Error e)
+  in
+  let rec apply i = function
+    | [] -> Ok ()
+    | { Tool_call.path; old_text; new_text } :: rest -> (
+        match Workspace.validate_write_path ws path with
+        | Error e -> Error (Printf.sprintf "edit %d: %s" i e)
+        | Ok abs -> (
+            match load abs with
+            | Error e -> Error (Printf.sprintf "edit %d: %s" i e)
+            | Ok content ->
+                if not (String.is_substring content ~substring:old_text) then
+                  Error
+                    (Printf.sprintf "edit %d: old_text not found in %s" i path)
+                else (
+                  Hashtbl.set tbl ~key:abs
+                    ~data:
+                      (String.substr_replace_first content ~pattern:old_text
+                         ~with_:new_text);
+                  apply (i + 1) rest)))
+  in
+  match apply 1 edits with
+  | Error e -> err e
+  | Ok () -> (
+      let written =
+        Hashtbl.fold tbl ~init:(Ok 0) ~f:(fun ~key:abs ~data acc ->
+            match acc with
+            | Error _ as e -> e
+            | Ok n -> (
+                match write_file abs data with
+                | Ok _ -> Ok (n + 1)
+                | Error e -> Error e))
+      in
+      match written with
+      | Ok files ->
+          Tool_result.Success
+            {
+              output =
+                Printf.sprintf "applied %d edit(s) across %d file(s)"
+                  (List.length edits) files;
+            }
+      | Error e -> err e)
+
 let execute ws (tool_call : Tool_call.t) =
   match tool_call with
   | Read_file { path } -> exec_read_file ws path
@@ -201,6 +257,7 @@ let execute ws (tool_call : Tool_call.t) =
   | Search { query; path } -> exec_search ws query path
   | Make_dir { path } -> exec_make_dir ws path
   | Apply_patch { patch } -> exec_apply_patch ws patch
+  | Multi_edit { edits } -> exec_multi_edit ws edits
 
 let run ?(yolo = false) ~workspace ~tool_call () =
   match Policy.check ~yolo ~workspace ~tool_call () with
