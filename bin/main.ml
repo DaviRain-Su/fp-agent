@@ -35,13 +35,14 @@ let make_tui_reporter ~header =
   let redraw () =
     let _, h = Notty_unix.Term.size term in
     let body_rows = Int.max 1 (h - 3) in
-    let shown = List.rev (List.take (List.rev !lines) body_rows) in
+    let shown = View.window ~rows:body_rows !lines in
     let colored s =
       let attr =
-        if String.is_prefix (String.lstrip s) ~prefix:"✓" then A.fg A.green
-        else if String.is_prefix (String.lstrip s) ~prefix:"✗" then A.fg A.red
-        else if String.is_prefix s ~prefix:"→" then A.fg A.yellow
-        else A.empty
+        match View.classify s with
+        | `Ok -> A.fg A.green
+        | `Err -> A.fg A.red
+        | `Action -> A.fg A.yellow
+        | `Plain -> A.empty
       in
       I.string attr s
     in
