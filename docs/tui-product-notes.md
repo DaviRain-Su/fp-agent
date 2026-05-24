@@ -64,7 +64,8 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   prompt editor lines used by unit tests.
 - The fullscreen shell now records submitted prompt history. `Ctrl+Up` and
   `Ctrl+Down` browse prior prompts while preserving plain Up/Down for event
-  inspection.
+  inspection. Resume and fork flows seed that history from the event log while
+  filtering agent-internal retry/preflight messages.
 - `--tui` without an initial task now starts a fullscreen interactive shell.
   Ctrl+Enter drains the prompt into the session loop: slash commands render in
   the timeline and ordinary task prompts run the agent against the same

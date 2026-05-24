@@ -76,6 +76,14 @@ val create : ?command_count:int -> unit -> t
 val set_event_count : int -> t -> t
 (** Update event count and clamp any pinned event selection into range. *)
 
+val set_history : string list -> t -> t
+(** Replace prompt history while preserving the current draft. Empty entries are
+    ignored and consecutive duplicates are collapsed. *)
+
+val history_of_events : Event.t list -> string list
+(** Extract user prompt history from an event log, filtering agent-internal
+    retry/preflight/nudge messages. *)
+
 val selected_event_index : t -> int option
 (** Currently inspected event index, if events exist. *)
 

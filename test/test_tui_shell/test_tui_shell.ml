@@ -120,6 +120,39 @@ let test_prompt_history_input_mapping () =
   let state = state |> input Tui_shell.Ctrl_up |> input Tui_shell.Ctrl_down in
   Alcotest.(check string) "restores stashed draft" "draft" state.draft.text
 
+let test_prompt_history_can_be_seeded () =
+  let state =
+    Tui_shell.create ()
+    |> input (Tui_shell.Text "draft")
+    |> Tui_shell.set_history [ ""; "old task"; "old task"; "new task" ]
+  in
+  Alcotest.(check string) "preserves draft" "draft" state.draft.text;
+  let state = input Tui_shell.Ctrl_up state in
+  Alcotest.(check string) "seed latest" "new task" state.draft.text;
+  let state = input Tui_shell.Ctrl_up state in
+  Alcotest.(check string) "seed dedupes" "old task" state.draft.text
+
+let test_prompt_history_from_events_filters_internal_messages () =
+  let history =
+    Tui_shell.history_of_events
+      [
+        Event.User_message { content = "first task" };
+        Event.User_message { content = "[Code review preflight]\nstatus" };
+        Event.User_message
+          {
+            content =
+              "Your previous reply could not be processed (bad json). Reply.";
+          };
+        Event.Assistant_message { content = []; usage = Llm.zero_usage };
+        Event.User_message { content = "  " };
+        Event.User_message { content = "second task" };
+      ]
+  in
+  Alcotest.(check (list string))
+    "history from events"
+    [ "first task"; "second task" ]
+    history
+
 let test_palette_state () =
   let state = Tui_shell.create ~command_count:4 () in
   Alcotest.(check bool) "closed" false (Tui_shell.palette_open state);
@@ -548,6 +581,10 @@ let () =
             test_prompt_input_mapping;
           Alcotest.test_case "prompt_history_input_mapping" `Quick
             test_prompt_history_input_mapping;
+          Alcotest.test_case "prompt_history_can_be_seeded" `Quick
+            test_prompt_history_can_be_seeded;
+          Alcotest.test_case "prompt_history_from_events" `Quick
+            test_prompt_history_from_events_filters_internal_messages;
           Alcotest.test_case "palette_state" `Quick test_palette_state;
           Alcotest.test_case "palette_input_mapping" `Quick
             test_palette_input_mapping;

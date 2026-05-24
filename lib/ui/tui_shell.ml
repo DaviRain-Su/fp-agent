@@ -110,6 +110,38 @@ let set_event_count event_count t =
   let t = { t with event_count = Int.max 0 event_count } in
   { t with selection = normalize_selection t }
 
+let push_history prompt history =
+  match List.last history with
+  | Some last when String.equal last prompt -> history
+  | _ -> history @ [ prompt ]
+
+let set_history history t =
+  let history =
+    List.fold history ~init:[] ~f:(fun acc prompt ->
+        let prompt = String.strip prompt in
+        if String.is_empty prompt then acc else push_history prompt acc)
+  in
+  { t with history; history_index = None; history_stash = None }
+
+let internal_user_message content =
+  let content = String.strip content in
+  List.exists
+    [
+      "[Code review preflight]";
+      "Tool budget exhausted.";
+      "Review budget exhausted.";
+      "Your previous reply could not be processed";
+      "That response is not a code review.";
+    ] ~f:(fun prefix -> String.is_prefix content ~prefix)
+
+let history_of_events events =
+  List.filter_map events ~f:(function
+    | Event.User_message { content }
+      when (not (String.is_empty (String.strip content)))
+           && not (internal_user_message content) ->
+        Some content
+    | _ -> None)
+
 let selection_label t =
   View.selection_label ~event_count:t.event_count t.selection
 
@@ -130,11 +162,6 @@ let command_at t index = List.nth (visible_command_entries t) index
 
 let clear_history_browse t =
   { t with history_index = None; history_stash = None }
-
-let push_history prompt history =
-  match List.last history with
-  | Some last when String.equal last prompt -> history
-  | _ -> history @ [ prompt ]
 
 let history_entry t index =
   Option.value_map (List.nth t.history index) ~default:t.draft

@@ -146,7 +146,11 @@ let make_tui_view ~initial_events ~provider ~model ~api_base ~workspace_root
   let current_delta = ref "" in
   let phase = make_phase () in
   let events = ref initial_events in
-  let shell = ref (Tui_shell.create ()) in
+  let shell =
+    ref
+      (Tui_shell.create ()
+      |> Tui_shell.set_history (Tui_shell.history_of_events initial_events))
+  in
   let approval = ref None in
   let submitted = ref [] in
   let i = ref 0 in
@@ -181,7 +185,10 @@ let make_tui_view ~initial_events ~provider ~model ~api_base ~workspace_root
     events := new_events;
     lines := event_display_lines new_events;
     current_delta := "";
-    shell := Tui_shell.set_event_count (List.length new_events) !shell
+    shell :=
+      !shell
+      |> Tui_shell.set_history (Tui_shell.history_of_events new_events)
+      |> Tui_shell.set_event_count (List.length new_events)
   in
   let request_approval tool_call reason =
     match !approval with

@@ -229,7 +229,8 @@ copy. Two consequences:
   view.
 - **TUI prompt history** records submitted prompts in the fullscreen shell.
   `Ctrl+Up` and `Ctrl+Down` browse previous prompts without stealing plain
-  Up/Down from event inspection.
+  Up/Down from event inspection. Resumed and forked sessions seed this history
+  from the event log, skipping agent-internal retry/preflight messages.
 - **TUI shell controller groundwork** centralizes prompt submission, command
   palette movement, and event inspection selection in a pure state machine.
   It also owns the abstract keyboard/mouse input mapping, including palette
