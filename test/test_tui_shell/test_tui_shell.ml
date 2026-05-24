@@ -608,6 +608,20 @@ let test_tui_command_sessions_and_diff () =
                  { Event.status = Event.Todo; text = "write tests" };
                ];
            });
+      Event_log.append log
+        (Event.Workspace_snapshot
+           {
+             is_git = true;
+             status = [ " M README.md" ];
+             diff_stat = [ " README.md | 1 +" ];
+           });
+      Event_log.append log
+        (Event.Turn_completed
+           {
+             status = Event.Turn_status_completed;
+             steps = 2;
+             summary = "updated README session docs";
+           });
       Event_log.close log;
       let child =
         match
@@ -623,10 +637,19 @@ let test_tui_command_sessions_and_diff () =
         (String.is_substring sessions ~substring:"  *");
       Alcotest.(check bool)
         "sessions show event count" true
-        (String.is_substring sessions ~substring:"events=2");
+        (String.is_substring sessions ~substring:"events=4");
       Alcotest.(check bool)
         "sessions show plan progress" true
         (String.is_substring sessions ~substring:"plan=1/2 done");
+      Alcotest.(check bool)
+        "sessions show turn status" true
+        (String.is_substring sessions ~substring:"turn=completed/2");
+      Alcotest.(check bool)
+        "sessions show workspace status" true
+        (String.is_substring sessions ~substring:"workspace=changed(1/1)");
+      Alcotest.(check bool)
+        "sessions keep legacy fallback status" true
+        (String.is_substring sessions ~substring:"turn=none workspace=unknown");
       Alcotest.(check bool)
         "sessions show last task" true
         (String.is_substring sessions ~substring:"last=inspect README");

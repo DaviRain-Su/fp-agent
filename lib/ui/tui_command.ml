@@ -354,6 +354,27 @@ let plan_label events =
   let line = View.plan_progress_line (View.plan_progress_of_events events) in
   Option.value (String.chop_prefix line ~prefix:"plan: ") ~default:line
 
+let latest_turn_label events =
+  List.rev events
+  |> List.find_map ~f:(function
+    | Event.Turn_completed { status; steps; summary = _ } ->
+        Some (Printf.sprintf "%s/%d" (Event.turn_status_to_string status) steps)
+    | _ -> None)
+  |> Option.value ~default:"none"
+
+let latest_workspace_label events =
+  List.rev events
+  |> List.find_map ~f:(function
+    | Event.Workspace_snapshot { is_git = false; _ } -> Some "non-git"
+    | Event.Workspace_snapshot { status = []; diff_stat = []; _ } ->
+        Some "clean"
+    | Event.Workspace_snapshot { status; diff_stat; _ } ->
+        Some
+          (Printf.sprintf "changed(%d/%d)" (List.length status)
+             (List.length diff_stat))
+    | _ -> None)
+  |> Option.value ~default:"unknown"
+
 let session_fork_label dir =
   match Session.read_meta dir with
   | None, None -> ""
@@ -384,8 +405,12 @@ let session_line ctx entry =
           |> Option.value_map ~default:"(none)" ~f:(preview_text ~cols:80)
         in
         Some
-          (Printf.sprintf "  %s %s events=%d plan=%s last=%s%s" mark entry
-             (List.length events) (plan_label events) last fork)
+          (Printf.sprintf
+             "  %s %s events=%d plan=%s turn=%s workspace=%s last=%s%s" mark
+             entry (List.length events) (plan_label events)
+             (latest_turn_label events)
+             (latest_workspace_label events)
+             last fork)
 
 let sessions_lines ctx =
   match Stdlib.Sys.readdir ctx.sessions_root with

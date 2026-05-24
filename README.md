@@ -225,7 +225,8 @@ copy. Two consequences:
 
 - **Resume** (`--resume` / `/resume`) reconstructs state by replaying a
   session's log. `/sessions` lists resumable sessions with event counts, plan
-  progress, last user task, current-session marker, and fork metadata.
+  progress, latest turn status, latest workspace snapshot, last user task,
+  current-session marker, and fork metadata.
 - **New session** (`/new`) starts a fresh root session in the same workspace
   without replaying the current task history.
 - **Retry** (`/retry`) finds the latest user task in the current event log and

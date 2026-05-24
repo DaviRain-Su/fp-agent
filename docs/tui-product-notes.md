@@ -89,8 +89,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   event log, reload inspector context, and continue later turns from that
   session.
 - `/sessions` now renders a session browser instead of a bare directory list,
-  showing the current marker, event count, plan progress, last user task, and
-  parent/fork metadata for each session.
+  showing the current marker, event count, plan progress, latest turn status,
+  latest workspace snapshot, last user task, and parent/fork metadata for each
+  session.
 - Token usage is now derived from assistant-message events and shown in the
   status/inspector surfaces; `/usage` renders input, output, and total tokens
   from the current event log.
