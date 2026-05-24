@@ -1030,6 +1030,13 @@ let test_repl_inspects_session_events () =
          /inspect\n\
          /inspect 3\n\
          /inspect nope\n\
+         /plan-add todo verify status\n\
+         /plan-update 2 done implement plan\n\
+         /plan\n\
+         /status\n\
+         /plan-clear\n\
+         /plan\n\
+         /log\n\
          /retry\n\
          /new\n\
          /log\n\
@@ -1042,6 +1049,13 @@ let test_repl_inspects_session_events () =
   assert_contains "plan update" repl.stdout "plan updated: 3 item(s)";
   assert_contains "plan item" repl.stdout "2. [doing] implement plan";
   assert_contains "log includes plan event" repl.stdout "plan: 1/3 done";
+  assert_contains "plan add update" repl.stdout "plan updated: 4 item(s)";
+  assert_contains "plan update marks done" repl.stdout
+    "2. [done] implement plan";
+  assert_contains "plan add item" repl.stdout "4. [todo] verify status";
+  assert_contains "status updated plan" repl.stdout "plan: 2/4 done";
+  assert_contains "plan clear" repl.stdout "plan updated: 0 item(s)";
+  assert_contains "plan empty after clear" repl.stdout "(plan is empty)";
   assert_contains "inspect prints index" repl.stdout "event 0";
   assert_contains "inspect kind" repl.stdout "kind: tool_call";
   assert_contains "inspect tool" repl.stdout "tool: search";

@@ -1081,20 +1081,83 @@ let split_plan_specs raw =
   |> List.map ~f:String.strip
   |> List.filter ~f:(fun spec -> not (String.is_empty spec))
 
-let parse_plan_item spec =
+let parse_plan_item ?(usage = plan_set_usage) spec =
   match String.lsplit2 spec ~on:' ' with
-  | None -> Error plan_set_usage
+  | None -> Error usage
   | Some (status, text) -> (
       let text = String.strip text in
       match (Event.plan_status_of_string status, String.is_empty text) with
       | None, _ -> Error ("unknown plan status: " ^ status)
-      | _, true -> Error plan_set_usage
+      | _, true -> Error usage
       | Some status, false -> Ok { Event.status; text })
 
 let parse_plan_set_args raw =
   match split_plan_specs raw with
   | [] -> Error plan_set_usage
   | specs -> Result.all (List.map specs ~f:parse_plan_item)
+
+let latest_plan_items events =
+  List.find_map (List.rev events) ~f:(function
+    | Event.Plan_updated { items } -> Some items
+    | _ -> None)
+
+let current_plan_items events =
+  Option.value (latest_plan_items events) ~default:[]
+
+let plan_add_usage = "usage: /plan-add <todo|doing|done> <item>"
+
+let plan_update_usage =
+  "usage: /plan-update <item-number> <todo|doing|done> [item]"
+
+let plan_clear_usage = "usage: /plan-clear"
+let parse_plan_add_args raw = parse_plan_item ~usage:plan_add_usage raw
+
+let parse_plan_update_args raw =
+  let raw = String.strip raw in
+  match String.lsplit2 raw ~on:' ' with
+  | None -> Error plan_update_usage
+  | Some (index_s, rest) -> (
+      let rest = String.strip rest in
+      let status_s, text =
+        match String.lsplit2 rest ~on:' ' with
+        | None -> (rest, None)
+        | Some (status_s, text) ->
+            let text = String.strip text in
+            (status_s, if String.is_empty text then None else Some text)
+      in
+      match Int.of_string index_s with
+      | exception _ -> Error plan_update_usage
+      | index when index < 1 -> Error "plan item number must be >= 1"
+      | index -> (
+          match Event.plan_status_of_string status_s with
+          | None -> Error ("unknown plan status: " ^ status_s)
+          | Some status -> Ok (index, status, text)))
+
+let update_plan_item items ~index ~status ~text =
+  if List.is_empty items then
+    Error "no session plan (use /plan-add or /plan-set)"
+  else if index > List.length items then
+    Error (Printf.sprintf "no plan item %d (1..%d)" index (List.length items))
+  else
+    Ok
+      (List.mapi items ~f:(fun item_index (item : Event.plan_item) ->
+           if item_index = index - 1 then
+             { Event.status; text = Option.value text ~default:item.text }
+           else item))
+
+let plan_add_items events arg =
+  match parse_plan_add_args arg with
+  | Error _ as e -> e
+  | Ok item -> Ok (current_plan_items events @ [ item ])
+
+let plan_update_items events arg =
+  match parse_plan_update_args arg with
+  | Error _ as e -> e
+  | Ok (index, status, text) ->
+      update_plan_item (current_plan_items events) ~index ~status ~text
+
+let plan_clear_items arg =
+  if String.is_empty (String.strip arg) then Ok [] else Error plan_clear_usage
 
 let plan_updated_lines items =
   Printf.sprintf "plan updated: %d item(s)" (List.length items)
@@ -1214,6 +1277,30 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
         Event_log.append !log event;
         view.reporter.on_event event;
         view.append_lines ("[tui] /plan-set" :: plan_updated_lines items)
+  in
+  let change_plan command change =
+    match change (events ()) with
+    | Error e -> view.append_lines [ "[tui] " ^ command; e ]
+    | Ok items ->
+        let event = Event.Plan_updated { items } in
+        Event_log.append !log event;
+        view.reporter.on_event event;
+        view.append_lines (("[tui] " ^ command) :: plan_updated_lines items)
+  in
+  let add_plan_item arg =
+    change_plan "/plan-add" (fun events -> plan_add_items events arg)
+  in
+  let update_plan_item arg =
+    change_plan "/plan-update" (fun events -> plan_update_items events arg)
+  in
+  let clear_plan arg =
+    match plan_clear_items arg with
+    | Error e -> view.append_lines [ "[tui] /plan-clear"; e ]
+    | Ok items ->
+        let event = Event.Plan_updated { items } in
+        Event_log.append !log event;
+        view.reporter.on_event event;
+        view.append_lines ("[tui] /plan-clear" :: plan_updated_lines items)
   in
   let current_model_lines command =
     Option.value
@@ -1418,6 +1505,9 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
     | Command (Retry, _) -> retry_last_task ()
     | Command (Compact, _) -> compact_session ()
     | Command (PlanSet, arg) -> set_plan arg
+    | Command (PlanAdd, arg) -> add_plan_item arg
+    | Command (PlanUpdate, arg) -> update_plan_item arg
+    | Command (PlanClear, arg) -> clear_plan arg
     | Command (Undo, _) -> undo ()
     | Command (PluginNew, arg) -> new_plugin arg
     | Command (PluginDev, arg) -> dev_plugin arg
@@ -1918,6 +2008,29 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
         Event_log.append !log (Event.Plan_updated { items });
         List.iter (plan_updated_lines items) ~f:Stdlib.print_endline
   in
+  let change_plan change =
+    match Journal.read ~session_dir:!session with
+    | Error e -> Stdlib.print_endline e
+    | Ok events -> (
+        match change events with
+        | Error e -> Stdlib.print_endline e
+        | Ok items ->
+            Event_log.append !log (Event.Plan_updated { items });
+            List.iter (plan_updated_lines items) ~f:Stdlib.print_endline)
+  in
+  let add_plan_item arg =
+    change_plan (fun events -> plan_add_items events arg)
+  in
+  let update_plan_item arg =
+    change_plan (fun events -> plan_update_items events arg)
+  in
+  let clear_plan arg =
+    match plan_clear_items arg with
+    | Error e -> Stdlib.print_endline e
+    | Ok items ->
+        Event_log.append !log (Event.Plan_updated { items });
+        List.iter (plan_updated_lines items) ~f:Stdlib.print_endline
+  in
   let rec loop () =
     Stdlib.print_string "\n> ";
     Stdlib.Out_channel.flush Stdlib.stdout;
@@ -2015,6 +2128,15 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
             loop ()
         | Command (PlanSet, arg) ->
             set_plan arg;
+            loop ()
+        | Command (PlanAdd, arg) ->
+            add_plan_item arg;
+            loop ()
+        | Command (PlanUpdate, arg) ->
+            update_plan_item arg;
+            loop ()
+        | Command (PlanClear, arg) ->
+            clear_plan arg;
             loop ()
         | Command (Undo, _) ->
             undo ();

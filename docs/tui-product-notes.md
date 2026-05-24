@@ -25,7 +25,8 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   policy decision.
 - Footer command palette: `/model`, `/provider`, `/provider-add`, `/plugins`,
   `/tools`, `/new`, `/resume`, `/fork`, `/retry`, `/plan`, `/plan-set`,
-  `/compact`, `/status`, `/instructions`, `/undo`, `/diff`.
+  `/plan-add`, `/plan-update`, `/plan-clear`, `/compact`, `/status`,
+  `/instructions`, `/undo`, `/diff`.
 - Status strip: provider/model, session id, step count, token usage, current
   phase, and active plugin count.
 - Review mode: navigate prior events, fork from an event, and replay compacted
@@ -102,11 +103,12 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   latest non-empty user task, and submit it again through the current runtime.
   The command palette seeds `/retry` as a draft instead of auto-dispatching it,
   keeping reruns explicit.
-- Fullscreen TUI and REPL `/plan-set` now append a `Plan_updated` event with
-  todo/doing/done items, while `/plan`, `/log`, and `/inspect` render the
-  latest plan from the event log. `/status`, the fullscreen status strip, and
-  the inspector also surface plan completion progress. Plan state survives
-  resume/fork because it is data, not transient UI state.
+- Fullscreen TUI and REPL `/plan-set`, `/plan-add`, `/plan-update`, and
+  `/plan-clear` now append `Plan_updated` events with todo/doing/done items,
+  while `/plan`, `/log`, and `/inspect` render the latest plan from the event
+  log. `/status`, the fullscreen status strip, and the inspector also surface
+  plan completion progress. Plan state survives resume/fork because it is data,
+  not transient UI state.
 - The command palette now groups commands by workflow area such as Tools,
   Plugins, Sessions, Models, Context, and Run Control. Filtering also matches
   those group labels, so queries like `plugins install` can jump directly to

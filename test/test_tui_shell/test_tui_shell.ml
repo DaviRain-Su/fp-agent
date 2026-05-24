@@ -374,6 +374,15 @@ let test_tui_command_model_log_and_inspect () =
         "plan-set is stateful" true
         (Option.is_none (Tui_command.run context "/plan-set todo inspect code"));
       Alcotest.(check bool)
+        "plan-add is stateful" true
+        (Option.is_none (Tui_command.run context "/plan-add todo run tests"));
+      Alcotest.(check bool)
+        "plan-update is stateful" true
+        (Option.is_none (Tui_command.run context "/plan-update 1 done"));
+      Alcotest.(check bool)
+        "plan-clear is stateful" true
+        (Option.is_none (Tui_command.run context "/plan-clear"));
+      Alcotest.(check bool)
         "new session is stateful" true
         (Option.is_none (Tui_command.run context "/new"));
       Alcotest.(check bool)

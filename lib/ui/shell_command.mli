@@ -25,6 +25,9 @@ type id =
   | Inspect
   | Plan
   | PlanSet
+  | PlanAdd
+  | PlanUpdate
+  | PlanClear
   | Usage
   | Status
   | Instructions

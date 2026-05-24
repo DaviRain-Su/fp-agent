@@ -27,6 +27,9 @@ type id =
   | Inspect
   | Plan
   | PlanSet
+  | PlanAdd
+  | PlanUpdate
+  | PlanClear
   | Usage
   | Status
   | Instructions
@@ -270,6 +273,30 @@ let specs =
       acceptance = Draft "/plan-set ";
     };
     {
+      id = PlanAdd;
+      command = "/plan-add <status> <item>";
+      description = "append a session plan item";
+      aliases = [];
+      palette = true;
+      acceptance = Draft "/plan-add todo ";
+    };
+    {
+      id = PlanUpdate;
+      command = "/plan-update <number> <status> [item]";
+      description = "update a session plan item";
+      aliases = [];
+      palette = true;
+      acceptance = Draft "/plan-update ";
+    };
+    {
+      id = PlanClear;
+      command = "/plan-clear";
+      description = "clear the session plan";
+      aliases = [];
+      palette = true;
+      acceptance = Draft "/plan-clear";
+    };
+    {
       id = Usage;
       command = "/usage";
       description = "show token usage from the event log";
@@ -355,7 +382,9 @@ let group_of_id = function
       "Plugins"
   | Sessions | Tree | NewSession | Resume -> "Sessions"
   | Model | ModelNext | Models | Provider | ProviderAdd -> "Models"
-  | Log | Inspect | Plan | PlanSet | Usage | Status | Instructions -> "Context"
+  | Log | Inspect | Plan | PlanSet | PlanAdd | PlanUpdate | PlanClear | Usage
+  | Status | Instructions ->
+      "Context"
   | Compact | Fork | Diff | Retry | Undo -> "Run Control"
   | Help | Exit -> "Shell"
 

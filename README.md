@@ -63,6 +63,9 @@ dune exec -- fp-agent
 > /retry             # rerun the latest user task
 > /plan              # show the latest session plan
 > /plan-set todo inspect code; doing implement fix; done write tests
+> /plan-add todo run regression tests
+> /plan-update 2 done implement fix
+> /plan-clear
 > /log               # list this session's events with indices
 > /usage             # show token usage from the event log
 > /status            # show runtime/session/plugin status
@@ -228,9 +231,10 @@ copy. Two consequences:
   tool count.
 - **Project instructions** (`/instructions`) shows the workspace instruction
   files that will be appended to the model system prompt.
-- **Session plan** (`/plan`, `/plan-set`) stores a visible todo/doing/done plan
-  as an event-log entry, so long tasks can carry an auditable working plan
-  across REPL/TUI resume, fork, status, inspect, and log views.
+- **Session plan** (`/plan`, `/plan-set`, `/plan-add`, `/plan-update`,
+  `/plan-clear`) stores a visible todo/doing/done plan as an event-log entry, so
+  long tasks can carry an auditable working plan across REPL/TUI resume, fork,
+  status, inspect, and log views.
 - **Compaction** (`/compact`) appends a `Context_compacted` event that replaces
   older model-visible turns with a bounded summary while preserving the recent
   turns needed to continue safely. The raw event log remains intact.

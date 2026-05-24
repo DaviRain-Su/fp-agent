@@ -49,6 +49,12 @@ let test_parse () =
     "todo inspect code; doing implement plan; done write tests"
     (Shell_command.parse
        "/plan-set todo inspect code; doing implement plan; done write tests");
+  require_command "plan add" Shell_command.PlanAdd "todo run tests"
+    (Shell_command.parse "/plan-add todo run tests");
+  require_command "plan update" Shell_command.PlanUpdate "2 done write tests"
+    (Shell_command.parse "/plan-update 2 done write tests");
+  require_command "plan clear" Shell_command.PlanClear ""
+    (Shell_command.parse "/plan-clear");
   require_command "provider" Shell_command.Provider
     "local-llm qwen36-rtx http://127.0.0.1:8000/v1"
     (Shell_command.parse
@@ -135,6 +141,16 @@ let test_metadata () =
   Alcotest.(check bool)
     "palette has plan set" true
     (List.mem palette "/plan-set <status item; ...>" ~equal:String.equal);
+  Alcotest.(check bool)
+    "palette has plan add" true
+    (List.mem palette "/plan-add <status> <item>" ~equal:String.equal);
+  Alcotest.(check bool)
+    "palette has plan update" true
+    (List.mem palette "/plan-update <number> <status> [item]"
+       ~equal:String.equal);
+  Alcotest.(check bool)
+    "palette has plan clear" true
+    (List.mem palette "/plan-clear" ~equal:String.equal);
   Alcotest.(check string) "plan group" "Context" (entry "/plan").group;
   Alcotest.(check bool)
     "palette has status" true
@@ -239,6 +255,13 @@ let test_acceptance () =
            [--local-compat]"));
   require_acceptance "plan set draft" ("draft", "/plan-set ")
     (Shell_command.accept (entry "/plan-set <status item; ...>"));
+  require_acceptance "plan add draft"
+    ("draft", "/plan-add todo ")
+    (Shell_command.accept (entry "/plan-add <status> <item>"));
+  require_acceptance "plan update draft" ("draft", "/plan-update ")
+    (Shell_command.accept (entry "/plan-update <number> <status> [item]"));
+  require_acceptance "plan clear draft" ("draft", "/plan-clear")
+    (Shell_command.accept (entry "/plan-clear"));
   require_acceptance "plugin new draft" ("draft", "/plugin-new ")
     (Shell_command.accept
        (entry
