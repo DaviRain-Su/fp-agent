@@ -12,6 +12,7 @@ type id =
   | PluginInstall
   | PluginRemove
   | PluginSmoke
+  | PluginDoctor
   | Sessions
   | Tree
   | NewSession
@@ -139,6 +140,14 @@ let specs =
       aliases = [];
       palette = true;
       acceptance = Draft "/plugin-smoke ";
+    };
+    {
+      id = PluginDoctor;
+      command = "/plugin-doctor";
+      description = "show plugin search path and diagnostics";
+      aliases = [ "/plugins-doctor" ];
+      palette = true;
+      acceptance = Execute "/plugin-doctor";
     };
     {
       id = Sessions;
@@ -302,7 +311,7 @@ let command_token command =
 let group_of_id = function
   | Tools | Tool -> "Tools"
   | Plugins | Plugin | PluginNew | PluginDev | PluginCheck | PluginInstall
-  | PluginRemove | PluginSmoke ->
+  | PluginRemove | PluginSmoke | PluginDoctor ->
       "Plugins"
   | Sessions | Tree | NewSession | Resume -> "Sessions"
   | Model | ModelNext | Models | Provider -> "Models"

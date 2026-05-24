@@ -72,6 +72,7 @@ dune exec -- fp-agent
 > /provider local-llm qwen36-rtx
 > /tools             # preview available tools
 > /tool read_file    # inspect a tool's kind/schema/description
+> /plugin-doctor     # show plugin search paths and diagnostics
 > /plugin echo_json  # inspect a plugin by id or tool name
 > /plugin-new --id local.my-plugin --tool-name my_tool my-plugin
 > /plugin-dev --replace my-plugin
@@ -125,6 +126,7 @@ Plugin commands also receive runtime env such as `FP_AGENT_WORKSPACE`,
 export FP_AGENT_PLUGIN_PATH=$PWD/examples/plugins/echo
 dune exec -- fp-agent
 > /plugins
+> /plugin-doctor
 > /plugin echo_json
 > /plugin-new --id local.my-plugin --tool-name my_tool my-plugin
 > /plugin-dev --replace my-plugin
@@ -152,6 +154,7 @@ dune exec -- fp-agent
 > /plugin-install --replace my-plugin
 > /plugin-smoke --replace my-plugin
 > /plugin-remove local.my-plugin
+dune exec -- fp-agent --doctor-plugins
 dune exec -- fp-agent --check-plugin my-plugin --replace-plugin
 dune exec -- fp-agent --run-plugin-tool my-plugin \
   --plugin-tool hello_world \
@@ -164,7 +167,9 @@ dune exec -- fp-agent --remove-plugin local.my-plugin
 
 Plugins are discovered from `FP_AGENT_PLUGIN_PATH`, `.fp-agent/plugins`, and
 `FP_AGENT_PLUGIN_HOME` / `~/.local/share/fp-agent/plugins`. See
-`docs/plugins.md` for the SDK contract. `/plugins` and `--list-plugins` also
+`docs/plugins.md` for the SDK contract. `/plugin-doctor` and
+`--doctor-plugins` show the search roots, install home, invalid manifest
+diagnostics, and tool-name conflicts. `/plugins` and `--list-plugins` also
 surface invalid manifest diagnostics instead of silently hiding broken plugin
 directories, and report tool-name conflicts when a plugin would shadow a
 built-in or earlier discovered plugin tool.
@@ -278,6 +283,8 @@ Options:
 - `--replace-plugin` — allow `--install-plugin` or `--dev-plugin` to replace an
   existing installed plugin after staging the new copy
 - `--list-plugins` — list plugins installed in the plugin home, then exit
+- `--doctor-plugins` / `--plugin-doctor` — show plugin discovery/install
+  diagnostics, then exit
 - `--remove-plugin ID` / `--uninstall-plugin ID` — remove an installed plugin
   from the plugin home, then exit
 

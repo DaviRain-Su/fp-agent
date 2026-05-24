@@ -366,6 +366,8 @@ let default_search_roots () =
   let home = Option.to_list (install_home ()) in
   explicit @ local @ home
 
+let search_roots = default_search_roots
+
 let has_manifest dir =
   Stdlib.Sys.file_exists (Stdlib.Filename.concat dir manifest_file)
 
@@ -398,7 +400,7 @@ let discover_dirs dirs =
   }
 
 let discover () =
-  default_search_roots () |> List.concat_map ~f:dirs_in_root |> discover_dirs
+  search_roots () |> List.concat_map ~f:dirs_in_root |> discover_dirs
 
 let manifests () = (discover ()).manifests
 

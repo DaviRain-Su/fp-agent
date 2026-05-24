@@ -22,5 +22,9 @@ val status_lines : context -> string list
 val instruction_lines : context -> string list
 (** Render workspace project instructions without a command header. *)
 
+val plugin_diagnostics_lines : unit -> string list
+(** Render plugin search path, manifest, and conflict diagnostics without a
+    command header. *)
+
 val last_user_message : Event.t list -> string option
 (** Return the latest non-empty user task from an event log, if any. *)

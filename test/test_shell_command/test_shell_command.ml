@@ -64,6 +64,10 @@ let test_parse () =
   require_command "plugin smoke" Shell_command.PluginSmoke
     "--replace ./my-plugin"
     (Shell_command.parse "/plugin-smoke --replace ./my-plugin");
+  require_command "plugin doctor" Shell_command.PluginDoctor ""
+    (Shell_command.parse "/plugin-doctor");
+  require_command "plugin doctor alias" Shell_command.PluginDoctor ""
+    (Shell_command.parse "/plugins-doctor");
   require_command "quit alias" Shell_command.Exit ""
     (Shell_command.parse "/quit");
   Alcotest.(check bool)
@@ -124,6 +128,11 @@ let test_metadata () =
   Alcotest.(check bool)
     "palette has plugin smoke" true
     (List.mem palette "/plugin-smoke [--replace] <dir>" ~equal:String.equal);
+  Alcotest.(check bool)
+    "palette has plugin doctor" true
+    (List.mem palette "/plugin-doctor" ~equal:String.equal);
+  Alcotest.(check string)
+    "plugin doctor group" "Plugins" (entry "/plugin-doctor").group;
   Alcotest.(check bool)
     "palette has instructions" true
     (List.mem palette "/instructions" ~equal:String.equal);
@@ -193,6 +202,9 @@ let test_acceptance () =
   require_acceptance "plugin smoke draft"
     ("draft", "/plugin-smoke ")
     (Shell_command.accept (entry "/plugin-smoke [--replace] <dir>"));
+  require_acceptance "plugin doctor execute"
+    ("execute", "/plugin-doctor")
+    (Shell_command.accept (entry "/plugin-doctor"));
   require_acceptance "new session draft" ("draft", "/new")
     (Shell_command.accept (entry "/new"));
   require_acceptance "retry draft" ("draft", "/retry")

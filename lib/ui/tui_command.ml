@@ -113,6 +113,52 @@ let plugins_lines () =
       if List.is_empty manifest_lines then error_lines @ conflict_lines
       else manifest_lines @ [ "" ] @ error_lines @ conflict_lines
 
+let plugin_diagnostics_lines () =
+  let discovery = Plugin.discover () in
+  let conflicts = Plugin.tool_conflicts () in
+  let roots = Plugin.search_roots () in
+  let install_home =
+    Option.value (Plugin.install_home ()) ~default:"(unavailable)"
+  in
+  let root_lines =
+    match roots with
+    | [] -> [ "  (none)" ]
+    | roots -> List.map roots ~f:(fun root -> "  - " ^ root)
+  in
+  let invalid_lines =
+    match discovery.errors with
+    | [] -> [ "Invalid plugins: 0" ]
+    | errors ->
+        "Invalid plugins:"
+        :: List.map errors ~f:(fun (error : Plugin.load_error) ->
+            Printf.sprintf "  - %s: %s" error.dir error.message)
+  in
+  let conflict_lines =
+    match conflicts with
+    | [] -> [ "Plugin tool conflicts: 0" ]
+    | conflicts ->
+        "Plugin tool conflicts:"
+        :: List.map conflicts ~f:(fun (conflict : Plugin.tool_conflict) ->
+            Printf.sprintf "  - %s from %s skipped; already provided by %s"
+              conflict.tool_name conflict.plugin_id conflict.existing_owner)
+  in
+  [
+    "Plugin diagnostics";
+    "install_home: " ^ install_home;
+    Printf.sprintf "valid_plugins: %d" (List.length discovery.manifests);
+    Printf.sprintf "invalid_plugins: %d" (List.length discovery.errors);
+    Printf.sprintf "tool_conflicts: %d" (List.length conflicts);
+    "search_roots:";
+  ]
+  @ root_lines @ [ "" ] @ invalid_lines @ [ "" ] @ conflict_lines
+  @ [
+      "";
+      "next: /plugins";
+      "next: /plugin <id|tool>";
+      "next: /plugin-check <dir>";
+      "next: /plugin-dev --replace <dir>";
+    ]
+
 let plugin_matches query (plugin : Plugin.manifest) =
   String.equal plugin.id query
   || String.equal plugin.name query
@@ -347,6 +393,8 @@ let run ctx command =
   | Command (Plugins, _) -> Some (command_section command (plugins_lines ()))
   | Command (Plugin, arg) ->
       Some (command_section command (plugin_detail_lines arg))
+  | Command (PluginDoctor, _) ->
+      Some (command_section command (plugin_diagnostics_lines ()))
   | Command (Sessions, _) -> Some (command_section command (sessions_lines ctx))
   | Command (Tree, _) -> Some (command_section command (tree_lines ctx))
   | Command (Model, "") ->

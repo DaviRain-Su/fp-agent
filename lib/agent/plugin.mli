@@ -99,3 +99,8 @@ val smoke :
 val install_home : unit -> string option
 (** Directory used by [install]. Controlled by [FP_AGENT_PLUGIN_HOME], falling
     back to [~/.local/share/fp-agent/plugins]. *)
+
+val search_roots : unit -> string list
+(** Plugin discovery roots, in precedence order. This includes
+    [FP_AGENT_PLUGIN_PATH], [.fp-agent/plugins], and the install home when it
+    can be resolved. *)

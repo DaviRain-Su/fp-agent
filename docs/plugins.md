@@ -87,6 +87,7 @@ Use the REPL command:
 
 ```text
 /plugins
+/plugin-doctor
 /plugin echo_json
 /plugin-new --id com.example.echo --tool-name echo_json my-plugin
 /plugin-dev --replace my-plugin
@@ -105,6 +106,11 @@ install without guessing why a tool disappeared. It also reports tool-name
 conflicts when a plugin tries to reuse a built-in tool name or a name already
 claimed by an earlier discovered plugin; the conflicting plugin tool is skipped
 while the rest of the valid plugin remains visible.
+
+`/plugin-doctor` prints the effective plugin search roots, resolved install
+home, valid/invalid plugin counts, tool-name conflict count, invalid manifest
+details, and next inspection commands. Use it when a plugin was installed but a
+tool is missing from `/tools`.
 
 `/plugin <plugin-id|tool-name>` prints the manifest details for one plugin:
 directory, version, tool kind, command, timeout, and input schema.
@@ -227,6 +233,12 @@ List installed plugins:
 
 ```sh
 dune exec -- fp-agent --list-plugins
+```
+
+Inspect discovery and install diagnostics:
+
+```sh
+dune exec -- fp-agent --doctor-plugins
 ```
 
 The list command also reports invalid installed manifests under

@@ -177,7 +177,7 @@ let test_palette_state () =
     (Tui_shell.selected_command_index state)
 
 let test_palette_input_mapping () =
-  let state = Tui_shell.create ~command_count:11 () in
+  let state = Tui_shell.create ~command_count:12 () in
   let state = input Tui_shell.Slash state in
   Alcotest.(check (option int))
     "slash opens" (Some 0)
@@ -192,14 +192,14 @@ let test_palette_input_mapping () =
     (Tui_shell.selected_command_index state);
   let state = input Tui_shell.End state in
   Alcotest.(check (option int))
-    "end moves palette" (Some 10)
+    "end moves palette" (Some 11)
     (Tui_shell.selected_command_index state);
   let result = Tui_shell.handle_input ~page_size:3 state Tui_shell.Enter in
   Alcotest.(check bool)
     "enter closes palette" false
     (Tui_shell.palette_open result.state);
   Alcotest.(check (option string))
-    "enter accepts selected command" (palette_command_at 10)
+    "enter accepts selected command" (palette_command_at 11)
     (accepted_command result.accepted_command);
   Alcotest.(check (option string))
     "enter dispatches no-arg command" (Some "/sessions")
@@ -569,7 +569,26 @@ let test_tui_command_plugins_and_tools () =
       let plugin = output "/plugin tui_echo" context in
       Alcotest.(check bool)
         "plugin detail includes command" true
-        (String.is_substring plugin ~substring:"command: sh echo.sh"))
+        (String.is_substring plugin ~substring:"command: sh echo.sh");
+      let doctor = output "/plugin-doctor" context in
+      Alcotest.(check bool)
+        "doctor command header" true
+        (String.is_substring doctor ~substring:"[tui] /plugin-doctor");
+      Alcotest.(check bool)
+        "doctor shows install home" true
+        (String.is_substring doctor ~substring:"install_home:");
+      Alcotest.(check bool)
+        "doctor shows search roots" true
+        (String.is_substring doctor ~substring:"search_roots:");
+      Alcotest.(check bool)
+        "doctor shows invalid count" true
+        (String.is_substring doctor ~substring:"invalid_plugins: 1");
+      Alcotest.(check bool)
+        "doctor shows conflict count" true
+        (String.is_substring doctor ~substring:"tool_conflicts: 1");
+      Alcotest.(check bool)
+        "doctor shows next dev command" true
+        (String.is_substring doctor ~substring:"next: /plugin-dev --replace"))
 
 let () =
   Alcotest.run "tui_shell"

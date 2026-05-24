@@ -249,6 +249,16 @@ let test_plugin_lifecycle_cli () =
   assert_contains "list conflict owner" listed.stdout
     "read_file from com.example.installed_conflict skipped; already provided \
      by built-in tool";
+  let doctor = run ~env [ bin; "--doctor-plugins" ] in
+  assert_success "doctor plugins" doctor;
+  assert_contains "doctor header" doctor.stdout "Plugin diagnostics";
+  assert_contains "doctor install home" doctor.stdout "install_home:";
+  assert_contains "doctor search roots" doctor.stdout "search_roots:";
+  assert_contains "doctor valid count" doctor.stdout "valid_plugins: 2";
+  assert_contains "doctor invalid count" doctor.stdout "invalid_plugins: 1";
+  assert_contains "doctor conflict count" doctor.stdout "tool_conflicts: 1";
+  assert_contains "doctor next command" doctor.stdout
+    "next: /plugin-dev --replace <dir>";
   let removed = run ~env [ bin; "--remove-plugin"; "local.my-plugin" ] in
   assert_success "remove plugin" removed;
   assert_contains "remove output" removed.stdout "removed plugin:";
@@ -281,6 +291,7 @@ let test_repl_installs_and_removes_plugin () =
              "/plugin-check " ^ plugin_dir;
              "/plugin-install " ^ plugin_dir;
              "/plugins";
+             "/plugin-doctor";
              "/tool repl_echo";
              "/plugin-smoke --replace " ^ plugin_dir;
              "/plugin-remove local.repl-plugin";
@@ -311,6 +322,9 @@ let test_repl_installs_and_removes_plugin () =
   assert_contains "install tool inspect hint" repl.stdout
     "next: /tool repl_echo";
   assert_contains "plugin listed after install" repl.stdout "local.repl-plugin";
+  assert_contains "plugin doctor output" repl.stdout "Plugin diagnostics";
+  assert_contains "plugin doctor next command" repl.stdout
+    "next: /plugin-check <dir>";
   assert_contains "tool available after install" repl.stdout "name: repl_echo";
   assert_contains "smoke output" repl.stdout "smoke ok: repl_echo";
   assert_contains "dev check output" repl.stdout
@@ -562,6 +576,7 @@ let test_repl_lists_dynamic_plugin_tools () =
         (String.concat ~sep:"\n"
            [
              "/plugins";
+             "/plugin-doctor";
              "/plugin local.my-plugin";
              "/plugin hello_world";
              "/plugin-smoke --replace " ^ plugin_dir;
@@ -577,6 +592,8 @@ let test_repl_lists_dynamic_plugin_tools () =
   in
   assert_success "repl plugin commands" repl;
   assert_contains "plugins lists scaffold" repl.stdout "local.my-plugin";
+  assert_contains "plugin doctor output" repl.stdout "Plugin diagnostics";
+  assert_contains "plugin doctor conflict count" repl.stdout "tool_conflicts: 1";
   assert_contains "plugins report invalid section" repl.stdout
     "Invalid plugins:";
   assert_contains "plugins report invalid error" repl.stdout "at least one tool";
