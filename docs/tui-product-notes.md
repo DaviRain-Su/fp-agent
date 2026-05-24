@@ -119,9 +119,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - Plugin smoke checks are now available inside the REPL and fullscreen TUI as
   `/plugin-smoke [--replace] <dir>`, backed by the same SDK smoke runner as the
   CLI.
-- Plugin development now has `/plugin-dev [--replace] <dir>`, which validates,
-  smoke-tests, installs, refreshes tools, and prints inspection next steps in one
-  command.
+- Plugin development now has `/plugin-dev [--replace] <dir>` and
+  `--dev-plugin DIR`, which validate, smoke-test, install, refresh tools, and
+  print inspection next steps in one command.
 - Plugin install management is now available inside the REPL and fullscreen TUI
   as `/plugin-new`, `/plugin-check`, `/plugin-install`, and `/plugin-remove`,
   with tool registry and status-count reloads after install/remove so current

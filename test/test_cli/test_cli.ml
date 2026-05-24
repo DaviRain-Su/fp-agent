@@ -216,7 +216,7 @@ let test_plugin_lifecycle_cli () =
   assert_contains "replace without install stderr"
     replace_without_install.stderr
     "--replace-plugin requires --install-plugin DIR or --check-plugin DIR or \
-     --smoke-plugin DIR";
+     --smoke-plugin DIR or --dev-plugin DIR";
   let invalid_installed = Stdlib.Filename.concat home "invalid-plugin" in
   mkdir_p invalid_installed;
   write_file
@@ -359,8 +359,14 @@ let test_new_plugin_custom_id_cli () =
   assert_success "smoke custom tool plugin" smoked;
   assert_contains "custom tool smoke output" smoked.stdout
     "smoke ok: named_echo";
-  let installed = run ~env [ bin; "--install-plugin"; plugin_dir ] in
-  assert_success "install custom id plugin" installed;
+  let installed = run ~env [ bin; "--dev-plugin"; plugin_dir ] in
+  assert_success "dev custom id plugin" installed;
+  assert_contains "dev custom check output" installed.stdout
+    "plugin dev check ok: com.example.named_plugin";
+  assert_contains "dev custom smoke output" installed.stdout
+    "plugin dev smoke ok:";
+  assert_contains "dev custom tool hint" installed.stdout
+    "next: /tool named_echo";
   Alcotest.(check bool)
     "installed under custom id" true
     (Stdlib.Sys.file_exists

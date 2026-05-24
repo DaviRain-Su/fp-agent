@@ -140,6 +140,7 @@ Create, test, and install a plugin into the user plugin home:
 dune exec -- fp-agent --new-plugin my-plugin
 dune exec -- fp-agent --new-plugin my-plugin --plugin-id com.example.my_plugin
 dune exec -- fp-agent --new-plugin my-plugin --plugin-tool-name my_tool
+dune exec -- fp-agent --dev-plugin my-plugin --replace-plugin
 dune exec -- fp-agent --check-plugin my-plugin
 dune exec -- fp-agent --smoke-plugin my-plugin
 dune exec -- fp-agent
@@ -263,14 +264,16 @@ Options:
 - `--check-plugin DIR` — validate a plugin directory, then exit
 - `--smoke-plugin DIR` — validate a plugin directory and run each tool with
   `examples/<tool>.args.json`
+- `--dev-plugin DIR` / `--plugin-dev DIR` — validate, smoke-test, install,
+  refresh, and print plugin/tool inspection next steps, then exit
 - `--replace-plugin` with `--check-plugin` — validate replacement
   compatibility against the currently installed plugin with the same id
 - `--run-plugin-tool DIR --plugin-tool NAME --plugin-args JSON` — run a plugin
   tool locally for development, then exit
 - `--plugin-args-file FILE` — read local plugin tool JSON args from a file
 - `--install-plugin DIR` — validate and install a plugin directory, then exit
-- `--replace-plugin` — allow `--install-plugin` to replace an existing
-  installed plugin after staging the new copy
+- `--replace-plugin` — allow `--install-plugin` or `--dev-plugin` to replace an
+  existing installed plugin after staging the new copy
 - `--list-plugins` — list plugins installed in the plugin home, then exit
 - `--remove-plugin ID` / `--uninstall-plugin ID` — remove an installed plugin
   from the plugin home, then exit

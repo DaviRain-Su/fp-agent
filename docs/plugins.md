@@ -180,6 +180,7 @@ matching file:
 
 ```sh
 dune exec -- fp-agent --smoke-plugin my-plugin
+dune exec -- fp-agent --dev-plugin my-plugin --replace-plugin
 dune exec -- fp-agent
 > /plugin-new --id com.example.echo --tool-name echo_json my-plugin
 > /plugin-dev --replace my-plugin
@@ -192,6 +193,11 @@ dune exec -- fp-agent --run-plugin-tool my-plugin \
   --plugin-tool hello_world \
   --plugin-args-file my-plugin/examples/hello_world.args.json
 ```
+
+`--dev-plugin DIR` (alias `--plugin-dev DIR`) runs the same one-step development
+loop without opening the REPL: validate, smoke-test, install, refresh, and print
+the next plugin/tool inspection commands. Add `--replace-plugin` when iterating
+on an already installed plugin.
 
 The command loads the manifest, validates the JSON args, runs the tool from the
 plugin directory, and prints stdout. It uses `--workspace` or `WORKSPACE_ROOT`

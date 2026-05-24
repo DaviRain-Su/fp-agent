@@ -829,6 +829,12 @@ and the next model turn can see updated plugin tools immediately.
 
 ## CLI Equivalents
 
+Run the full development loop:
+
+```sh
+dune exec -- fp-agent --dev-plugin . --replace-plugin
+```
+
 Validate:
 
 ```sh
