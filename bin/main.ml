@@ -123,8 +123,8 @@ let make_tui_reporter ~provider ~model ~session ~header =
   let lines = ref [] in
   let current_delta = ref "" in
   let phase = make_phase () in
-  let event_count = ref 0 in
-  let last_event = ref None in
+  let events = ref [] in
+  let selection = ref View.Follow_latest in
   let i = ref 0 in
   let visible_lines () =
     if String.is_empty !current_delta then !lines
@@ -135,9 +135,42 @@ let make_tui_reporter ~provider ~model ~session ~header =
       lines := !lines @ View.display_lines !current_delta;
       current_delta := "")
   in
+  let drain_input ~page_size =
+    let move delta =
+      selection :=
+        View.move_selection ~event_count:(List.length !events) ~delta !selection
+    in
+    let select_first () =
+      selection := View.select_event ~event_count:(List.length !events) ~index:0
+    in
+    let follow_latest () = selection := View.Follow_latest in
+    let rec loop () =
+      if Notty_unix.Term.pending term then (
+        (match Notty_unix.Term.event term with
+        | `Key (`Arrow `Up, _) | `Key (`ASCII 'k', _) -> move (-1)
+        | `Key (`Arrow `Down, _) | `Key (`ASCII 'j', _) -> move 1
+        | `Key (`Page `Up, _) -> move (-page_size)
+        | `Key (`Page `Down, _) -> move page_size
+        | `Key (`Home, _) -> select_first ()
+        | `Key (`End, _) | `Key (`ASCII 'G', _) -> follow_latest ()
+        | `Mouse (`Press (`Scroll `Up), _, _) -> move (-1)
+        | `Mouse (`Press (`Scroll `Down), _, _) -> move 1
+        | `Resize _ | `End | `Paste _ | `Key _ | `Mouse _ -> ());
+        loop ())
+    in
+    loop ()
+  in
   let redraw () =
     let w, h = Notty_unix.Term.size term in
     let body_rows = Int.max 1 (h - 4) in
+    drain_input ~page_size:body_rows;
+    let event_count = List.length !events in
+    let selected_event =
+      Option.bind
+        (View.selection_index ~event_count !selection)
+        ~f:(List.nth !events)
+    in
+    let selection_label = View.selection_label ~event_count !selection in
     let phase_text = phase_label !(fst phase) in
     let status : View.status =
       {
@@ -145,7 +178,7 @@ let make_tui_reporter ~provider ~model ~session ~header =
         model;
         session;
         phase = phase_text;
-        events = !event_count;
+        events = event_count;
         plugins = plugin_count;
         tools = tool_count;
       }
@@ -176,12 +209,14 @@ let make_tui_reporter ~provider ~model ~session ~header =
               (visible_lines ())
           in
           let inspector =
-            (match !last_event with
+            (match selected_event with
               | None ->
                   View.inspector_lines status
+                    ~focus_label:("Selected event: " ^ selection_label)
                     ~last_event:"waiting for first event"
               | Some event ->
                   View.inspector_lines status
+                    ~focus_label:("Selected event: " ^ selection_label)
                     ~last_event:(View.event_summary event)
                   @ ("" :: View.event_inspector_lines event))
             |> View.viewport ~rows:body_rows ~cols:panes.inspector_cols
@@ -208,22 +243,28 @@ let make_tui_reporter ~provider ~model ~session ~header =
     in
     let rule = I.string A.(fg lightblue) (String.make (Int.max 1 w) '-') in
     let footer =
+      let hint =
+        Printf.sprintf "%s | up/down inspect | End follow latest"
+          selection_label
+      in
       match phase_text with
-      | None -> I.string A.(fg (gray 12)) "done — ctrl-c to exit"
+      | None ->
+          I.string A.(fg (gray 12)) (View.truncate ~cols:w ("done | " ^ hint))
       | Some label ->
           let frame = spinner_frames.(!i % Array.length spinner_frames) in
           I.string
             A.(fg cyan)
-            (Printf.sprintf "%s %s (%.0fs)" frame label
-               (now () -. !(snd phase)))
+            (View.truncate ~cols:w
+               (Printf.sprintf "%s %s (%.0fs) | %s" frame label
+                  (now () -. !(snd phase))
+                  hint))
     in
     Notty_unix.Term.image term
       (I.vcat [ header_img; status_img; rule; body; footer ])
   in
   redraw ();
   let on_event e =
-    Int.incr event_count;
-    last_event := Some e;
+    events := !events @ [ e ];
     update_phase phase e;
     (match e with
     | Model_delta { content } -> current_delta := !current_delta ^ content

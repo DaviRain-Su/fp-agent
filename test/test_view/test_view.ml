@@ -97,6 +97,41 @@ let test_status_and_inspector () =
     ]
     (View.inspector_lines status ~last_event:"→ read_file README.md")
 
+let test_event_selection () =
+  Alcotest.(check (option int))
+    "empty selection has no index" None
+    (View.selection_index ~event_count:0 View.Follow_latest);
+  Alcotest.(check string)
+    "empty selection label" "no events"
+    (View.selection_label ~event_count:0 View.Follow_latest);
+  Alcotest.(check (option int))
+    "follow latest resolves newest" (Some 4)
+    (View.selection_index ~event_count:5 View.Follow_latest);
+  let pinned =
+    View.move_selection ~event_count:5 ~delta:(-1) View.Follow_latest
+  in
+  Alcotest.(check (option int))
+    "move up pins previous event" (Some 3)
+    (View.selection_index ~event_count:5 pinned);
+  Alcotest.(check string)
+    "pinned label" "event 4/5"
+    (View.selection_label ~event_count:5 pinned);
+  let latest = View.move_selection ~event_count:5 ~delta:1 pinned in
+  Alcotest.(check (option int))
+    "moving to newest follows latest" (Some 4)
+    (View.selection_index ~event_count:5 latest);
+  Alcotest.(check string)
+    "latest label" "latest (5/5)"
+    (View.selection_label ~event_count:5 latest);
+  let first = View.select_event ~event_count:5 ~index:(-100) in
+  Alcotest.(check (option int))
+    "select clamps low" (Some 0)
+    (View.selection_index ~event_count:5 first);
+  let newest = View.select_event ~event_count:5 ~index:100 in
+  Alcotest.(check string)
+    "select newest follows" "latest (5/5)"
+    (View.selection_label ~event_count:5 newest)
+
 let test_event_summary () =
   let event = Event.Tool_call (Tool_call.read_file "README.md") in
   Alcotest.(check string) "kind" "tool_call" (View.event_kind event);
@@ -231,6 +266,7 @@ let () =
           Alcotest.test_case "split_panes" `Quick test_split_panes;
           Alcotest.test_case "status_and_inspector" `Quick
             test_status_and_inspector;
+          Alcotest.test_case "event_selection" `Quick test_event_selection;
           Alcotest.test_case "event_summary" `Quick test_event_summary;
           Alcotest.test_case "event_inspector_lines" `Quick
             test_event_inspector_lines;

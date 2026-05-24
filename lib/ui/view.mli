@@ -41,8 +41,30 @@ type status = {
 val status_line : status -> string
 (** Render the compact status strip. *)
 
-val inspector_lines : status -> last_event:string -> string list
+val inspector_lines :
+  ?focus_label:string -> status -> last_event:string -> string list
 (** Render the right-side run inspector as plain lines. *)
+
+type event_selection =
+  | Follow_latest
+  | Pinned of int
+      (** Which event the TUI inspector should show. [Follow_latest] tracks new
+          events; [Pinned i] keeps inspecting a historical event. *)
+
+val selection_index : event_count:int -> event_selection -> int option
+(** Resolve a selection to a concrete event index, if any events exist. *)
+
+val selection_label : event_count:int -> event_selection -> string
+(** Human-readable selection status for inspector labels and footers. *)
+
+val move_selection :
+  event_count:int -> delta:int -> event_selection -> event_selection
+(** Move the selected event by [delta], clamped to the valid event range. Moving
+    to the newest event resumes [Follow_latest]. *)
+
+val select_event : event_count:int -> index:int -> event_selection
+(** Select a concrete event index, clamped to the valid event range. Selecting
+    the newest event resumes [Follow_latest]. *)
 
 val event_kind : Event.t -> string
 (** Stable event type label for the inspector. *)

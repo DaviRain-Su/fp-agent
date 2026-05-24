@@ -124,6 +124,9 @@ copy. Two consequences:
 - **Inspect** (`/inspect [index]`) renders the same event inspector used by the
   TUI: event kind, summary, tool args, policy/result details, and a JSON
   preview. With no index it inspects the latest event.
+- **TUI event navigation** (`--tui`) lets the inspector follow the latest event
+  by default, or pin a historical event with Up/Down, `j`/`k`, PageUp/PageDown,
+  Home, and End.
 
 Options:
 

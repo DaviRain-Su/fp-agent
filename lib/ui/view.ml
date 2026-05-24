@@ -63,7 +63,7 @@ let status_line s =
   Printf.sprintf "%s/%s | %s | %s | events %d | plugins %d | tools %d"
     s.provider s.model s.session phase s.events s.plugins s.tools
 
-let inspector_lines s ~last_event =
+let inspector_lines ?(focus_label = "Last event") s ~last_event =
   [
     "Inspector";
     "provider: " ^ s.provider;
@@ -74,9 +74,47 @@ let inspector_lines s ~last_event =
     Printf.sprintf "plugins: %d" s.plugins;
     Printf.sprintf "tools: %d" s.tools;
     "";
-    "Last event";
+    focus_label;
     last_event;
   ]
+
+type event_selection = Follow_latest | Pinned of int
+
+let latest_index event_count =
+  if event_count <= 0 then None else Some (event_count - 1)
+
+let clamp ~lo ~hi n = Int.max lo (Int.min hi n)
+
+let normalize_selection ~event_count selection =
+  match latest_index event_count with
+  | None -> Follow_latest
+  | Some latest -> (
+      match selection with
+      | Follow_latest -> Follow_latest
+      | Pinned index ->
+          let index = clamp ~lo:0 ~hi:latest index in
+          if index = latest then Follow_latest else Pinned index)
+
+let selection_index ~event_count selection =
+  match normalize_selection ~event_count selection with
+  | Follow_latest -> latest_index event_count
+  | Pinned index -> Some index
+
+let selection_label ~event_count selection =
+  match selection_index ~event_count selection with
+  | None -> "no events"
+  | Some index -> (
+      match normalize_selection ~event_count selection with
+      | Follow_latest -> Printf.sprintf "latest (%d/%d)" (index + 1) event_count
+      | Pinned _ -> Printf.sprintf "event %d/%d" (index + 1) event_count)
+
+let select_event ~event_count ~index =
+  normalize_selection ~event_count (Pinned index)
+
+let move_selection ~event_count ~delta selection =
+  match selection_index ~event_count selection with
+  | None -> Follow_latest
+  | Some index -> select_event ~event_count ~index:(index + delta)
 
 let flat s = String.substr_replace_all s ~pattern:"\n" ~with_:" "
 
