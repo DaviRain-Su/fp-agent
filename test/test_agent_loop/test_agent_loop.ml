@@ -168,6 +168,41 @@ let test_parallel_tool_batch_then_final () =
         "two tool result events" 2
         (count "\"Tool_result_message\""))
 
+let test_history_truncation_keeps_tool_exchange_atomic () =
+  let big_result =
+    String.make (Agent_loop.max_history_chars_for_test - 100) 'x'
+  in
+  let old_tool_use =
+    Llm.assistant
+      [
+        Llm.Tool_use
+          {
+            id = "old-call";
+            name = "read_file";
+            input = `Assoc [ ("path", `String "big.txt") ];
+          };
+      ]
+  in
+  let old_tool_result =
+    {
+      Llm.role = Llm.User;
+      content = [ Llm.Tool_result { id = "old-call"; content = big_result } ];
+    }
+  in
+  let newest = Llm.user "newest task" in
+  let truncated =
+    Agent_loop.truncate_history_for_test
+      [ Llm.user "old task"; old_tool_use; old_tool_result; newest ]
+  in
+  Alcotest.(check int)
+    "oversized older tool exchange is dropped as a unit" 1
+    (List.length truncated);
+  match truncated with
+  | [ { role = Llm.User; content = [ Llm.Text "newest task" ] } ] -> ()
+  | turns ->
+      Alcotest.failf "unexpected truncated history: %s"
+        (Yojson.Safe.to_string (`List (List.map turns ~f:Llm.turn_to_json)))
+
 let test_max_steps () =
   with_env (fun config workspace event_log _ ->
       let config = { config with Config.max_steps = 3 } in
@@ -199,6 +234,8 @@ let () =
           Alcotest.test_case "tool_then_final" `Quick test_tool_then_final;
           Alcotest.test_case "parallel_tool_batch" `Quick
             test_parallel_tool_batch_then_final;
+          Alcotest.test_case "history_truncation_atomic" `Quick
+            test_history_truncation_keeps_tool_exchange_atomic;
           Alcotest.test_case "max_steps" `Quick test_max_steps;
           Alcotest.test_case "model_error" `Quick test_model_error;
           Alcotest.test_case "approval_denied" `Quick test_approval_denied;

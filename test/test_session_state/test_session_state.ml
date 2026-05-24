@@ -62,16 +62,31 @@ let test_batch_tool_results_reduce_to_observations () =
   let events =
     [
       Event.User_message { content = "batch" };
-      Event.Model_response
+      Event.Assistant_message
         {
-          action =
-            Model_action.Tool_calls
-              [ Tool_call.read_file "a"; Tool_call.read_file "b" ];
+          content =
+            [
+              Llm.Tool_use
+                {
+                  id = "call-a";
+                  name = "read_file";
+                  input = `Assoc [ ("path", `String "a") ];
+                };
+              Llm.Tool_use
+                {
+                  id = "call-b";
+                  name = "read_file";
+                  input = `Assoc [ ("path", `String "b") ];
+                };
+            ];
+          usage = Llm.zero_usage;
         };
       Event.Tool_call (Tool_call.read_file "a");
-      Event.Tool_result (Tool_result.Success { output = "a" });
+      Event.Tool_result_message
+        { id = "call-a"; result = Tool_result.Success { output = "a" } };
       Event.Tool_call (Tool_call.read_file "b");
-      Event.Tool_result (Tool_result.Success { output = "b" });
+      Event.Tool_result_message
+        { id = "call-b"; result = Tool_result.Success { output = "b" } };
     ]
   in
   let st = Session_state.replay events in
@@ -80,9 +95,15 @@ let test_batch_tool_results_reduce_to_observations () =
     List.map (Session_state.messages st) ~f:(fun m -> m.Message.role)
   in
   Alcotest.(check (list string))
-    "messages: user, assistant, observations"
-    [ "user"; "assistant"; "user"; "user" ]
-    roles
+    "messages: user, assistant, observation batch"
+    [ "user"; "assistant"; "user" ]
+    roles;
+  match List.last_exn (Session_state.turns st) with
+  | { role = Llm.User; content = [ Llm.Tool_result _; Llm.Tool_result _ ] } ->
+      ()
+  | turn ->
+      Alcotest.failf "expected batched tool results: %s"
+        (Yojson.Safe.to_string (Llm.turn_to_json turn))
 
 let test_normalized_events_preserve_tool_ids () =
   let events =

@@ -6,6 +6,20 @@ open! Base
 type t = { turns : Llm.turn list; agent_state : Agent_state.t; steps : int }
 
 let empty = { turns = []; agent_state = Agent_state.Initializing; steps = 0 }
+let append_turn st turn = { st with turns = st.turns @ [ turn ] }
+let is_tool_result = function Llm.Tool_result _ -> true | _ -> false
+
+let append_tool_result st block =
+  match List.rev st.turns with
+  | ({ role = Llm.User; content } as last) :: rev_prefix
+    when (not (List.is_empty content)) && List.for_all content ~f:is_tool_result
+    ->
+      {
+        st with
+        turns =
+          List.rev ({ last with content = content @ [ block ] } :: rev_prefix);
+      }
+  | _ -> append_turn st { role = Llm.User; content = [ block ] }
 
 let content_of_action = function
   | Model_action.Final_answer { answer } -> [ Llm.Text answer ]
@@ -22,8 +36,7 @@ let content_of_action = function
 
 let reduce (st : t) (event : Event.t) =
   match event with
-  | User_message { content } ->
-      { st with turns = st.turns @ [ Llm.user content ] }
+  | User_message { content } -> append_turn st (Llm.user content)
   | Model_delta _ -> st
   | Assistant_message { content; _ } ->
       {
@@ -38,26 +51,10 @@ let reduce (st : t) (event : Event.t) =
         steps = st.steps + 1;
       }
   | Tool_result_message { id; result } ->
-      {
-        st with
-        turns =
-          st.turns
-          @ [
-              {
-                role = Llm.User;
-                content =
-                  [
-                    Llm.Tool_result
-                      { id; content = Tool_result.to_observation result };
-                  ];
-              };
-            ];
-      }
+      append_tool_result st
+        (Llm.Tool_result { id; content = Tool_result.to_observation result })
   | Tool_result result ->
-      {
-        st with
-        turns = st.turns @ [ Llm.user (Tool_result.to_observation result) ];
-      }
+      append_turn st (Llm.user (Tool_result.to_observation result))
   | State_transition { to_state; _ } -> { st with agent_state = to_state }
   | Tool_call _ | Policy_decision _ | Graph_event _ -> st
 

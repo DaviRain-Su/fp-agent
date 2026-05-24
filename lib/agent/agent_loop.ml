@@ -11,8 +11,6 @@ let status_to_string = function
   | Failed -> "failed"
   | Max_steps_reached -> "max_steps_reached"
 
-(* Keep the most recent turns that fit the budget, so
-   long sessions do not blow the context window. *)
 let turn_cost (turn : Llm.turn) =
   let content_cost = function
     | Llm.Text s -> String.length s
@@ -26,14 +24,64 @@ let turn_cost (turn : Llm.turn) =
   in
   List.sum (module Int) turn.content ~f:content_cost + 16
 
+let tool_use_ids content =
+  List.filter_map content ~f:(function
+    | Llm.Tool_use { id; _ } -> Some id
+    | _ -> None)
+
+let is_tool_result_turn_for ids (turn : Llm.turn) =
+  match turn.role with
+  | Llm.Assistant -> false
+  | Llm.User ->
+      (not (List.is_empty turn.content))
+      && List.for_all turn.content ~f:(function
+        | Llm.Tool_result { id; _ } -> List.mem ids id ~equal:String.equal
+        | _ -> false)
+
+let is_orphan_tool_result_turn (turn : Llm.turn) =
+  match turn.role with
+  | Llm.Assistant -> false
+  | Llm.User ->
+      List.exists turn.content ~f:(function
+        | Llm.Tool_result _ -> true
+        | _ -> false)
+
+let history_chunks turns =
+  let rec loop acc = function
+    | [] -> List.rev acc
+    | ({ Llm.role = Llm.Assistant; content } as turn) :: rest -> (
+        match tool_use_ids content with
+        | [] -> loop ([ turn ] :: acc) rest
+        | ids ->
+            let rec collect results = function
+              | result_turn :: tl when is_tool_result_turn_for ids result_turn
+                ->
+                  collect (result_turn :: results) tl
+              | remaining -> (List.rev results, remaining)
+            in
+            let result_turns, remaining = collect [] rest in
+            loop ((turn :: result_turns) :: acc) remaining)
+    | turn :: rest when is_orphan_tool_result_turn turn -> loop acc rest
+    | turn :: rest -> loop ([ turn ] :: acc) rest
+  in
+  loop [] turns
+
+(* Keep the most recent turns that fit the budget, so long sessions do not blow
+   the context window. Tool exchanges must be kept or dropped as a unit;
+   provider APIs reject orphaned tool_result blocks. *)
 let truncate_history turns =
   let rec take acc budget = function
-    | [] -> acc
-    | turn :: tl ->
-        let cost = turn_cost turn in
-        if budget - cost < 0 then acc else take (turn :: acc) (budget - cost) tl
+    | [] -> List.concat acc
+    | chunk :: tl ->
+        let cost = List.sum (module Int) chunk ~f:turn_cost in
+        if budget - cost < 0 then
+          if List.is_empty acc then List.concat [ chunk ] else List.concat acc
+        else take (chunk :: acc) (budget - cost) tl
   in
-  take [] max_history_chars (List.rev turns)
+  take [] max_history_chars (List.rev (history_chunks turns))
+
+let max_history_chars_for_test = max_history_chars
+let truncate_history_for_test = truncate_history
 
 let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
     ?(on_approval = fun _ _ -> Lwt.return false) ?(initial_history = [])
