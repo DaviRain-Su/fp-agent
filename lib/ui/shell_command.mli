@@ -4,6 +4,7 @@ type id =
   | Tool
   | Plugins
   | Plugin
+  | PluginSmoke
   | Sessions
   | Tree
   | NewSession

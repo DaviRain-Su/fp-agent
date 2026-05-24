@@ -72,6 +72,7 @@ dune exec -- fp-agent
 > /tools             # preview available tools
 > /tool read_file    # inspect a tool's kind/schema/description
 > /plugin echo_json  # inspect a plugin by id or tool name
+> /plugin-smoke my-plugin
 > /inspect 12        # inspect event 12: tool args/result/policy/JSON
 > /help
 > /exit
@@ -118,6 +119,7 @@ export FP_AGENT_PLUGIN_PATH=$PWD/examples/plugins/echo
 dune exec -- fp-agent
 > /plugins
 > /plugin echo_json
+> /plugin-smoke my-plugin
 > /tool echo_json
 > /tools
 ```
@@ -130,6 +132,8 @@ dune exec -- fp-agent --new-plugin my-plugin --plugin-id com.example.my_plugin
 dune exec -- fp-agent --new-plugin my-plugin --plugin-tool-name my_tool
 dune exec -- fp-agent --check-plugin my-plugin
 dune exec -- fp-agent --smoke-plugin my-plugin
+dune exec -- fp-agent
+> /plugin-smoke my-plugin
 dune exec -- fp-agent --check-plugin my-plugin --replace-plugin
 dune exec -- fp-agent --run-plugin-tool my-plugin \
   --plugin-tool hello_world \
@@ -186,6 +190,10 @@ copy. Two consequences:
   echoed into the TUI timeline. Read-only commands such as `/tools`, `/plugins`,
   `/models`, `/model`, `/usage`, `/status`, `/instructions`, `/diff`, `/log`,
   and `/inspect` render their results directly inside the fullscreen view.
+- **Plugin smoke checks** (`/plugin-smoke <dir>`) validate a plugin and run its
+  `examples/<tool>.args.json` files from inside the REPL or fullscreen TUI, so
+  plugin developers can keep the current agent session open while testing SDK
+  changes.
 - **TUI model/provider switching** lets `/model <id>` and `/provider <name>
   [model] [api-base]` change the runtime used by later TUI task submissions.
 - **TUI session navigation** lets `/new`, `/resume <dir>`, and `/fork [index]`

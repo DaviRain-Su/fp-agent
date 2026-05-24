@@ -28,6 +28,8 @@ type tool_conflict = {
   existing_owner : string;
 }
 
+type smoke_result = { tool_name : string; args_file : string; output : string }
+
 let manifest_file = "fp-agent-plugin.json"
 let supported_sdk_version = 1
 let default_timeout_sec = 60
@@ -567,6 +569,75 @@ let run_tool ~dir ~tool_name ~workspace ~args =
                    { message = "requires user approval: " ^ reason })
           | Permission.Deny reason ->
               Ok (Tool_result.Error { message = "policy denied: " ^ reason })))
+
+let read_json_file path =
+  match Stdlib.In_channel.with_open_bin path Stdlib.In_channel.input_all with
+  | content -> (
+      match Yojson.Safe.from_string content with
+      | json -> Ok json
+      | exception exn ->
+          Error
+            (Printf.sprintf "invalid JSON in %s: %s" path (Exn.to_string exn)))
+  | exception exn ->
+      Error
+        (Printf.sprintf "cannot read plugin args file %s: %s" path
+           (Exn.to_string exn))
+
+let smoke_arg_candidates dir tool_name =
+  let examples = Stdlib.Filename.concat dir "examples" in
+  [
+    Stdlib.Filename.concat examples (tool_name ^ ".args.json");
+    Stdlib.Filename.concat examples (tool_name ^ ".json");
+  ]
+  @
+  if String.equal tool_name "hello_world" then
+    [ Stdlib.Filename.concat examples "hello.args.json" ]
+  else []
+
+let smoke_args_file dir tool_name =
+  List.find (smoke_arg_candidates dir tool_name) ~f:Stdlib.Sys.file_exists
+
+let smoke_error_line dir tool_name =
+  let expected =
+    smoke_arg_candidates dir tool_name |> String.concat ~sep:", "
+  in
+  Printf.sprintf "missing smoke args for tool %s; expected one of: %s" tool_name
+    expected
+
+let run_smoke_tool manifest workspace (tool : plugin_tool) args =
+  match plugin_check tool.tool_kind workspace args with
+  | Permission.Allow -> run_plugin_tool manifest tool workspace args
+  | Permission.Ask_user reason ->
+      Tool_result.Error { message = "requires user approval: " ^ reason }
+  | Permission.Deny reason ->
+      Tool_result.Error { message = "policy denied: " ^ reason }
+
+let smoke ?(replace = false) ~workspace dir =
+  match check ~replace dir with
+  | Error _ as e -> e
+  | Ok manifest ->
+      let rec loop acc (tools : plugin_tool list) =
+        match tools with
+        | [] -> Ok (List.rev acc)
+        | tool :: rest -> (
+            match smoke_args_file dir tool.tool_name with
+            | None -> Error (smoke_error_line dir tool.tool_name)
+            | Some args_file -> (
+                match read_json_file args_file with
+                | Error _ as e -> e
+                | Ok args -> (
+                    match run_smoke_tool manifest workspace tool args with
+                    | Tool_result.Success { output } ->
+                        loop
+                          ({ tool_name = tool.tool_name; args_file; output }
+                          :: acc)
+                          rest
+                    | Tool_result.Error { message } ->
+                        Error
+                          (Printf.sprintf "%s failed: %s" tool.tool_name message)
+                    )))
+      in
+      loop [] manifest.tools
 
 let register_manifest (manifest : manifest) =
   List.iter manifest.tools ~f:(fun plugin_tool ->

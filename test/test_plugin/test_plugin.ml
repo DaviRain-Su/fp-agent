@@ -408,6 +408,32 @@ let test_run_tool_for_plugin_development () =
             "output includes args" true
             (String.is_substring output ~substring:{|"message":"hello"|}))
 
+let test_smoke_runs_example_args () =
+  with_temp_dir "fp_agent_plugin_smoke" (fun root ->
+      let plugin_dir = Stdlib.Filename.concat root "plugin" in
+      mkdir_p plugin_dir;
+      write_plugin plugin_dir ~id:"com.example.smoke"
+        ~tool_name:"plugin_smoke_echo" ~kind:"read";
+      write
+        (Stdlib.Filename.concat plugin_dir
+           (Stdlib.Filename.concat "examples" "plugin_smoke_echo.args.json"))
+        {|{"message":"from-smoke"}|};
+      match Plugin.smoke ~workspace:(workspace root) plugin_dir with
+      | Error e -> Alcotest.failf "smoke failed: %s" e
+      | Ok [ result ] ->
+          Alcotest.(check string)
+            "smoke tool" "plugin_smoke_echo" result.tool_name;
+          Alcotest.(check bool)
+            "smoke args file" true
+            (String.is_suffix result.args_file
+               ~suffix:"examples/plugin_smoke_echo.args.json");
+          Alcotest.(check bool)
+            "smoke output" true
+            (String.is_substring result.output ~substring:"from-smoke")
+      | Ok results ->
+          Alcotest.failf "expected one smoke result, got %d"
+            (List.length results))
+
 let test_plugin_runtime_environment () =
   with_temp_dir "fp_agent_plugin_env" (fun root ->
       let plugin_dir = Stdlib.Filename.concat root "plugin" in
@@ -710,6 +736,7 @@ let () =
             test_check_rejects_candidate_tool_conflicts;
           Alcotest.test_case "run_tool" `Quick
             test_run_tool_for_plugin_development;
+          Alcotest.test_case "smoke" `Quick test_smoke_runs_example_args;
           Alcotest.test_case "runtime_environment" `Quick
             test_plugin_runtime_environment;
           Alcotest.test_case "run_tool_schema_validation" `Quick

@@ -44,6 +44,8 @@ let test_parse () =
     "local-llm qwen36-rtx http://127.0.0.1:8000/v1"
     (Shell_command.parse
        "/provider local-llm qwen36-rtx http://127.0.0.1:8000/v1");
+  require_command "plugin smoke" Shell_command.PluginSmoke "./my-plugin"
+    (Shell_command.parse "/plugin-smoke ./my-plugin");
   require_command "quit alias" Shell_command.Exit ""
     (Shell_command.parse "/quit");
   Alcotest.(check bool)
@@ -68,6 +70,9 @@ let test_metadata () =
   Alcotest.(check bool)
     "palette has status" true
     (List.mem palette "/status" ~equal:String.equal);
+  Alcotest.(check bool)
+    "palette has plugin smoke" true
+    (List.mem palette "/plugin-smoke <dir>" ~equal:String.equal);
   Alcotest.(check bool)
     "palette has instructions" true
     (List.mem palette "/instructions" ~equal:String.equal);
@@ -111,6 +116,9 @@ let test_acceptance () =
     (Shell_command.accept (entry "/tool <name>"));
   require_acceptance "provider draft" ("draft", "/provider ")
     (Shell_command.accept (entry "/provider <name> [model] [api-base]"));
+  require_acceptance "plugin smoke draft"
+    ("draft", "/plugin-smoke ")
+    (Shell_command.accept (entry "/plugin-smoke <dir>"));
   require_acceptance "new session draft" ("draft", "/new")
     (Shell_command.accept (entry "/new"));
   require_acceptance "retry draft" ("draft", "/retry")

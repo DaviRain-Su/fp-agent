@@ -489,15 +489,20 @@ let test_repl_lists_dynamic_plugin_tools () =
   let repl =
     run ~env
       ~stdin:
-        "/plugins\n\
-         /plugin local.my-plugin\n\
-         /plugin hello_world\n\
-         /plugin missing\n\
-         /tool read_file\n\
-         /tool hello_world\n\
-         /tool missing\n\
-         /tools\n\
-         /exit\n"
+        (String.concat ~sep:"\n"
+           [
+             "/plugins";
+             "/plugin local.my-plugin";
+             "/plugin hello_world";
+             "/plugin-smoke " ^ plugin_dir;
+             "/plugin missing";
+             "/tool read_file";
+             "/tool hello_world";
+             "/tool missing";
+             "/tools";
+             "/exit";
+             "";
+           ])
       [ bin ]
   in
   assert_success "repl plugin commands" repl;
@@ -514,6 +519,9 @@ let test_repl_lists_dynamic_plugin_tools () =
   assert_contains "plugin detail tool" repl.stdout "- hello_world";
   assert_contains "plugin detail command" repl.stdout "command: sh hello.sh";
   assert_contains "plugin detail schema" repl.stdout "input_schema:";
+  assert_contains "plugin smoke output" repl.stdout "smoke ok: hello_world";
+  assert_contains "plugin smoke tool output" repl.stdout
+    "hello from fp-agent plugin:";
   assert_contains "plugin missing" repl.stdout
     "no plugin or tool matching: missing";
   assert_contains "builtin tool detail" repl.stdout "name: read_file";

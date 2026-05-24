@@ -6,6 +6,7 @@ type id =
   | Tool
   | Plugins
   | Plugin
+  | PluginSmoke
   | Sessions
   | Tree
   | NewSession
@@ -84,6 +85,14 @@ let specs =
       aliases = [];
       palette = true;
       acceptance = Draft "/plugin ";
+    };
+    {
+      id = PluginSmoke;
+      command = "/plugin-smoke <dir>";
+      description = "run plugin smoke tests";
+      aliases = [];
+      palette = true;
+      acceptance = Draft "/plugin-smoke ";
     };
     {
       id = Sessions;

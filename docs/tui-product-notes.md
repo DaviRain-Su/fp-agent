@@ -108,6 +108,8 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   README, and smoke-test args file start with the developer's real first tool.
 - Plugin local development now has `--smoke-plugin`, which validates a plugin
   and runs each tool against `examples/<tool>.args.json` before install.
+- Plugin smoke checks are now available inside the REPL and fullscreen TUI as
+  `/plugin-smoke <dir>`, backed by the same SDK smoke runner as the CLI.
 - Plugin installation now supports `--replace-plugin` for iterative SDK
   development. Replacement validates and stages the new plugin before removing
   the old installed copy, so reinstalling a local plugin is one command without

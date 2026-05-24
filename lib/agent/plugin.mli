@@ -26,6 +26,8 @@ type tool_conflict = {
   existing_owner : string;
 }
 
+type smoke_result = { tool_name : string; args_file : string; output : string }
+
 val manifest_file : string
 val supported_sdk_version : int
 
@@ -85,6 +87,14 @@ val run_tool :
   (Tool_result.t, string) result
 (** Load [dir], run [tool_name] with [args], and return the tool result. This is
     the local developer-facing runner used by the CLI debug command. *)
+
+val smoke :
+  ?replace:bool ->
+  workspace:Workspace.t ->
+  string ->
+  (smoke_result list, string) result
+(** Validate a plugin directory and run each tool with
+    [examples/<tool>.args.json]. *)
 
 val install_home : unit -> string option
 (** Directory used by [install]. Controlled by [FP_AGENT_PLUGIN_HOME], falling

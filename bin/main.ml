@@ -603,6 +603,20 @@ let run_oneshot config workspace ~confirm ~resume_opt ~tui ~yolo ~task =
   print_changes root;
   match outcome.status with Agent_loop.Completed -> 0 | _ -> 1
 
+let plugin_smoke_result_lines results =
+  List.concat_map results ~f:(fun (result : Plugin.smoke_result) ->
+      let output = String.strip result.output in
+      Printf.sprintf "smoke ok: %s (%s)" result.tool_name result.args_file
+      :: (if String.is_empty output then [] else String.split_lines output))
+
+let plugin_smoke_lines ?(replace = false) ~workspace dir =
+  let dir = String.strip dir in
+  if String.is_empty dir then [ "usage: /plugin-smoke <dir>" ]
+  else
+    match Plugin.smoke ~replace ~workspace dir with
+    | Error e -> [ "plugin smoke error: " ^ e ]
+    | Ok results -> plugin_smoke_result_lines results
+
 let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
   let root = Workspace.root workspace in
   let sessions_root =
@@ -805,6 +819,10 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
   let undo () =
     view.append_lines ("[tui] /undo" :: Git_snapshot.undo snapshots)
   in
+  let smoke_plugin arg =
+    view.append_lines
+      ("[tui] /plugin-smoke" :: plugin_smoke_lines ~workspace arg)
+  in
   let stop = ref false in
   let handle_submission raw =
     match Shell_command.parse raw with
@@ -825,6 +843,7 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
     | Command (Retry, _) -> retry_last_task ()
     | Command (Compact, _) -> compact_session ()
     | Command (Undo, _) -> undo ()
+    | Command (PluginSmoke, arg) -> smoke_plugin arg
     | Command _ -> (
         match Tui_command.run (command_context ()) raw with
         | Some lines -> view.append_lines lines
@@ -1294,6 +1313,11 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
         | Command (Plugin, arg) ->
             print_plugin_detail arg;
             loop ()
+        | Command (PluginSmoke, arg) ->
+            List.iter
+              (plugin_smoke_lines ~workspace arg)
+              ~f:Stdlib.print_endline;
+            loop ()
         | Command (Sessions, _) ->
             print_sessions sessions_root !session;
             loop ()
@@ -1407,27 +1431,6 @@ let plugin_args_json args_json args_file =
   | Some json, None -> Ok json
   | None, Some path -> read_plugin_args_file path
 
-let smoke_arg_candidates dir tool_name =
-  let examples = Stdlib.Filename.concat dir "examples" in
-  [
-    Stdlib.Filename.concat examples (tool_name ^ ".args.json");
-    Stdlib.Filename.concat examples (tool_name ^ ".json");
-  ]
-  @
-  if String.equal tool_name "hello_world" then
-    [ Stdlib.Filename.concat examples "hello.args.json" ]
-  else []
-
-let smoke_args_file dir tool_name =
-  List.find (smoke_arg_candidates dir tool_name) ~f:Stdlib.Sys.file_exists
-
-let smoke_error_line dir tool_name =
-  let expected =
-    smoke_arg_candidates dir tool_name |> String.concat ~sep:", "
-  in
-  Printf.sprintf "missing smoke args for tool %s; expected one of: %s" tool_name
-    expected
-
 let workspace_for_plugin_debug workspace_opt =
   let root =
     Option.value workspace_opt
@@ -1472,58 +1475,19 @@ let run_plugin_tool_cli dir tool_name args_json args_file workspace_opt =
               1))
 
 let run_plugin_smoke_cli dir replace_plugin workspace_opt =
-  match
-    ( Plugin.check ~replace:replace_plugin dir,
-      workspace_for_plugin_debug workspace_opt )
-  with
-  | Error e, _ ->
+  match workspace_for_plugin_debug workspace_opt with
+  | Error e ->
       Stdlib.prerr_endline ("plugin smoke error: " ^ e);
       1
-  | _, Error e ->
-      Stdlib.prerr_endline ("plugin smoke error: " ^ e);
-      1
-  | Ok manifest, Ok workspace ->
-      let rec loop (tools : Plugin.plugin_tool list) =
-        match tools with
-        | [] -> 0
-        | tool :: rest -> (
-            match smoke_args_file dir tool.tool_name with
-            | None ->
-                Stdlib.prerr_endline
-                  ("plugin smoke error: " ^ smoke_error_line dir tool.tool_name);
-                1
-            | Some args_file -> (
-                match read_plugin_args_file args_file with
-                | Error e ->
-                    Stdlib.prerr_endline ("plugin smoke error: " ^ e);
-                    1
-                | Ok args_json -> (
-                    match parse_json_arg args_json with
-                    | Error e ->
-                        Stdlib.prerr_endline ("plugin smoke error: " ^ e);
-                        1
-                    | Ok args -> (
-                        match
-                          Plugin.run_tool ~dir ~tool_name:tool.tool_name
-                            ~workspace ~args
-                        with
-                        | Error e ->
-                            Stdlib.prerr_endline ("plugin smoke error: " ^ e);
-                            1
-                        | Ok (Tool_result.Error { message }) ->
-                            Stdlib.prerr_endline
-                              (Printf.sprintf
-                                 "plugin smoke error: %s failed: %s"
-                                 tool.tool_name message);
-                            1
-                        | Ok (Tool_result.Success { output }) ->
-                            Stdlib.Printf.printf "smoke ok: %s (%s)\n%!"
-                              tool.tool_name args_file;
-                            if not (String.is_empty (String.strip output)) then
-                              Stdlib.Printf.printf "%s\n%!" output;
-                            loop rest))))
-      in
-      loop manifest.tools
+  | Ok workspace -> (
+      match Plugin.smoke ~replace:replace_plugin ~workspace dir with
+      | Error e ->
+          Stdlib.prerr_endline ("plugin smoke error: " ^ e);
+          1
+      | Ok results ->
+          List.iter (plugin_smoke_result_lines results) ~f:(fun line ->
+              Stdlib.Printf.printf "%s\n%!" line);
+          0)
 
 let dispatch new_plugin plugin_id plugin_tool_name check_plugin install_plugin
     smoke_plugin replace_plugin list_plugins remove_plugin run_plugin_tool
