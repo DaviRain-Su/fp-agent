@@ -30,9 +30,11 @@ val register_all : unit -> unit
 (** Register all discovered plugin tools. Built-in tools keep precedence when a
     plugin declares the same tool name. *)
 
-val install : string -> (string, string) result
+val install : ?replace:bool -> string -> (string, string) result
 (** Install a plugin directory into the user plugin home and return the
-    installed path. *)
+    installed path. When [replace] is [true], an existing installed plugin with
+    the same id is replaced after the new plugin has been validated and staged.
+*)
 
 val installed_manifests : unit -> manifest list
 (** Load valid manifests installed directly under the plugin home. *)

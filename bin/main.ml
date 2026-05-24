@@ -1281,9 +1281,9 @@ let run_plugin_tool_cli dir tool_name args_json workspace_opt =
               Stdlib.prerr_endline ("plugin tool error: " ^ message);
               1))
 
-let dispatch new_plugin check_plugin install_plugin list_plugins remove_plugin
-    run_plugin_tool plugin_tool plugin_args task provider api_base model
-    workspace max_steps confirm resume tui yolo =
+let dispatch new_plugin check_plugin install_plugin replace_plugin list_plugins
+    remove_plugin run_plugin_tool plugin_tool plugin_args task provider api_base
+    model workspace max_steps confirm resume tui yolo =
   match
     ( new_plugin,
       check_plugin,
@@ -1310,7 +1310,7 @@ let dispatch new_plugin check_plugin install_plugin list_plugins remove_plugin
           Stdlib.prerr_endline ("plugin check error: " ^ e);
           1)
   | None, None, Some path, _, _, _ -> (
-      match Plugin.install path with
+      match Plugin.install ~replace:replace_plugin path with
       | Ok dst ->
           Stdlib.Printf.printf "installed plugin: %s\n" dst;
           0
@@ -1330,6 +1330,10 @@ let dispatch new_plugin check_plugin install_plugin list_plugins remove_plugin
           1)
   | None, None, None, false, None, Some dir ->
       run_plugin_tool_cli dir plugin_tool plugin_args workspace
+  | None, None, None, false, None, None when replace_plugin ->
+      Stdlib.prerr_endline
+        "plugin install error: --replace-plugin requires --install-plugin DIR";
+      1
   | None, None, None, false, None, None ->
       with_setup provider api_base model workspace max_steps
         (fun config workspace ->
@@ -1360,6 +1364,16 @@ let () =
           ~doc:
             "Install a plugin directory containing fp-agent-plugin.json into \
              the plugin home, then exit.")
+  in
+  let replace_plugin =
+    Arg.(
+      value & flag
+      & info
+          [ "replace-plugin"; "force-plugin-install" ]
+          ~doc:
+            "Allow --install-plugin to replace an existing installed plugin \
+             with the same id. The new plugin is validated and staged before \
+             the old installation is removed.")
   in
   let list_plugins =
     Arg.(
@@ -1488,10 +1502,10 @@ let () =
   let doc = "A type-safe local CLI code agent harness." in
   let term =
     Term.(
-      const dispatch $ new_plugin $ check_plugin $ install_plugin $ list_plugins
-      $ remove_plugin $ run_plugin_tool $ plugin_tool $ plugin_args $ task
-      $ provider $ api_base $ model $ workspace $ max_steps $ confirm $ resume
-      $ tui $ yolo)
+      const dispatch $ new_plugin $ check_plugin $ install_plugin
+      $ replace_plugin $ list_plugins $ remove_plugin $ run_plugin_tool
+      $ plugin_tool $ plugin_args $ task $ provider $ api_base $ model
+      $ workspace $ max_steps $ confirm $ resume $ tui $ yolo)
   in
   let info = Cmd.info "fp-agent" ~version:"0.1.0" ~doc in
   Stdlib.exit (Cmd.eval' (Cmd.v info term))

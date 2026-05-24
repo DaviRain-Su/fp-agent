@@ -130,16 +130,45 @@ let test_plugin_lifecycle_cli () =
   let installed = run ~env [ bin; "--install-plugin"; plugin_dir ] in
   assert_success "install plugin" installed;
   assert_contains "install output" installed.stdout "installed plugin:";
+  let installed_dir = Stdlib.Filename.concat home "local.my-plugin" in
   Alcotest.(check bool)
     "installed manifest" true
     (Stdlib.Sys.file_exists
-       (Stdlib.Filename.concat home
-          (Stdlib.Filename.concat "local.my-plugin" "fp-agent-plugin.json")));
+       (Stdlib.Filename.concat installed_dir "fp-agent-plugin.json"));
   Alcotest.(check bool)
     "installed readme" true
-    (Stdlib.Sys.file_exists
-       (Stdlib.Filename.concat home
-          (Stdlib.Filename.concat "local.my-plugin" "README.md")));
+    (Stdlib.Sys.file_exists (Stdlib.Filename.concat installed_dir "README.md"));
+  let duplicate = run ~env [ bin; "--install-plugin"; plugin_dir ] in
+  assert_failure "install duplicate plugin" duplicate;
+  assert_contains "duplicate install stderr" duplicate.stderr
+    "plugin already installed";
+  write_file
+    (Stdlib.Filename.concat plugin_dir "hello.sh")
+    "#!/bin/sh\nprintf 'replacement plugin: '\ncat\n";
+  let replaced =
+    run ~env [ bin; "--install-plugin"; plugin_dir; "--replace-plugin" ]
+  in
+  assert_success "replace plugin install" replaced;
+  assert_contains "replace install output" replaced.stdout "installed plugin:";
+  let replaced_run =
+    run ~env
+      [
+        bin;
+        "--run-plugin-tool";
+        installed_dir;
+        "--plugin-tool";
+        "hello_world";
+        "--plugin-args";
+        {|{"message":"replace"}|};
+      ]
+  in
+  assert_success "run replaced plugin" replaced_run;
+  assert_contains "replaced plugin output" replaced_run.stdout
+    "replacement plugin:";
+  let replace_without_install = run ~env [ bin; "--replace-plugin" ] in
+  assert_failure "replace without install" replace_without_install;
+  assert_contains "replace without install stderr"
+    replace_without_install.stderr "--replace-plugin requires --install-plugin";
   let listed = run ~env [ bin; "--list-plugins" ] in
   assert_success "list plugins after install" listed;
   assert_contains "list plugin id" listed.stdout "local.my-plugin";

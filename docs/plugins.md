@@ -129,6 +129,15 @@ dune exec -- fp-agent --install-plugin examples/plugins/echo
 The installer validates the manifest and copies the plugin into the plugin
 home. It does not overwrite an existing plugin with the same id.
 
+During plugin development, reinstall a changed plugin with:
+
+```sh
+dune exec -- fp-agent --install-plugin examples/plugins/echo --replace-plugin
+```
+
+Replacement is staged before the old installation is removed, so invalid
+manifests or copy failures do not delete the existing installed plugin.
+
 List installed plugins:
 
 ```sh

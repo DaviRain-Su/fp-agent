@@ -24,7 +24,7 @@ let with_temp_dir prefix f =
   let root = Stdlib.Filename.temp_dir prefix "" in
   Exn.protect ~f:(fun () -> f root) ~finally:(fun () -> rm_rf root)
 
-let write_plugin dir ~id ~tool_name ~kind =
+let write_plugin ?(version = "0.1.0") ?script dir ~id ~tool_name ~kind =
   write
     (Stdlib.Filename.concat dir Plugin.manifest_file)
     (Printf.sprintf
@@ -32,7 +32,7 @@ let write_plugin dir ~id ~tool_name ~kind =
 {
   "id": "%s",
   "name": "Test Plugin",
-  "version": "0.1.0",
+  "version": "%s",
   "sdk_version": 1,
   "tools": [
     {
@@ -49,12 +49,14 @@ let write_plugin dir ~id ~tool_name ~kind =
   ]
 }
 |}
-       id tool_name kind);
+       id version tool_name kind);
   write
     (Stdlib.Filename.concat dir "echo.sh")
-    "printf 'tool=%s workspace=%s input=' \"$FP_AGENT_TOOL_NAME\" \
-     \"$FP_AGENT_WORKSPACE\"\n\
-     cat\n"
+    (Option.value script
+       ~default:
+         "printf 'tool=%s workspace=%s input=' \"$FP_AGENT_TOOL_NAME\" \
+          \"$FP_AGENT_WORKSPACE\"\n\
+          cat\n")
 
 let workspace root =
   match Workspace.create ~root with
@@ -179,6 +181,74 @@ let test_install_plugin_copies_to_home () =
               Alcotest.(check bool)
                 "missing remove rejected" true
                 (Result.is_error (Plugin.remove "com.example.install"))))
+
+let test_install_plugin_can_replace_existing () =
+  with_temp_dir "fp_agent_plugin_replace" (fun root ->
+      let src_v1 = Stdlib.Filename.concat root "src-v1" in
+      let bad_src = Stdlib.Filename.concat root "bad-src" in
+      let src_v2 = Stdlib.Filename.concat root "src-v2" in
+      let home = Stdlib.Filename.concat root "home" in
+      mkdir_p src_v1;
+      mkdir_p bad_src;
+      mkdir_p src_v2;
+      Unix.putenv "FP_AGENT_PLUGIN_PATH" "";
+      Unix.putenv "FP_AGENT_PLUGIN_HOME" home;
+      write_plugin src_v1 ~id:"com.example.replace"
+        ~tool_name:"plugin_replace_echo" ~kind:"read"
+        ~script:"printf 'version=v1 input='; cat\n";
+      write (Stdlib.Filename.concat src_v1 "old-only.txt") "stale";
+      write
+        (Stdlib.Filename.concat bad_src Plugin.manifest_file)
+        {|{
+  "id": "com.example.replace",
+  "tools": []
+}
+|};
+      write_plugin src_v2 ~id:"com.example.replace" ~version:"0.2.0"
+        ~tool_name:"plugin_replace_echo" ~kind:"read"
+        ~script:"printf 'version=v2 input='; cat\n";
+      match Plugin.install src_v1 with
+      | Error e -> Alcotest.failf "initial install failed: %s" e
+      | Ok dst -> (
+          Alcotest.(check bool)
+            "second install rejected" true
+            (Result.is_error (Plugin.install src_v2));
+          Alcotest.(check bool)
+            "bad replace rejected" true
+            (Result.is_error (Plugin.install ~replace:true bad_src));
+          Alcotest.(check bool)
+            "bad replace preserved old files" true
+            (Stdlib.Sys.file_exists (Stdlib.Filename.concat dst "old-only.txt"));
+          (match Plugin.check dst with
+          | Error e -> Alcotest.failf "check old install failed: %s" e
+          | Ok manifest ->
+              Alcotest.(check string)
+                "old install still present" "0.1.0" manifest.version);
+          match Plugin.install ~replace:true src_v2 with
+          | Error e -> Alcotest.failf "replace install failed: %s" e
+          | Ok replaced -> (
+              Alcotest.(check string) "replace path" dst replaced;
+              Alcotest.(check bool)
+                "stale file removed" false
+                (Stdlib.Sys.file_exists
+                   (Stdlib.Filename.concat dst "old-only.txt"));
+              match Plugin.check dst with
+              | Error e -> Alcotest.failf "check replaced failed: %s" e
+              | Ok manifest -> (
+                  Alcotest.(check string)
+                    "replaced version" "0.2.0" manifest.version;
+                  match
+                    Plugin.run_tool ~dir:dst ~tool_name:"plugin_replace_echo"
+                      ~workspace:(workspace root)
+                      ~args:(`Assoc [ ("message", `String "hello") ])
+                  with
+                  | Error e -> Alcotest.failf "run replaced failed: %s" e
+                  | Ok (Tool_result.Error { message }) ->
+                      Alcotest.failf "replaced tool error: %s" message
+                  | Ok (Tool_result.Success { output }) ->
+                      Alcotest.(check bool)
+                        "replaced script ran" true
+                        (String.is_substring output ~substring:"version=v2")))))
 
 let test_run_tool_for_plugin_development () =
   with_temp_dir "fp_agent_plugin_run_tool" (fun root ->
@@ -430,6 +500,8 @@ let () =
             test_plugin_write_policy_uses_path_bounds;
           Alcotest.test_case "install_plugin" `Quick
             test_install_plugin_copies_to_home;
+          Alcotest.test_case "install_replace_plugin" `Quick
+            test_install_plugin_can_replace_existing;
           Alcotest.test_case "run_tool" `Quick
             test_run_tool_for_plugin_development;
           Alcotest.test_case "run_tool_schema_validation" `Quick

@@ -83,6 +83,10 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - Plugin manifests now expose `sdk_version` compatibility metadata. Scaffolded
   plugins write it explicitly, while check/install/run reject unsupported future
   SDK versions.
+- Plugin installation now supports `--replace-plugin` for iterative SDK
+  development. Replacement validates and stages the new plugin before removing
+  the old installed copy, so reinstalling a local plugin is one command without
+  making failed updates destructive.
 - The command palette controller now distinguishes close from accept: Enter
   returns the highlighted command entry, giving the future fullscreen shell a
   tested command-dispatch point while preserving the current overlay behavior.

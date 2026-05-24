@@ -508,21 +508,6 @@ let rec copy_tree src dst =
             (Stdlib.Filename.concat dst name)))
   else copy_file src dst
 
-let install src_dir =
-  match (load_manifest src_dir, install_home ()) with
-  | Error e, _ -> Error e
-  | _, None -> Error "cannot determine plugin install home"
-  | Ok manifest, Some home ->
-      let dst = Stdlib.Filename.concat home manifest.id in
-      if Stdlib.Sys.file_exists dst then
-        Error ("plugin already installed: " ^ dst)
-      else (
-        mkdir_p home;
-        try
-          copy_tree src_dir dst;
-          Ok dst
-        with exn -> Error ("plugin install failed: " ^ Exn.to_string exn))
-
 let rec remove_tree path =
   match Unix.lstat path with
   | { st_kind = Unix.S_DIR; _ } ->
@@ -531,6 +516,34 @@ let rec remove_tree path =
           remove_tree (Stdlib.Filename.concat path name));
       Unix.rmdir path
   | _ -> Unix.unlink path
+
+let temp_install_dir home id =
+  let path = Stdlib.Filename.temp_file ~temp_dir:home ("." ^ id ^ ".") ".tmp" in
+  Unix.unlink path;
+  path
+
+let cleanup_staged_dir path =
+  if Stdlib.Sys.file_exists path then try remove_tree path with _ -> ()
+
+let install ?(replace = false) src_dir =
+  match (load_manifest src_dir, install_home ()) with
+  | Error e, _ -> Error e
+  | _, None -> Error "cannot determine plugin install home"
+  | Ok manifest, Some home ->
+      let dst = Stdlib.Filename.concat home manifest.id in
+      if (not replace) && Stdlib.Sys.file_exists dst then
+        Error ("plugin already installed: " ^ dst)
+      else (
+        mkdir_p home;
+        let staged = temp_install_dir home manifest.id in
+        try
+          copy_tree src_dir staged;
+          if Stdlib.Sys.file_exists dst then remove_tree dst;
+          Unix.rename staged dst;
+          Ok dst
+        with exn ->
+          cleanup_staged_dir staged;
+          Error ("plugin install failed: " ^ Exn.to_string exn))
 
 let remove id =
   match (validate_plugin_id id, install_home ()) with

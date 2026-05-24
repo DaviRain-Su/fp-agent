@@ -114,6 +114,7 @@ dune exec -- fp-agent --run-plugin-tool my-plugin \
   --plugin-tool hello_world \
   --plugin-args '{"message":"hi"}'
 dune exec -- fp-agent --install-plugin my-plugin
+dune exec -- fp-agent --install-plugin my-plugin --replace-plugin
 dune exec -- fp-agent --list-plugins
 dune exec -- fp-agent --remove-plugin local.my-plugin
 ```
@@ -187,6 +188,8 @@ Options:
 - `--run-plugin-tool DIR --plugin-tool NAME --plugin-args JSON` — run a plugin
   tool locally for development, then exit
 - `--install-plugin DIR` — validate and install a plugin directory, then exit
+- `--replace-plugin` — allow `--install-plugin` to replace an existing
+  installed plugin after staging the new copy
 - `--list-plugins` — list plugins installed in the plugin home, then exit
 - `--remove-plugin ID` / `--uninstall-plugin ID` — remove an installed plugin
   from the plugin home, then exit
