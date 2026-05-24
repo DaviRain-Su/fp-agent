@@ -35,11 +35,13 @@ let dangerous_command_reason command =
 
 let check ~workspace ~tool_call =
   match (tool_call : Tool_call.t) with
-  | Read_file { path } | List_files { path } -> (
+  | Read_file { path } | List_files { path } | Search { path = Some path; _ }
+    -> (
       match Workspace.resolve_path workspace path with
       | Ok _ -> Permission.Allow
       | Error reason -> Permission.Deny reason)
-  | Write_file { path; _ } | Edit_file { path; _ } -> (
+  | Search { path = None; _ } -> Permission.Allow
+  | Write_file { path; _ } | Edit_file { path; _ } | Make_dir { path } -> (
       match Workspace.validate_write_path workspace path with
       | Ok _ -> Permission.Allow
       | Error reason -> Permission.Deny reason)

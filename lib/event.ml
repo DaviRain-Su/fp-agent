@@ -24,6 +24,8 @@ let describe_tool (tc : Tool_call.t) =
   | Edit_file { path; _ } -> "edit_file " ^ path
   | Run_command { command; _ } -> "run_command " ^ command
   | List_files { path } -> "list_files " ^ path
+  | Search { query; _ } -> "search " ^ query
+  | Make_dir { path } -> "make_dir " ^ path
 
 let first_line s =
   let line =

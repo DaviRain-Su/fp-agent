@@ -16,6 +16,8 @@ Available tools and their args:
 - edit_file   {"path": string, "old": string, "new": string}   (replaces the first exact occurrence of "old")
 - run_command {"command": string, "cwd": string (optional)}
 - list_files  {"path": string}
+- search      {"query": string, "path": string (optional)}   (substring search across workspace files)
+- make_dir    {"path": string}
 
 When the task is complete, finish with:
 {"action":"final_answer","summary": string, "details": string (optional)}
@@ -71,6 +73,12 @@ let build_tool tool args : (Tool_call.t, string) Result.t =
   | "run_command" ->
       Result.map (get_string args "command") ~f:(fun command ->
           Tool_call.Run_command { command; cwd = get_string_opt args "cwd" })
+  | "search" ->
+      Result.map (get_string args "query") ~f:(fun query ->
+          Tool_call.Search { query; path = get_string_opt args "path" })
+  | "make_dir" ->
+      Result.map (get_string args "path") ~f:(fun path ->
+          Tool_call.Make_dir { path })
   | other -> Error ("unknown tool: " ^ other)
 
 let tool_names =

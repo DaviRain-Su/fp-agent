@@ -98,6 +98,12 @@ Each turn the model returns a single JSON action (see the system prompt in
 checked by the policy layer, executed by the tool runner, and the result is fed
 back as an observation.
 
+Tools: `read_file`, `write_file`, `edit_file`, `list_files`, `run_command`,
+`search` (substring search across workspace files), and `make_dir`.
+
+Use `--confirm` to require interactive approval before each shell command or
+file modification.
+
 ### Modules
 
 | Module | Responsibility |

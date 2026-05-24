@@ -99,6 +99,70 @@ let exec_run_command ws command cwd =
           in
           Tool_result.Success { output })
 
+let max_search_matches = 200
+let max_search_file_bytes = 1_000_000
+
+(* Recursively visit regular files under [dir], skipping dotfiles/dirs (incl.
+   .git). Per-directory readdir failures are ignored. *)
+let rec walk_files dir ~f =
+  match Stdlib.Sys.readdir dir with
+  | exception Sys_error _ -> ()
+  | entries ->
+      Array.iter entries ~f:(fun name ->
+          if String.is_prefix name ~prefix:"." then ()
+          else
+            let p = Stdlib.Filename.concat dir name in
+            if Stdlib.Sys.is_directory p then walk_files p ~f else f p)
+
+let exec_search ws query path =
+  match Workspace.resolve_path ws (Option.value path ~default:".") with
+  | Error e -> err e
+  | Ok abs ->
+      let root = Workspace.root ws in
+      let rel file =
+        Option.value
+          (String.chop_prefix file ~prefix:(root ^ "/"))
+          ~default:file
+      in
+      let matches = ref [] and count = ref 0 in
+      let scan_file file =
+        if !count < max_search_matches then
+          match read_file file with
+          | Error _ -> ()
+          | Ok content ->
+              if
+                (not (is_binary content))
+                && String.length content <= max_search_file_bytes
+              then
+                List.iteri (String.split_lines content) ~f:(fun i line ->
+                    if
+                      !count < max_search_matches
+                      && String.is_substring line ~substring:query
+                    then (
+                      matches :=
+                        Printf.sprintf "%s:%d:%s" (rel file) (i + 1)
+                          (String.strip line)
+                        :: !matches;
+                      Int.incr count))
+      in
+      if Stdlib.Sys.is_directory abs then walk_files abs ~f:scan_file
+      else scan_file abs;
+      let out = String.concat ~sep:"\n" (List.rev !matches) in
+      Tool_result.Success
+        {
+          output =
+            (if String.is_empty out then "(no matches)" else truncate out);
+        }
+
+let exec_make_dir ws path =
+  match Workspace.validate_write_path ws path with
+  | Error e -> err e
+  | Ok abs -> (
+      try
+        mkdir_p abs;
+        Tool_result.Success { output = "created directory " ^ path }
+      with exn -> err (Exn.to_string exn))
+
 let execute ws (tool_call : Tool_call.t) =
   match tool_call with
   | Read_file { path } -> exec_read_file ws path
@@ -107,6 +171,8 @@ let execute ws (tool_call : Tool_call.t) =
       exec_edit_file ws path old_text new_text
   | List_files { path } -> exec_list_files ws path
   | Run_command { command; cwd } -> exec_run_command ws command cwd
+  | Search { query; path } -> exec_search ws query path
+  | Make_dir { path } -> exec_make_dir ws path
 
 let run ~workspace ~tool_call =
   match Policy.check ~workspace ~tool_call with

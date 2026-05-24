@@ -53,6 +53,14 @@ let test_parse_non_object_errors () =
     "non-object json errors cleanly" true
     (Result.is_error (parse {|[1,2,3]|}))
 
+let test_parse_search () =
+  match
+    parse {|{"action":"tool_call","tool":"search","args":{"query":"needle"}}|}
+  with
+  | Ok (Model_action.Tool_call (Tool_call.Search { query; path = None })) ->
+      Alcotest.(check string) "query" "needle" query
+  | _ -> Alcotest.fail "expected search tool call"
+
 let test_parse_final_answer () =
   match
     parse {|{"action":"final_answer","summary":"done","details":"more"}|}
@@ -136,6 +144,7 @@ let () =
           Alcotest.test_case "edit_wire_names" `Quick test_parse_edit_wire_names;
           Alcotest.test_case "flat_tool" `Quick test_parse_flat_tool;
           Alcotest.test_case "bare_tool_field" `Quick test_parse_bare_tool_field;
+          Alcotest.test_case "search" `Quick test_parse_search;
           Alcotest.test_case "array_wrapped" `Quick test_parse_array_wrapped;
           Alcotest.test_case "non_object" `Quick test_parse_non_object_errors;
           Alcotest.test_case "final_answer" `Quick test_parse_final_answer;

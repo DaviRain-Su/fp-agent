@@ -7,6 +7,8 @@ type t =
   | Edit_file of { path : string; old_text : string; new_text : string }
   | Run_command of { command : string; cwd : string option }
   | List_files of { path : string }
+  | Search of { query : string; path : string option }
+  | Make_dir of { path : string }
 [@@deriving yojson_of, of_yojson]
 
 let to_yojson = yojson_of_t

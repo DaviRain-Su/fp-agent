@@ -4,6 +4,8 @@ type t =
   | Edit_file of { path : string; old_text : string; new_text : string }
   | Run_command of { command : string; cwd : string option }
   | List_files of { path : string }
+  | Search of { query : string; path : string option }
+  | Make_dir of { path : string }
 
 val yojson_of_t : t -> Yojson.Safe.t
 val t_of_yojson : Yojson.Safe.t -> t

@@ -69,6 +69,37 @@ let test_list_files () =
         (String.is_substring (output l) ~substring:"one.txt"
         && String.is_substring (output l) ~substring:"two.txt"))
 
+let test_search () =
+  with_workspace (fun ws _ ->
+      ignore
+        (run ws
+           (Tool_call.Write_file
+              { path = "a/foo.ml"; content = "let needle = 1\nlet x = 2" }));
+      ignore
+        (run ws
+           (Tool_call.Write_file { path = "b/bar.ml"; content = "let y = 3" }));
+      let r = run ws (Tool_call.Search { query = "needle"; path = None }) in
+      Alcotest.(check bool)
+        "finds match with location" true
+        (String.is_substring (output r) ~substring:"a/foo.ml"
+        && String.is_substring (output r) ~substring:"needle");
+      let none =
+        run ws (Tool_call.Search { query = "zzzznope"; path = None })
+      in
+      Alcotest.(check bool)
+        "reports no matches" true
+        (String.is_substring (output none) ~substring:"no matches"))
+
+let test_make_dir () =
+  with_workspace (fun ws root ->
+      let r = run ws (Tool_call.Make_dir { path = "x/y/z" }) in
+      Alcotest.(check bool) "make_dir ok" true (is_success r);
+      Alcotest.(check bool)
+        "dir exists" true
+        (Stdlib.Sys.is_directory (Stdlib.Filename.concat root "x/y/z"));
+      let denied = run ws (Tool_call.Make_dir { path = "../escape" }) in
+      Alcotest.(check bool) "escape denied" true (is_error denied))
+
 let test_run_command () =
   with_workspace (fun ws _ ->
       let r =
@@ -132,6 +163,8 @@ let () =
           Alcotest.test_case "edit" `Quick test_edit;
           Alcotest.test_case "edit_no_match" `Quick test_edit_no_match;
           Alcotest.test_case "list_files" `Quick test_list_files;
+          Alcotest.test_case "search" `Quick test_search;
+          Alcotest.test_case "make_dir" `Quick test_make_dir;
           Alcotest.test_case "run_command" `Quick test_run_command;
           Alcotest.test_case "policy_denied" `Quick test_policy_denied;
         ] );
