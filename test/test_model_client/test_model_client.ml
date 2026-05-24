@@ -130,6 +130,29 @@ let test_parse_array_tool_batch () =
   | Ok _ -> Alcotest.fail "expected array batch"
   | Error e -> Alcotest.failf "unexpected array batch parse error: %s" e
 
+let test_parse_anthropic_tool_use () =
+  match
+    parse {|{"type":"tool_use","name":"read_file","input":{"path":"a.ml"}}|}
+  with
+  | Ok (Model_action.Tool_call tc) ->
+      check_tool tc ~name:"read_file";
+      check_arg tc "path" "a.ml"
+  | Ok _ -> Alcotest.fail "expected anthropic tool_use"
+  | Error e -> Alcotest.failf "unexpected anthropic parse error: %s" e
+
+let test_parse_anthropic_tool_use_batch () =
+  match
+    parse
+      {|[{"type":"tool_use","name":"read_file","input":{"path":"a.ml"}},{"type":"tool_use","name":"list_files","input":{"path":"lib"}}]|}
+  with
+  | Ok (Model_action.Tool_calls [ read; list ]) ->
+      check_tool read ~name:"read_file";
+      check_arg read "path" "a.ml";
+      check_tool list ~name:"list_files";
+      check_arg list "path" "lib"
+  | Ok _ -> Alcotest.fail "expected anthropic tool_use batch"
+  | Error e -> Alcotest.failf "unexpected anthropic batch parse error: %s" e
+
 let test_parse_final_answer () =
   match
     parse {|{"action":"final_answer","summary":"done","details":"more"}|}
@@ -308,6 +331,10 @@ let () =
             test_parse_tool_calls_batch;
           Alcotest.test_case "array_tool_batch" `Quick
             test_parse_array_tool_batch;
+          Alcotest.test_case "anthropic_tool_use" `Quick
+            test_parse_anthropic_tool_use;
+          Alcotest.test_case "anthropic_tool_use_batch" `Quick
+            test_parse_anthropic_tool_use_batch;
           Alcotest.test_case "array_wrapped" `Quick test_parse_array_wrapped;
           Alcotest.test_case "non_object" `Quick test_parse_non_object_errors;
           Alcotest.test_case "final_answer" `Quick test_parse_final_answer;

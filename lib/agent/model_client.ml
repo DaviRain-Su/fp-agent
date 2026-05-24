@@ -83,7 +83,10 @@ let args_object json =
   | `Null -> (
       match Yojson.Safe.Util.member "arguments" json with
       | `Assoc _ as a -> a
-      | _ -> json)
+      | _ -> (
+          match Yojson.Safe.Util.member "input" json with
+          | `Assoc _ as a -> a
+          | _ -> json))
   | _ -> json
 
 let parse_tool_object json : (Tool_call.t, string) Result.t =
@@ -97,8 +100,9 @@ let parse_tool_object json : (Tool_call.t, string) Result.t =
   | `String a when is_tool_name a -> as_tool a
   | `String other -> Error ("unknown tool action in batch: " ^ other)
   | _ -> (
-      match member "tool" json with
-      | `String tool -> as_tool tool
+      match (member "tool" json, member "type" json, member "name" json) with
+      | `String tool, _, _ -> as_tool tool
+      | _, `String "tool_use", `String tool -> as_tool tool
       | _ -> Error "batch item is missing a tool name")
 
 let parse_tool_list = function
@@ -155,8 +159,9 @@ let parse_object json : (Model_action.t, string) Result.t =
   | _ -> (
       (* no usable "action": try a bare "tool" field, else treat a
              "summary" as a final answer. *)
-      match member "tool" json with
-      | `String tool -> as_tool tool
+      match (member "tool" json, member "type" json, member "name" json) with
+      | `String tool, _, _ -> as_tool tool
+      | _, `String "tool_use", `String tool -> as_tool tool
       | _ -> (
           match get_string_opt json "summary" with
           | Some _ -> final ()
@@ -179,6 +184,14 @@ let parse_action content : (Model_action.t, string) Result.t =
                 match calls with
                 | [ tc ] -> Model_action.Tool_call tc
                 | calls -> Model_action.Tool_calls calls)
+        | `String s ->
+            Error
+              (Printf.sprintf
+                 "model returned plain text instead of a JSON object. This \
+                  usually means the model ignored the system prompt \
+                  instructing it to output JSON. Try a different model or \
+                  adjust the system prompt. Content: %s"
+                 s)
         | json -> parse_object json
       with Yojson.Safe.Util.Type_error (msg, _) ->
         Error ("unexpected JSON shape from model: " ^ msg))
@@ -271,7 +284,16 @@ let anthropic_extract body_str =
               match member "text" b with `String s -> Some s | _ -> None)
         with
         | Some text -> Ok text
-        | None -> Error "no text block in model response"
+        | None ->
+            let tool_blocks =
+              List.filter blocks ~f:(fun b ->
+                  match member "type" b with
+                  | `String "tool_use" -> true
+                  | _ -> false)
+            in
+            if List.is_empty tool_blocks then
+              Error "no text block in model response"
+            else Ok (Yojson.Safe.to_string (`List tool_blocks))
       with exn -> Error ("unexpected messages shape: " ^ Exn.to_string exn))
 
 (* --- shared HTTP plumbing --- *)
