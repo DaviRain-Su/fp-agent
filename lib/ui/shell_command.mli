@@ -15,6 +15,7 @@ type id =
   | Usage
   | Fork
   | Diff
+  | Retry
   | Undo
   | Exit
 

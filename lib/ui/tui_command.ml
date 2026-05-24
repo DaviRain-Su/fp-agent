@@ -285,6 +285,13 @@ let usage_lines ctx =
     Printf.sprintf "total_tokens: %d" (View.token_usage_total usage);
   ]
 
+let last_user_message events =
+  List.find_map (List.rev events) ~f:(function
+    | Event.User_message { content }
+      when not (String.is_empty (String.strip content)) ->
+        Some content
+    | _ -> None)
+
 let run ctx command =
   let open Shell_command in
   match parse command with

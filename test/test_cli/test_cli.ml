@@ -510,7 +510,14 @@ let test_repl_inspects_session_events () =
   let repl =
     run ~env
       ~stdin:
-        "/log\n/usage\n/inspect 0\n/inspect\n/inspect 3\n/inspect nope\n/exit\n"
+        "/log\n\
+         /usage\n\
+         /inspect 0\n\
+         /inspect\n\
+         /inspect 3\n\
+         /inspect nope\n\
+         /retry\n\
+         /exit\n"
       [ fp_agent_bin (); "--resume"; session_dir ]
   in
   assert_success "repl inspect command" repl;
@@ -523,7 +530,9 @@ let test_repl_inspects_session_events () =
   assert_contains "usage input" repl.stdout "input_tokens: 31";
   assert_contains "usage total" repl.stdout "total_tokens: 40";
   assert_contains "inspect range" repl.stdout "no event at index 3 (0..1)";
-  assert_contains "inspect usage" repl.stdout "usage: /inspect [event-index]"
+  assert_contains "inspect usage" repl.stdout "usage: /inspect [event-index]";
+  assert_contains "retry without user task" repl.stdout
+    "no previous user task to retry"
 
 let test_tui_confirm_reaches_config_for_oneshot () =
   let root = tmp_dir "fp-agent-cli-tui-" in

@@ -17,6 +17,7 @@ type id =
   | Usage
   | Fork
   | Diff
+  | Retry
   | Undo
   | Exit
 
@@ -167,6 +168,14 @@ let specs =
       aliases = [];
       palette = true;
       acceptance = Execute "/diff";
+    };
+    {
+      id = Retry;
+      command = "/retry";
+      description = "rerun the latest user task";
+      aliases = [];
+      palette = true;
+      acceptance = Draft "/retry";
     };
     {
       id = Undo;

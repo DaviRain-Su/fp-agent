@@ -55,6 +55,7 @@ dune exec -- fp-agent
 > now add a second line "bye" to it
 > /diff              # show uncommitted changes (git)
 > /undo              # revert the last turn's changes (git)
+> /retry             # rerun the latest user task
 > /log               # list this session's events with indices
 > /usage             # show token usage from the event log
 > /fork 3            # fork a new branch at event index 3 (or /fork for the end)
@@ -135,6 +136,9 @@ copy. Two consequences:
 
 - **Resume** (`--resume` / `/resume`) reconstructs state by replaying a
   session's log.
+- **Retry** (`/retry`) finds the latest user task in the current event log and
+  submits it again. The command is a seeded draft in the TUI palette so an
+  accidental palette Enter cannot rerun work without an explicit submit.
 - **Fork** (`/fork [index]`) branches a session at an event index — the child's
   log is a prefix of the parent's, so replaying it yields the state at that
   point. Sessions therefore form a **tree** (`/tree`), letting you explore
@@ -161,6 +165,8 @@ copy. Two consequences:
 - **TUI undo** lets `/undo` restore the git worktree to the checkpoint captured
   before the previous submitted TUI task, while leaving `.ocaml-agent` session
   logs alone.
+- **TUI retry** lets `/retry` rerun the latest user task in the active
+  event-sourced session, using the currently selected provider/model runtime.
 - **TUI prompt editor** keeps multiline draft editing pure and testable:
   inserted text, seeded palette drafts, newline, delete/backspace, cursor
   movement, and rendering with a visible cursor all show inside the fullscreen

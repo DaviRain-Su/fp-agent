@@ -646,6 +646,10 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
       selected_event_index = latest_event_index events;
     }
   in
+  let oneline s =
+    let flat = String.substr_replace_all s ~pattern:"\n" ~with_:" " in
+    if String.length flat > 80 then String.prefix flat 80 ^ "..." else flat
+  in
   let append_summary (outcome : Agent_loop.outcome) =
     view.append_lines
       [
@@ -672,6 +676,14 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
               ~workspace ~task ()))
     in
     append_summary outcome
+  in
+  let retry_last_task () =
+    match Tui_command.last_user_message (events ()) with
+    | None ->
+        view.append_lines [ "[tui] /retry"; "no previous user task to retry" ]
+    | Some task ->
+        view.append_lines [ "[tui] /retry"; "retrying: " ^ oneline task ];
+        run_task task
   in
   let current_model_lines command =
     Option.value
@@ -780,6 +792,7 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
     | Command (Provider, args) -> switch_provider args
     | Command (Resume, arg) -> resume_session arg
     | Command (Fork, arg) -> fork_session arg
+    | Command (Retry, _) -> retry_last_task ()
     | Command (Undo, _) -> undo ()
     | Command _ -> (
         match Tui_command.run (command_context ()) raw with
@@ -1162,6 +1175,16 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
     reporter.close ();
     print_summary outcome
   in
+  let retry_last_task () =
+    match Journal.read ~session_dir:!session with
+    | Error e -> Stdlib.print_endline e
+    | Ok events -> (
+        match Tui_command.last_user_message events with
+        | None -> Stdlib.print_endline "no previous user task to retry"
+        | Some task ->
+            Stdlib.Printf.printf "retrying: %s\n%!" (oneline task);
+            run_task task)
+  in
   let rec loop () =
     Stdlib.print_string "\n> ";
     Stdlib.Out_channel.flush Stdlib.stdout;
@@ -1210,6 +1233,9 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
             loop ()
         | Command (Diff, _) ->
             show_diff ();
+            loop ()
+        | Command (Retry, _) ->
+            retry_last_task ();
             loop ()
         | Command (Undo, _) ->
             undo ();

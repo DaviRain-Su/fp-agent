@@ -31,6 +31,7 @@ let test_parse () =
   require_command "models" Shell_command.Models ""
     (Shell_command.parse "/models");
   require_command "usage" Shell_command.Usage "" (Shell_command.parse "/usage");
+  require_command "retry" Shell_command.Retry "" (Shell_command.parse "/retry");
   require_command "provider" Shell_command.Provider
     "local-llm qwen36-rtx http://127.0.0.1:8000/v1"
     (Shell_command.parse
@@ -56,6 +57,9 @@ let test_metadata () =
   Alcotest.(check bool)
     "palette has usage" true
     (List.mem palette "/usage" ~equal:String.equal);
+  Alcotest.(check bool)
+    "palette has retry" true
+    (List.mem palette "/retry" ~equal:String.equal);
   let help = Shell_command.help_text () in
   Alcotest.(check bool)
     "help has alias" true
@@ -80,6 +84,8 @@ let test_acceptance () =
     (Shell_command.accept (entry "/tool <name>"));
   require_acceptance "provider draft" ("draft", "/provider ")
     (Shell_command.accept (entry "/provider <name> [model] [api-base]"));
+  require_acceptance "retry draft" ("draft", "/retry")
+    (Shell_command.accept (entry "/retry"));
   require_acceptance "undo draft" ("draft", "/undo")
     (Shell_command.accept (entry "/undo"))
 

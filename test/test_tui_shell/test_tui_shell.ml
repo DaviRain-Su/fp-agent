@@ -308,6 +308,16 @@ let test_tui_command_model_log_and_inspect () =
         "provider switch is stateful" true
         (Option.is_none
            (Tui_command.run context "/provider local-llm qwen36-rtx"));
+      Alcotest.(check bool)
+        "retry is stateful" true
+        (Option.is_none (Tui_command.run context "/retry"));
+      Alcotest.(check (option string))
+        "last user task" (Some "inspect README")
+        (Tui_command.last_user_message events);
+      Alcotest.(check (option string))
+        "last user task skips empty retry target" (Some "inspect README")
+        (Tui_command.last_user_message
+           (events @ [ Event.User_message { content = "  " } ]));
       let log = output "/log" context in
       Alcotest.(check bool)
         "log includes event summary" true
@@ -347,6 +357,9 @@ let test_tui_command_sessions_and_diff () =
       Alcotest.(check bool)
         "undo is stateful" true
         (Option.is_none (Tui_command.run context "/undo"));
+      Alcotest.(check bool)
+        "retry is stateful" true
+        (Option.is_none (Tui_command.run context "/retry"));
       let diff = output "/diff" context in
       Alcotest.(check bool)
         "non-git diff message" true

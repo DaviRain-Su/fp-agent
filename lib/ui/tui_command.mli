@@ -15,3 +15,6 @@ val run : context -> string -> string list option
 (** Execute a safe command-palette or submitted slash command and return lines
     to append to the TUI timeline. Returns [None] for commands that are
     unsupported in the TUI or require side effects beyond display. *)
+
+val last_user_message : Event.t list -> string option
+(** Return the latest non-empty user task from an event log, if any. *)
