@@ -11,8 +11,6 @@ let status_to_string = function
   | Failed -> "failed"
   | Max_steps_reached -> "max_steps_reached"
 
-let observation_of_result = Tool_result.to_observation
-
 (* Keep the system prompt plus the most recent messages that fit the budget, so
    long sessions do not blow the context window. *)
 let truncate_history ~system messages =
@@ -28,23 +26,26 @@ let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
     ?(on_approval = fun _ _ -> Lwt.return false) ?(initial_history = [])
     ?(yolo = false) ~(config : Config.t) ~model_client ~event_log ~workspace
     ~task () =
-  let log e =
-    Event_log.append event_log e;
-    on_event e
+  (* Single source of truth: live state is the fold of the events we emit, so
+     it is identical by construction to replaying the log (resume/fork). *)
+  let st = ref { Session_state.empty with messages = initial_history } in
+  let emit event =
+    Event_log.append event_log event;
+    on_event event;
+    st := Session_state.reduce !st event
   in
-  let state = ref Agent_state.Initializing in
   let goto next =
-    match Agent_state.transition !state next with
-    | Ok s ->
-        log (Event.State_transition { from_state = !state; to_state = s });
-        state := s
-    | Error _ -> state := next
+    let from_state = Session_state.agent_state !st in
+    let to_state =
+      match Agent_state.transition from_state next with
+      | Ok s -> s
+      | Error _ -> next
+    in
+    emit (Event.State_transition { from_state; to_state })
   in
-  log (Event.User_message { content = task });
-  let history = ref (initial_history @ [ Message.user task ]) in
-  let add_msg m = history := !history @ [ m ] in
   let system = Message.system Model_client.system_prompt in
-  let messages () = truncate_history ~system !history in
+  let messages () = truncate_history ~system (Session_state.messages !st) in
+  emit (Event.User_message { content = task });
   goto Agent_state.Waiting_for_model;
   let finish status summary steps = Lwt.return { status; summary; steps } in
   let rec step n =
@@ -60,21 +61,24 @@ let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
         match result with
         | Error e ->
             if retries < max_parse_retries then (
-              add_msg
-                (Message.user
-                   (Printf.sprintf
-                      "Your previous reply could not be processed (%s). Reply \
-                       with a SINGLE valid JSON action."
-                      e));
+              (* the nudge is a real conversation message, so it is emitted as
+                 an event and folded into state like everything else *)
+              emit
+                (Event.User_message
+                   {
+                     content =
+                       Printf.sprintf
+                         "Your previous reply could not be processed (%s). \
+                          Reply with a SINGLE valid JSON action."
+                         e;
+                   });
               send_with_retry (retries + 1) n)
             else (
               goto Agent_state.Failed;
               finish Failed ("model interaction failed: " ^ e) (n - 1))
         | Ok action ->
-            log (Event.Model_response { action });
-            add_msg
-              (Message.assistant
-                 (Yojson.Safe.to_string (Model_action.to_yojson action)));
+            (* reduce derives the assistant message from this event *)
+            emit (Event.Model_response { action });
             handle_action action n)
   and handle_action action n =
     match (action : Model_action.t) with
@@ -83,13 +87,13 @@ let run ?(on_event = fun _ -> ()) ?(policy = Policy.default)
         finish Completed answer n
     | Tool_call tc -> (
         goto Agent_state.Executing_tool;
-        log (Event.Tool_call tc);
+        emit (Event.Tool_call tc);
         let permission = Policy.check ~yolo ~workspace ~tool_call:tc () in
-        log (Event.Policy_decision { tool_call = tc; permission });
+        emit (Event.Policy_decision { tool_call = tc; permission });
         let after_result result =
-          log (Event.Tool_result result);
+          (* reduce derives the observation message from this event *)
+          emit (Event.Tool_result result);
           goto Agent_state.Observing_result;
-          add_msg (Message.user (observation_of_result result));
           goto Agent_state.Waiting_for_model;
           step (n + 1)
         in

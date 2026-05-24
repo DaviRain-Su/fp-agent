@@ -74,6 +74,23 @@ let test_shell_timeout () =
     "long command times out" true
     (is_error (Shell.run ~command:"sleep 5" ~timeout_sec:1))
 
+let test_shell_scrubs_secret_env () =
+  Unix.putenv "KIMI_API_KEY" "super-secret";
+  Unix.putenv "FP_AGENT_TEST_VISIBLE" "visible";
+  match
+    Shell.run
+      ~command:"printf '%s:%s' \"$KIMI_API_KEY\" \"$FP_AGENT_TEST_VISIBLE\""
+      ~timeout_sec:10
+  with
+  | Ok r ->
+      Unix.putenv "KIMI_API_KEY" "";
+      Unix.putenv "FP_AGENT_TEST_VISIBLE" "";
+      Alcotest.(check string) "secret scrubbed" ":visible" r.stdout
+  | Error msg ->
+      Unix.putenv "KIMI_API_KEY" "";
+      Unix.putenv "FP_AGENT_TEST_VISIBLE" "";
+      Alcotest.failf "unexpected error: %s" msg
+
 let () =
   Alcotest.run "workspace_shell"
     [
@@ -89,5 +106,7 @@ let () =
           Alcotest.test_case "stdout" `Quick test_shell_stdout;
           Alcotest.test_case "exit_and_stderr" `Quick test_shell_exit_and_stderr;
           Alcotest.test_case "timeout" `Quick test_shell_timeout;
+          Alcotest.test_case "scrubs_secret_env" `Quick
+            test_shell_scrubs_secret_env;
         ] );
     ]

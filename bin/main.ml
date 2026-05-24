@@ -229,7 +229,7 @@ let run_oneshot config workspace ~confirm ~resume_opt ~tui ~yolo ~task =
         ~header:(Printf.sprintf "fp-agent  %s  —  %s" config.model task)
     else make_plain_reporter ()
   in
-  let policy = policy_of ~confirm:(confirm && not tui) in
+  let policy = policy_of ~confirm in
   warn_yolo yolo;
   let outcome =
     Lwt_main.run
@@ -254,6 +254,7 @@ let tool_catalog =
     ("make_dir", "{path}");
     ("run_command", "{command, cwd?}");
     ("apply_patch", "{patch}");
+    ("multi_edit", "{edits}");
   ]
 
 let print_help () =
@@ -512,13 +513,20 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
 
 let dispatch task provider api_base model workspace max_steps confirm resume tui
     yolo =
-  with_setup provider api_base model workspace max_steps
-    (fun config workspace ->
-      match task with
-      | Some task ->
-          run_oneshot config workspace ~confirm ~resume_opt:resume ~tui ~yolo
-            ~task
-      | None -> run_repl config workspace ~confirm ~resume_opt:resume ~yolo)
+  match task with
+  | Some _ when confirm && tui ->
+      Stdlib.prerr_endline
+        "--confirm cannot be combined with --tui; run without --tui when \
+         approval prompts are required.";
+      1
+  | _ ->
+      with_setup provider api_base model workspace max_steps
+        (fun config workspace ->
+          match task with
+          | Some task ->
+              run_oneshot config workspace ~confirm ~resume_opt:resume ~tui
+                ~yolo ~task
+          | None -> run_repl config workspace ~confirm ~resume_opt:resume ~yolo)
 
 let () =
   let open Cmdliner in
@@ -573,7 +581,7 @@ let () =
       & info [ "confirm" ]
           ~doc:
             "Ask for confirmation on stdin before each shell command or file \
-             modification.")
+             modification. Cannot be combined with --tui.")
   in
   let resume =
     Arg.(

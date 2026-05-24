@@ -84,7 +84,8 @@ Options:
 - `--api-base URL` — override the provider's base URL
 - `-w`, `--workspace DIR` — workspace root (default: `WORKSPACE_ROOT` or cwd)
 - `--max-steps N` — max agent steps (default: `MAX_STEPS` or 30)
-- `--confirm` — ask for approval before each shell command or file write
+- `--confirm` — ask for approval before each shell command or file write (not
+  compatible with `--tui`)
 - `--yolo` — bypass the dangerous-command deny-list (workspace bounds still apply)
 - `--resume SESSION_DIR` — replay a previous session's event log as context and continue
 - `--tui` — full-screen live view of the run (autonomous; needs a real terminal)
@@ -191,10 +192,12 @@ file modification.
 - Writes to `.git/` are blocked.
 - Dangerous shell commands (e.g. `rm -rf /`, `mkfs`, piping a download into a
   shell) are denied.
-- API keys never reach the event log.
+- Provider API keys are not written by the harness, and shell child processes
+  run with likely secret environment variables removed.
 
-Shell commands run via `/bin/sh -c` and inherit the current environment
-(including the provider API key); this harness does not sandbox that.
+Shell commands run via `/bin/sh -c` and inherit a scrubbed environment. This is
+not an OS-level sandbox: command output is still fed back to the model and
+written to the event log.
 
 ## Out of scope
 

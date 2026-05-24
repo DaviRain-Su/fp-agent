@@ -99,6 +99,26 @@ let test_yolo_bypasses_denylist () =
                 (Tool_call.Write_file { path = ".git/x"; content = "y" })
               ())))
 
+let test_apply_patch_paths () =
+  with_workspace (fun ws ->
+      let patch path =
+        Printf.sprintf "--- a/%s\n+++ b/%s\n@@ -1 +1 @@\n-old\n+new\n" path path
+      in
+      Alcotest.(check bool)
+        "safe patch allowed" true
+        (is_allow (check ws (Tool_call.Apply_patch { patch = patch "ok.txt" })));
+      Alcotest.(check bool)
+        ".git patch denied" true
+        (is_deny
+           (check ws (Tool_call.Apply_patch { patch = patch ".git/config" })));
+      Alcotest.(check bool)
+        "escape patch denied" true
+        (is_deny
+           (check ws (Tool_call.Apply_patch { patch = patch "../evil.txt" })));
+      Alcotest.(check bool)
+        "malformed patch denied" true
+        (is_deny (check ws (Tool_call.Apply_patch { patch = "@@ no paths\n" }))))
+
 let () =
   Alcotest.run "policy"
     [
@@ -112,5 +132,6 @@ let () =
             test_dangerous_commands_denied;
           Alcotest.test_case "deny_reason" `Quick test_deny_includes_reason;
           Alcotest.test_case "yolo" `Quick test_yolo_bypasses_denylist;
+          Alcotest.test_case "apply_patch_paths" `Quick test_apply_patch_paths;
         ] );
     ]

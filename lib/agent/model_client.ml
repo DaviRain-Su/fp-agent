@@ -3,7 +3,7 @@ open! Base
 type t = { send : Message.t list -> (Model_action.t, string) Result.t Lwt.t }
 
 let system_prompt =
-  {|You are a coding agent operating inside a sandboxed workspace. You work toward the user's task by issuing one tool call at a time and observing the result.
+  {|You are a coding agent operating inside a bounded workspace. You work toward the user's task by issuing one tool call at a time and observing the result.
 
 On every turn you MUST reply with a SINGLE JSON object and nothing else. Do not wrap it in markdown code fences. Do not add prose before or after.
 
@@ -103,7 +103,17 @@ let build_tool tool args : (Tool_call.t, string) Result.t =
   | other -> Error ("unknown tool: " ^ other)
 
 let tool_names =
-  [ "read_file"; "write_file"; "edit_file"; "run_command"; "list_files" ]
+  [
+    "read_file";
+    "write_file";
+    "edit_file";
+    "run_command";
+    "list_files";
+    "search";
+    "make_dir";
+    "apply_patch";
+    "multi_edit";
+  ]
 
 let is_tool_name n = List.mem tool_names n ~equal:String.equal
 

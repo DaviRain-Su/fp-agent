@@ -33,6 +33,49 @@ let dangerous_command_reason command =
   List.find_map rules ~f:(fun (pred, reason) ->
       if pred () then Some reason else None)
 
+let trim_patch_metadata path =
+  let path = String.strip path in
+  match String.lsplit2 path ~on:'\t' with
+  | Some (path, _) -> String.strip path
+  | None -> path
+
+let strip_diff_prefix path =
+  let path = trim_patch_metadata path in
+  if String.is_prefix path ~prefix:"a/" || String.is_prefix path ~prefix:"b/"
+  then String.drop_prefix path 2
+  else path
+
+let patch_line_path line =
+  match String.split line ~on:' ' with
+  | [ "diff"; "--git"; a; b ] -> [ strip_diff_prefix a; strip_diff_prefix b ]
+  | "+++" :: rest
+  | "---" :: rest
+  | "rename" :: "from" :: rest
+  | "rename" :: "to" :: rest
+  | "copy" :: "from" :: rest
+  | "copy" :: "to" :: rest ->
+      [ strip_diff_prefix (String.concat ~sep:" " rest) ]
+  | _ -> []
+
+let validate_patch_paths workspace patch =
+  let paths =
+    String.split_lines patch
+    |> List.concat_map ~f:patch_line_path
+    |> List.filter ~f:(fun path ->
+        not (String.is_empty path || String.equal path "/dev/null"))
+  in
+  match paths with
+  | [] -> Permission.Deny "patch does not declare any file paths"
+  | _ -> (
+      match
+        List.find_map paths ~f:(fun path ->
+            match Workspace.validate_write_path workspace path with
+            | Ok _ -> None
+            | Error reason -> Some reason)
+      with
+      | Some reason -> Permission.Deny reason
+      | None -> Permission.Allow)
+
 let check ?(yolo = false) ~workspace ~tool_call () =
   match (tool_call : Tool_call.t) with
   | Read_file { path } | List_files { path } | Search { path = Some path; _ }
@@ -49,8 +92,7 @@ let check ?(yolo = false) ~workspace ~tool_call () =
       match dangerous_command_reason command with
       | Some reason -> if yolo then Permission.Allow else Permission.Deny reason
       | None -> Permission.Allow)
-  (* git apply itself rejects paths that escape the tree. *)
-  | Apply_patch _ -> Permission.Allow
+  | Apply_patch { patch } -> validate_patch_paths workspace patch
   | Multi_edit { edits } -> (
       match
         List.find_map edits ~f:(fun e ->

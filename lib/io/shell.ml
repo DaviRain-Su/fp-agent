@@ -9,6 +9,23 @@ let read_and_remove file =
   (try Unix.unlink file with Unix.Unix_error _ -> ());
   contents
 
+let env_name entry =
+  match String.lsplit2 entry ~on:'=' with
+  | Some (name, _) -> name
+  | None -> entry
+
+let is_sensitive_env_name name =
+  let name = String.uppercase name in
+  String.equal name "API_KEY"
+  || String.is_suffix name ~suffix:"_API_KEY"
+  || String.is_suffix name ~suffix:"_TOKEN"
+  || String.is_suffix name ~suffix:"_SECRET"
+  || String.is_suffix name ~suffix:"_PASSWORD"
+
+let scrubbed_environment () =
+  Unix.environment ()
+  |> Array.filter ~f:(fun entry -> not (is_sensitive_env_name (env_name entry)))
+
 (* Run [command] through [/bin/sh -c] with output captured to temp files.
    Polls the child so the call can enforce [timeout_sec] and kill a runaway
    process. *)
@@ -18,9 +35,9 @@ let run ~command ~timeout_sec =
   let fd_out = Unix.openfile out_file [ Unix.O_WRONLY; Unix.O_TRUNC ] 0o600 in
   let fd_err = Unix.openfile err_file [ Unix.O_WRONLY; Unix.O_TRUNC ] 0o600 in
   let pid =
-    Unix.create_process "/bin/sh"
+    Unix.create_process_env "/bin/sh"
       [| "/bin/sh"; "-c"; command |]
-      Unix.stdin fd_out fd_err
+      (scrubbed_environment ()) Unix.stdin fd_out fd_err
   in
   Unix.close fd_out;
   Unix.close fd_err;

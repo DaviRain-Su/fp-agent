@@ -430,5 +430,8 @@ TOOL_RESULT tool=read_file ok=true
 - **YOLO 模式**:`--yolo` 绕过危险命令 deny-list(仍保留 workspace 边界)。
 - **policy 决策审计**:`Event.Policy_decision` 写入 event log(US-009 验收点)。
 - **实时进度**:`on_event` 回调 + 并发 spinner,等模型/跑工具时显示动态状态。
+- **shell 环境收紧**:`run_command` 仍通过 `/bin/sh -c` 执行,但子进程环境会移除 `*_API_KEY`、`*_TOKEN`、`*_SECRET`、`*_PASSWORD` 等疑似密钥变量;这不是 OS sandbox,命令输出仍会进入 observation/event log。
+- **`apply_patch` policy 预检**:执行 `git apply` 前从 unified diff/git diff header 提取路径并套用 workspace / `.git` 写入边界。
+- **`--confirm --tui` 显式拒绝**:避免全屏 TUI 模式静默绕过人工审批。
 
 仍为 Non-Goal(未实现):多 agent 调度、浏览器自动化、Web search、长期记忆/向量数据库、自动 git commit、远程 sandbox、OxCaml 特性、event log replay 引擎。

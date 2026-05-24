@@ -19,6 +19,8 @@
   (ppx_yojson_conv (>= v0.17.0))
   (lwt (>= 5.7.0))
   (cohttp-lwt-unix (>= 6.0.0))
+  (uri (>= 4.4.0))
+  (notty (>= 0.2.3))
   (fmt (>= 0.11.0))
   (cmdliner (>= 2.1.0))
   (logs (>= 0.10.0))

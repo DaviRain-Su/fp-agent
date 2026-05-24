@@ -61,6 +61,21 @@ let test_parse_search () =
       Alcotest.(check string) "query" "needle" query
   | _ -> Alcotest.fail "expected search tool call"
 
+let test_parse_flat_new_tools () =
+  (match parse {|{"action":"make_dir","path":"tmp/new"}|} with
+  | Ok (Model_action.Tool_call (Tool_call.Make_dir { path })) ->
+      Alcotest.(check string) "make_dir path" "tmp/new" path
+  | _ -> Alcotest.fail "expected flat make_dir");
+  match
+    parse
+      {|{"action":"multi_edit","edits":[{"path":"a.ml","old":"x","new":"y"}]}|}
+  with
+  | Ok (Model_action.Tool_call (Tool_call.Multi_edit { edits = [ edit ] })) ->
+      Alcotest.(check string) "multi_edit path" "a.ml" edit.path;
+      Alcotest.(check string) "multi_edit old" "x" edit.old_text;
+      Alcotest.(check string) "multi_edit new" "y" edit.new_text
+  | _ -> Alcotest.fail "expected flat multi_edit"
+
 let test_parse_final_answer () =
   match
     parse {|{"action":"final_answer","summary":"done","details":"more"}|}
@@ -145,6 +160,7 @@ let () =
           Alcotest.test_case "flat_tool" `Quick test_parse_flat_tool;
           Alcotest.test_case "bare_tool_field" `Quick test_parse_bare_tool_field;
           Alcotest.test_case "search" `Quick test_parse_search;
+          Alcotest.test_case "flat_new_tools" `Quick test_parse_flat_new_tools;
           Alcotest.test_case "array_wrapped" `Quick test_parse_array_wrapped;
           Alcotest.test_case "non_object" `Quick test_parse_non_object_errors;
           Alcotest.test_case "final_answer" `Quick test_parse_final_answer;
