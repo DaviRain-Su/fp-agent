@@ -3,6 +3,9 @@
 
 type t = {
   draft : View.prompt_editor;
+  history : string list;
+  history_index : int option;
+  history_stash : View.prompt_editor option;
   selection : View.event_selection;
   palette : View.palette_state;
   event_count : int;
@@ -27,6 +30,8 @@ type action =
   | Move_palette of int
   | Palette_home
   | Palette_end
+  | History_previous
+  | History_next
   | Move_event of int
   | Event_home
   | Event_end
@@ -40,6 +45,8 @@ type input =
   | Delete_key
   | Left
   | Right
+  | Ctrl_up
+  | Ctrl_down
   | Up
   | Down
   | Page_up
@@ -100,9 +107,9 @@ val handle : t -> action -> result
 
 val action_of_input : page_size:int -> t -> input -> action option
 (** Translate abstract terminal input into a shell action. Palette navigation
-    has priority while the palette is open; otherwise text edits the prompt and
-    navigation keys inspect events, with Home/End targeting the draft when one
-    is active. *)
+    has priority while the palette is open; otherwise text edits the prompt,
+    Ctrl+Up/Ctrl+Down browse prompt history, and navigation keys inspect events,
+    with Home/End targeting the draft when one is active. *)
 
 val handle_input : page_size:int -> t -> input -> result
 (** Translate and apply one abstract terminal input. Unknown or context-invalid

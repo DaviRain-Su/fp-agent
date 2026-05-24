@@ -227,13 +227,16 @@ copy. Two consequences:
   inserted text, seeded palette drafts, newline, delete/backspace, cursor
   movement, and rendering with a visible cursor all show inside the fullscreen
   view.
+- **TUI prompt history** records submitted prompts in the fullscreen shell.
+  `Ctrl+Up` and `Ctrl+Down` browse previous prompts without stealing plain
+  Up/Down from event inspection.
 - **TUI shell controller groundwork** centralizes prompt submission, command
   palette movement, and event inspection selection in a pure state machine.
   It also owns the abstract keyboard/mouse input mapping, including palette
-  priority, event browsing, multiline prompt editing, and Ctrl+Enter submit
-  semantics for the interactive shell. Palette Enter returns the selected
-  command entry so fullscreen command handling does not need to re-parse
-  terminal key events.
+  priority, event browsing, prompt history, multiline prompt editing, and
+  Ctrl+Enter submit semantics for the interactive shell. Palette Enter returns
+  the selected command entry so fullscreen command handling does not need to
+  re-parse terminal key events.
 
 Options:
 

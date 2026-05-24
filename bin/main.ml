@@ -244,6 +244,10 @@ let make_tui_view ~initial_events ~provider ~model ~api_base ~workspace_root
         else Some Tui_shell.Enter
     | `Key (`Backspace, _) -> Some Tui_shell.Backspace_key
     | `Key (`Delete, _) -> Some Tui_shell.Delete_key
+    | `Key (`Arrow `Up, mods) when has_key_modifier mods `Ctrl ->
+        Some Tui_shell.Ctrl_up
+    | `Key (`Arrow `Down, mods) when has_key_modifier mods `Ctrl ->
+        Some Tui_shell.Ctrl_down
     | `Key (`Arrow `Left, _) -> Some Tui_shell.Left
     | `Key (`Arrow `Right, _) -> Some Tui_shell.Right
     | `Key (`Arrow `Up, _) -> Some Tui_shell.Up

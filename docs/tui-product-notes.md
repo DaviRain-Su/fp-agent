@@ -62,6 +62,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   prompt draft when the palette is closed, so seeded commands like `/tool ` can
   be completed in the fullscreen view. The live draft renders with the same
   prompt editor lines used by unit tests.
+- The fullscreen shell now records submitted prompt history. `Ctrl+Up` and
+  `Ctrl+Down` browse prior prompts while preserving plain Up/Down for event
+  inspection.
 - `--tui` without an initial task now starts a fullscreen interactive shell.
   Ctrl+Enter drains the prompt into the session loop: slash commands render in
   the timeline and ordinary task prompts run the agent against the same

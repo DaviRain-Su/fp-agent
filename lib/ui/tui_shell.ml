@@ -2,6 +2,9 @@ open! Base
 
 type t = {
   draft : View.prompt_editor;
+  history : string list;
+  history_index : int option;
+  history_stash : View.prompt_editor option;
   selection : View.event_selection;
   palette : View.palette_state;
   event_count : int;
@@ -26,6 +29,8 @@ type action =
   | Move_palette of int
   | Palette_home
   | Palette_end
+  | History_previous
+  | History_next
   | Move_event of int
   | Event_home
   | Event_end
@@ -39,6 +44,8 @@ type input =
   | Delete_key
   | Left
   | Right
+  | Ctrl_up
+  | Ctrl_down
   | Up
   | Down
   | Page_up
@@ -68,6 +75,9 @@ let create ?command_count () =
   in
   {
     draft = View.prompt_empty;
+    history = [];
+    history_index = None;
+    history_stash = None;
     selection = View.Follow_latest;
     palette = View.Palette_closed;
     event_count = 0;
@@ -118,6 +128,49 @@ let page_delta page_size = Int.max 1 page_size
 let draft_has_text t = not (String.is_empty t.draft.text)
 let command_at t index = List.nth (visible_command_entries t) index
 
+let clear_history_browse t =
+  { t with history_index = None; history_stash = None }
+
+let push_history prompt history =
+  match List.last history with
+  | Some last when String.equal last prompt -> history
+  | _ -> history @ [ prompt ]
+
+let history_entry t index =
+  Option.value_map (List.nth t.history index) ~default:t.draft
+    ~f:View.prompt_make
+
+let history_previous t =
+  match t.history with
+  | [] -> t
+  | _ ->
+      let last_index = List.length t.history - 1 in
+      let index =
+        match t.history_index with
+        | None -> last_index
+        | Some current -> Int.max 0 (current - 1)
+      in
+      {
+        t with
+        draft = history_entry t index;
+        history_index = Some index;
+        history_stash = Some (Option.value t.history_stash ~default:t.draft);
+      }
+
+let history_next t =
+  match t.history_index with
+  | None -> t
+  | Some current when current + 1 < List.length t.history ->
+      let index = current + 1 in
+      { t with draft = history_entry t index; history_index = Some index }
+  | Some _ ->
+      {
+        t with
+        draft = Option.value t.history_stash ~default:View.prompt_empty;
+        history_index = None;
+        history_stash = None;
+      }
+
 let set_palette_index t index =
   let count = visible_command_count t in
   if count <= 0 then t
@@ -143,10 +196,17 @@ let update_palette_query t query =
 
 let handle_prompt t = function
   | Insert_text text ->
+      let t = clear_history_browse t in
       no_submit { t with draft = View.prompt_insert_text text t.draft }
-  | Newline -> no_submit { t with draft = View.prompt_newline t.draft }
-  | Backspace -> no_submit { t with draft = View.prompt_backspace t.draft }
-  | Delete -> no_submit { t with draft = View.prompt_delete t.draft }
+  | Newline ->
+      let t = clear_history_browse t in
+      no_submit { t with draft = View.prompt_newline t.draft }
+  | Backspace ->
+      let t = clear_history_browse t in
+      no_submit { t with draft = View.prompt_backspace t.draft }
+  | Delete ->
+      let t = clear_history_browse t in
+      no_submit { t with draft = View.prompt_delete t.draft }
   | Move_cursor delta ->
       no_submit { t with draft = View.prompt_move ~delta t.draft }
   | Prompt_home -> no_submit { t with draft = View.prompt_home t.draft }
@@ -154,9 +214,15 @@ let handle_prompt t = function
   | Submit_prompt ->
       if View.prompt_is_empty t.draft then no_submit t
       else
+        let prompt = t.draft.text in
         {
-          state = { t with draft = View.prompt_empty };
-          submitted = Some t.draft.text;
+          state =
+            {
+              (clear_history_browse t) with
+              draft = View.prompt_empty;
+              history = push_history prompt t.history;
+            };
+          submitted = Some prompt;
           accepted_command = None;
           dispatched_command = None;
         }
@@ -190,6 +256,8 @@ let handle t action =
                     t with
                     palette = View.Palette_closed;
                     draft = View.prompt_make draft;
+                    history_index = None;
+                    history_stash = None;
                   };
                 submitted = None;
                 accepted_command = Some command;
@@ -222,6 +290,8 @@ let handle t action =
       in
       no_submit (update_palette_query t query)
   | Palette_clear_query -> no_submit (update_palette_query t "")
+  | History_previous -> no_submit (history_previous t)
+  | History_next -> no_submit (history_next t)
   | Move_event delta ->
       no_submit
         {
@@ -256,6 +326,8 @@ let action_of_input ~page_size t input =
     | Text text -> Some (Insert_palette_text text)
     | Backspace_key -> Some Palette_backspace
     | Delete_key -> Some Palette_clear_query
+    | Ctrl_up -> Some (Move_palette (-1))
+    | Ctrl_down -> Some (Move_palette 1)
     | Shift_enter | Left | Right | Unknown -> None
   else
     match input with
@@ -268,6 +340,8 @@ let action_of_input ~page_size t input =
     | Delete_key -> Some Delete
     | Left -> Some (Move_cursor (-1))
     | Right -> Some (Move_cursor 1)
+    | Ctrl_up -> Some History_previous
+    | Ctrl_down -> Some History_next
     | Home when draft_has_text t -> Some Prompt_home
     | End when draft_has_text t -> Some Prompt_end
     | Up | Mouse_scroll_up -> Some (Move_event (-1))

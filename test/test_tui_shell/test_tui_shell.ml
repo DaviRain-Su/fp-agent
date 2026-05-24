@@ -91,6 +91,35 @@ let test_prompt_input_mapping () =
        ~substring:"[tui] prompt submitted: inspect README");
   Alcotest.(check string) "submit clears draft" "" result.state.draft.text
 
+let test_prompt_history_input_mapping () =
+  let submit text state =
+    (Tui_shell.handle_input ~page_size:3
+       (input (Tui_shell.Text text) state)
+       Tui_shell.Ctrl_enter)
+      .state
+  in
+  let state =
+    Tui_shell.create () |> submit "first task" |> submit "second task"
+  in
+  Alcotest.(check string)
+    "ctrl up recalls latest" "second task"
+    (input Tui_shell.Ctrl_up state).draft.text;
+  let state = state |> input Tui_shell.Ctrl_up |> input Tui_shell.Ctrl_up in
+  Alcotest.(check string) "ctrl up recalls older" "first task" state.draft.text;
+  let state = input Tui_shell.Ctrl_up state in
+  Alcotest.(check string)
+    "history clamps at oldest" "first task" state.draft.text;
+  let state = input Tui_shell.Ctrl_down state in
+  Alcotest.(check string)
+    "ctrl down recalls newer" "second task" state.draft.text;
+  let state = input Tui_shell.Ctrl_down state in
+  Alcotest.(check string) "ctrl down restores empty draft" "" state.draft.text;
+  let state =
+    Tui_shell.create () |> submit "saved task" |> input (Tui_shell.Text "draft")
+  in
+  let state = state |> input Tui_shell.Ctrl_up |> input Tui_shell.Ctrl_down in
+  Alcotest.(check string) "restores stashed draft" "draft" state.draft.text
+
 let test_palette_state () =
   let state = Tui_shell.create ~command_count:4 () in
   Alcotest.(check bool) "closed" false (Tui_shell.palette_open state);
@@ -517,6 +546,8 @@ let () =
           Alcotest.test_case "prompt_submit" `Quick test_prompt_submit;
           Alcotest.test_case "prompt_input_mapping" `Quick
             test_prompt_input_mapping;
+          Alcotest.test_case "prompt_history_input_mapping" `Quick
+            test_prompt_history_input_mapping;
           Alcotest.test_case "palette_state" `Quick test_palette_state;
           Alcotest.test_case "palette_input_mapping" `Quick
             test_palette_input_mapping;
