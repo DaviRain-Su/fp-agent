@@ -393,6 +393,9 @@ let test_tui_command_model_log_and_inspect () =
       Alcotest.(check bool)
         "retry is stateful" true
         (Option.is_none (Tui_command.run context "/retry"));
+      Alcotest.(check bool)
+        "review is stateful" true
+        (Option.is_none (Tui_command.run context "/review current changes"));
       Alcotest.(check (option string))
         "last user task" (Some "inspect README")
         (Tui_command.last_user_message events);

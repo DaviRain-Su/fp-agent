@@ -38,6 +38,7 @@ type id =
   | Compact
   | Fork
   | Diff
+  | Review
   | Retry
   | Undo
   | Exit
@@ -363,6 +364,14 @@ let specs =
       acceptance = Execute "/diff";
     };
     {
+      id = Review;
+      command = "/review [focus]";
+      description = "run the code review workflow";
+      aliases = [];
+      palette = true;
+      acceptance = Draft "/review ";
+    };
+    {
       id = Retry;
       command = "/retry";
       description = "rerun the latest user task";
@@ -403,7 +412,7 @@ let group_of_id = function
   | Log | Inspect | Plan | PlanSet | PlanAdd | PlanUpdate | PlanClear | Usage
   | Status | Handoff | Instructions ->
       "Context"
-  | Compact | Fork | Diff | Retry | Undo -> "Run Control"
+  | Compact | Fork | Diff | Review | Retry | Undo -> "Run Control"
   | Help | Exit -> "Shell"
 
 let entry_of_spec spec =

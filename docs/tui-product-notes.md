@@ -25,8 +25,8 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   policy decision.
 - Footer command palette: `/model`, `/provider`, `/provider-add`, `/plugins`,
   `/plugin-sdk`, `/tools`, `/new`, `/resume`, `/fork`, `/retry`, `/plan`,
-  `/plan-set`, `/plan-add`, `/plan-update`, `/plan-clear`, `/compact`,
-  `/status`, `/handoff`, `/instructions`, `/undo`, `/diff`.
+  `/review`, `/plan-set`, `/plan-add`, `/plan-update`, `/plan-clear`,
+  `/compact`, `/status`, `/handoff`, `/instructions`, `/undo`, `/diff`.
 - Status strip: provider/model, session id, step count, token usage, current
   phase, and active plugin count.
 - Review mode: navigate prior events, fork from an event, and replay compacted
@@ -93,6 +93,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - `/handoff` now renders a copyable continuation summary from the event log:
   resume commands, runtime, token usage, current plan, last user task, recent
   events, and workspace diff summary.
+- `/review [focus]` now gives REPL/TUI users an explicit code-review entry
+  point. It wraps the focus into a code-review task, triggering review guidance
+  and preflight without relying on the model to infer intent from free text.
 - `/instructions` now exposes the exact workspace project instructions that are
   appended to the model system prompt, so REPL/TUI users can audit repo guidance
   before spending a model call.
@@ -214,8 +217,8 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   command, kind, timeout, and schema details for one plugin.
 - The REPL exposes registered tool inspection through `/tool <name>`, so
   built-in and plugin tool schemas can be checked without asking the model.
-- Code-review tasks add review-specific system guidance without rewriting the
-  logged user event, preserving audit and replay fidelity.
+- Code-review tasks and `/review [focus]` add review-specific system guidance
+  without rewriting the logged user event, preserving audit and replay fidelity.
 - Project instructions from `AGENTS.md`, `CLAUDE.md`, and
   `.fp-agent/instructions.md` now load into the model system prompt, with
   workspace-bounded whole-line `@relative` includes and no event-log leakage.

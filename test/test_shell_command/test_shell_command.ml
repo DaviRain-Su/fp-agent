@@ -45,6 +45,8 @@ let test_parse () =
     (Shell_command.parse "/instructions");
   require_command "compact" Shell_command.Compact ""
     (Shell_command.parse "/compact");
+  require_command "review" Shell_command.Review "security risks"
+    (Shell_command.parse "/review security risks");
   require_command "retry" Shell_command.Retry "" (Shell_command.parse "/retry");
   require_command "plan" Shell_command.Plan "" (Shell_command.parse "/plan");
   require_command "plan set" Shell_command.PlanSet
@@ -215,6 +217,11 @@ let test_metadata () =
     "palette has compact" true
     (List.mem palette "/compact" ~equal:String.equal);
   Alcotest.(check bool)
+    "palette has review" true
+    (List.mem palette "/review [focus]" ~equal:String.equal);
+  Alcotest.(check string)
+    "review group" "Run Control" (entry "/review [focus]").group;
+  Alcotest.(check bool)
     "palette has new session" true
     (List.mem palette "/new" ~equal:String.equal);
   Alcotest.(check bool)
@@ -307,6 +314,8 @@ let test_acceptance () =
     (Shell_command.accept (entry "/plugin-sdk"));
   require_acceptance "new session draft" ("draft", "/new")
     (Shell_command.accept (entry "/new"));
+  require_acceptance "review draft" ("draft", "/review ")
+    (Shell_command.accept (entry "/review [focus]"));
   require_acceptance "retry draft" ("draft", "/retry")
     (Shell_command.accept (entry "/retry"));
   require_acceptance "undo draft" ("draft", "/undo")

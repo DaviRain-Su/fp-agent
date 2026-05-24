@@ -36,6 +36,7 @@ type id =
   | Compact
   | Fork
   | Diff
+  | Review
   | Retry
   | Undo
   | Exit

@@ -1163,6 +1163,17 @@ let plan_updated_lines items =
   Printf.sprintf "plan updated: %d item(s)" (List.length items)
   :: Tui_command.plan_lines [ Event.Plan_updated { items } ]
 
+let review_task arg =
+  let arg = String.strip arg in
+  if String.is_empty arg then "code review"
+  else
+    let lowered = String.lowercase arg in
+    if
+      String.is_substring lowered ~substring:"review"
+      || String.is_substring arg ~substring:"审查"
+    then arg
+    else "code review: " ^ arg
+
 let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
   let root = Workspace.root workspace in
   let sessions_root =
@@ -1503,6 +1514,10 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
     | Command (Resume, arg) -> resume_session arg
     | Command (Fork, arg) -> fork_session arg
     | Command (Retry, _) -> retry_last_task ()
+    | Command (Review, arg) ->
+        let task = review_task arg in
+        view.append_lines [ "[tui] /review"; "reviewing: " ^ oneline task ];
+        run_task task
     | Command (Compact, _) -> compact_session ()
     | Command (PlanSet, arg) -> set_plan arg
     | Command (PlanAdd, arg) -> add_plan_item arg
@@ -2119,6 +2134,11 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
             loop ()
         | Command (Diff, _) ->
             show_diff ();
+            loop ()
+        | Command (Review, arg) ->
+            let task = review_task arg in
+            Stdlib.Printf.printf "reviewing: %s\n%!" (oneline task);
+            run_task task;
             loop ()
         | Command (Retry, _) ->
             retry_last_task ();

@@ -61,6 +61,7 @@ dune exec -- fp-agent
 > /diff              # show uncommitted changes (git)
 > /undo              # revert the last turn's changes (git)
 > /retry             # rerun the latest user task
+> /review security   # run the code-review workflow with an optional focus
 > /plan              # show the latest session plan
 > /plan-set todo inspect code; doing implement fix; done write tests
 > /plan-add todo run regression tests
@@ -110,10 +111,11 @@ matches that provider; `/model-next` cycles the current provider's models; and
 `/provider <name> [model] [api-base]` updates the active runtime directly.
 `/resume <dir>` and `/fork [index]` switch the active event-sourced session.
 
-Code review requests get a review-specific system instruction: the agent starts
-from `git status --short` and `git diff --stat`, inspects changed files and
-related code, and reports concise findings with evidence. The original user
-request remains unchanged in the event log for audit and resume.
+Code review requests, including explicit `/review [focus]`, get a
+review-specific system instruction: the agent starts from `git status --short`
+and `git diff --stat`, inspects changed files and related code, and reports
+concise findings with evidence. The original user request remains unchanged in
+the event log for audit and resume.
 
 ### Project instructions
 
@@ -289,6 +291,9 @@ copy. Two consequences:
   logs alone.
 - **TUI retry** lets `/retry` rerun the latest user task in the active
   event-sourced session, using the currently selected provider/model runtime.
+- **TUI review** lets `/review [focus]` run the code-review workflow from the
+  current fullscreen session, triggering diff-first review guidance and
+  preflight while preserving the review request in the event log.
 - **TUI compaction** lets `/compact` manually summarize older context in the
   active session when a long run needs a smaller model-visible history.
 - **TUI prompt editor** keeps multiline draft editing pure and testable:
