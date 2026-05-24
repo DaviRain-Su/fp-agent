@@ -50,9 +50,19 @@ When the model calls a plugin tool, `fp-agent`:
 3. Exposes:
    - `FP_AGENT_WORKSPACE`
    - `FP_AGENT_PLUGIN_DIR`
+   - `FP_AGENT_PLUGIN_ID`
+   - `FP_AGENT_PLUGIN_NAME`
+   - `FP_AGENT_PLUGIN_VERSION`
+   - `FP_AGENT_PLUGIN_SDK_VERSION`
    - `FP_AGENT_TOOL_NAME`
+   - `FP_AGENT_TOOL_KIND`
+   - `FP_AGENT_ARGS_FILE`
 4. Treats stdout as the tool result when the command exits `0`.
 5. Treats non-zero exit as a tool error.
+
+`FP_AGENT_ARGS_FILE` points at the temporary JSON args file that is also piped
+to stdin. It exists for plugin SDKs or scripts that prefer reading a file path
+over consuming stdin directly.
 
 Before the command starts, `input_schema` is validated locally. The supported
 subset is intentionally small and portable: `type`, `required`, object

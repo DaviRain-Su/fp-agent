@@ -98,6 +98,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - Plugin manifests now expose `sdk_version` compatibility metadata. Scaffolded
   plugins write it explicitly, while check/install/run reject unsupported future
   SDK versions.
+- Plugin runtime commands now receive richer SDK environment metadata:
+  workspace, plugin id/name/version/sdk version, tool name/kind, and the args
+  JSON file path used for stdin.
 - Plugin installation now supports `--replace-plugin` for iterative SDK
   development. Replacement validates and stages the new plugin before removing
   the old installed copy, so reinstalling a local plugin is one command without

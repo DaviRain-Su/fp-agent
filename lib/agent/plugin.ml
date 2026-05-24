@@ -239,6 +239,11 @@ let kind_of_string = function
   | "exec" | "execute" -> Ok Tool.Exec
   | other -> Error ("unknown tool kind: " ^ other)
 
+let string_of_kind = function
+  | Tool.Read -> "read"
+  | Tool.Write -> "write"
+  | Tool.Exec -> "exec"
+
 let parse_tool json : (plugin_tool, string) Result.t =
   let timeout_sec =
     Option.value
@@ -493,11 +498,20 @@ let run_plugin_tool (manifest : manifest) tool workspace args =
           let command =
             Printf.sprintf
               "cd %s && FP_AGENT_WORKSPACE=%s FP_AGENT_PLUGIN_DIR=%s \
-               FP_AGENT_TOOL_NAME=%s %s < %s"
+               FP_AGENT_PLUGIN_ID=%s FP_AGENT_PLUGIN_NAME=%s \
+               FP_AGENT_PLUGIN_VERSION=%s FP_AGENT_PLUGIN_SDK_VERSION=%s \
+               FP_AGENT_TOOL_NAME=%s FP_AGENT_TOOL_KIND=%s \
+               FP_AGENT_ARGS_FILE=%s %s < %s"
               (Stdlib.Filename.quote manifest.dir)
               (Stdlib.Filename.quote (Workspace.root workspace))
               (Stdlib.Filename.quote manifest.dir)
+              (Stdlib.Filename.quote manifest.id)
+              (Stdlib.Filename.quote manifest.name)
+              (Stdlib.Filename.quote manifest.version)
+              (Stdlib.Filename.quote (Int.to_string manifest.sdk_version))
               (Stdlib.Filename.quote tool.tool_name)
+              (Stdlib.Filename.quote (string_of_kind tool.tool_kind))
+              (Stdlib.Filename.quote tmp)
               tool.tool_command
               (Stdlib.Filename.quote tmp)
           in
@@ -735,7 +749,13 @@ The tool receives JSON args on stdin and can use:
 
 - `FP_AGENT_WORKSPACE`
 - `FP_AGENT_PLUGIN_DIR`
+- `FP_AGENT_PLUGIN_ID`
+- `FP_AGENT_PLUGIN_NAME`
+- `FP_AGENT_PLUGIN_VERSION`
+- `FP_AGENT_PLUGIN_SDK_VERSION`
 - `FP_AGENT_TOOL_NAME`
+- `FP_AGENT_TOOL_KIND`
+- `FP_AGENT_ARGS_FILE`
 
 Install it with:
 

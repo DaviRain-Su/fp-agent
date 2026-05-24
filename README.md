@@ -110,6 +110,8 @@ returns its result on stdout. `input_schema` is enforced before the plugin
 command runs, so developers get local feedback from `--run-plugin-tool` without
 spending a model call. Manifests can declare `sdk_version`; unsupported future
 SDK versions are rejected by `--check-plugin`, install, and local tool runs.
+Plugin commands also receive runtime env such as `FP_AGENT_WORKSPACE`,
+`FP_AGENT_PLUGIN_ID`, `FP_AGENT_TOOL_KIND`, and `FP_AGENT_ARGS_FILE`.
 
 ```sh
 export FP_AGENT_PLUGIN_PATH=$PWD/examples/plugins/echo

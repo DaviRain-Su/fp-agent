@@ -408,6 +408,56 @@ let test_run_tool_for_plugin_development () =
             "output includes args" true
             (String.is_substring output ~substring:{|"message":"hello"|}))
 
+let test_plugin_runtime_environment () =
+  with_temp_dir "fp_agent_plugin_env" (fun root ->
+      let plugin_dir = Stdlib.Filename.concat root "plugin" in
+      mkdir_p plugin_dir;
+      write_plugin plugin_dir ~id:"com.example.env" ~tool_name:"plugin_env"
+        ~kind:"exec"
+        ~script:
+          "printf 'id=%s name=%s version=%s sdk=%s tool=%s kind=%s \
+           args_file_exists=' \"$FP_AGENT_PLUGIN_ID\" \
+           \"$FP_AGENT_PLUGIN_NAME\" \"$FP_AGENT_PLUGIN_VERSION\" \
+           \"$FP_AGENT_PLUGIN_SDK_VERSION\" \"$FP_AGENT_TOOL_NAME\" \
+           \"$FP_AGENT_TOOL_KIND\"\n\
+           if [ -f \"$FP_AGENT_ARGS_FILE\" ]; then printf yes; else printf no; \
+           fi\n\
+           printf ' stdin='\n\
+           cat\n\
+           printf ' args_file='\n\
+           cat \"$FP_AGENT_ARGS_FILE\"\n";
+      match
+        Plugin.run_tool ~dir:plugin_dir ~tool_name:"plugin_env"
+          ~workspace:(workspace root)
+          ~args:(`Assoc [ ("message", `String "hello") ])
+      with
+      | Error e -> Alcotest.failf "run_tool failed: %s" e
+      | Ok (Tool_result.Error { message }) ->
+          Alcotest.failf "plugin returned error: %s" message
+      | Ok (Tool_result.Success { output }) ->
+          Alcotest.(check bool)
+            "output includes plugin id" true
+            (String.is_substring output ~substring:"id=com.example.env");
+          Alcotest.(check bool)
+            "output includes plugin name" true
+            (String.is_substring output ~substring:"name=Test Plugin");
+          Alcotest.(check bool)
+            "output includes sdk version" true
+            (String.is_substring output ~substring:"sdk=1");
+          Alcotest.(check bool)
+            "output includes tool kind" true
+            (String.is_substring output ~substring:"kind=exec");
+          Alcotest.(check bool)
+            "args file exists" true
+            (String.is_substring output ~substring:"args_file_exists=yes");
+          Alcotest.(check bool)
+            "stdin includes args" true
+            (String.is_substring output ~substring:{|stdin={"message":"hello"}|});
+          Alcotest.(check bool)
+            "args file includes args" true
+            (String.is_substring output
+               ~substring:{|args_file={"message":"hello"}|}))
+
 let test_run_tool_validates_input_schema () =
   with_temp_dir "fp_agent_plugin_schema_validation" (fun root ->
       let plugin_dir = Stdlib.Filename.concat root "plugin" in
@@ -510,6 +560,14 @@ let test_scaffold_creates_valid_plugin () =
             (Stdlib.Sys.file_exists
                (Stdlib.Filename.concat dir
                   (Stdlib.Filename.concat "examples" "hello.args.json")));
+          let readme =
+            Stdlib.In_channel.with_open_bin
+              (Stdlib.Filename.concat dir "README.md")
+              Stdlib.In_channel.input_all
+          in
+          Alcotest.(check bool)
+            "readme documents args file env" true
+            (String.is_substring readme ~substring:"FP_AGENT_ARGS_FILE");
           match Plugin.check dir with
           | Error e -> Alcotest.failf "scaffold check failed: %s" e
           | Ok manifest ->
@@ -646,6 +704,8 @@ let () =
             test_check_rejects_candidate_tool_conflicts;
           Alcotest.test_case "run_tool" `Quick
             test_run_tool_for_plugin_development;
+          Alcotest.test_case "runtime_environment" `Quick
+            test_plugin_runtime_environment;
           Alcotest.test_case "run_tool_schema_validation" `Quick
             test_run_tool_validates_input_schema;
           Alcotest.test_case "run_tool_unsupported_schema_shape" `Quick
