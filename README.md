@@ -126,6 +126,7 @@ Create, test, and install a plugin into the user plugin home:
 
 ```sh
 dune exec -- fp-agent --new-plugin my-plugin
+dune exec -- fp-agent --new-plugin my-plugin --plugin-id com.example.my_plugin
 dune exec -- fp-agent --check-plugin my-plugin
 dune exec -- fp-agent --check-plugin my-plugin --replace-plugin
 dune exec -- fp-agent --run-plugin-tool my-plugin \
@@ -222,6 +223,7 @@ Options:
 - `--tui` — full-screen live view for one-shot tasks, or an interactive
   fullscreen shell when no task is supplied (needs a real terminal)
 - `--new-plugin DIR` — create a starter plugin directory, then exit
+- `--plugin-id ID` — manifest id to use with `--new-plugin`
 - `--check-plugin DIR` — validate a plugin directory, then exit
 - `--replace-plugin` with `--check-plugin` — validate replacement
   compatibility against the currently installed plugin with the same id

@@ -244,6 +244,52 @@ let test_plugin_lifecycle_cli () =
   assert_contains "remove missing stderr" missing.stderr
     "plugin is not installed"
 
+let test_new_plugin_custom_id_cli () =
+  let root = tmp_dir "fp-agent-cli-plugin-id-" in
+  let plugin_dir = Stdlib.Filename.concat root "named-plugin" in
+  let home = Stdlib.Filename.concat root "installed" in
+  let bin = fp_agent_bin () in
+  let env = isolated_env root @ [ ("FP_AGENT_PLUGIN_HOME", home) ] in
+  let created =
+    run ~env
+      [
+        bin;
+        "--new-plugin";
+        plugin_dir;
+        "--plugin-id";
+        "com.example.named_plugin";
+      ]
+  in
+  assert_success "new plugin custom id" created;
+  let checked = run ~env [ bin; "--check-plugin"; plugin_dir ] in
+  assert_success "check custom id plugin" checked;
+  assert_contains "custom id in check output" checked.stdout
+    "com.example.named_plugin";
+  let installed = run ~env [ bin; "--install-plugin"; plugin_dir ] in
+  assert_success "install custom id plugin" installed;
+  Alcotest.(check bool)
+    "installed under custom id" true
+    (Stdlib.Sys.file_exists
+       (Stdlib.Filename.concat home
+          (Stdlib.Filename.concat "com.example.named_plugin"
+             "fp-agent-plugin.json")));
+  let invalid =
+    run ~env
+      [
+        bin;
+        "--new-plugin";
+        Stdlib.Filename.concat root "bad";
+        "--plugin-id";
+        "bad id";
+      ]
+  in
+  assert_failure "new plugin invalid custom id" invalid;
+  assert_contains "invalid custom id stderr" invalid.stderr "plugin id";
+  let stray = run ~env [ bin; "--plugin-id"; "com.example.only" ] in
+  assert_failure "plugin id without new plugin" stray;
+  assert_contains "stray plugin id stderr" stray.stderr
+    "--plugin-id requires --new-plugin DIR"
+
 let test_plugin_tool_debug_cli () =
   let root = tmp_dir "fp-agent-cli-plugin-run-" in
   let plugin_dir = Stdlib.Filename.concat root "my-plugin" in
@@ -647,6 +693,8 @@ let () =
       ( "cli",
         [
           Alcotest.test_case "plugin lifecycle" `Quick test_plugin_lifecycle_cli;
+          Alcotest.test_case "plugin custom id" `Quick
+            test_new_plugin_custom_id_cli;
           Alcotest.test_case "plugin tool debug" `Quick
             test_plugin_tool_debug_cli;
           Alcotest.test_case "repl plugin tools" `Quick

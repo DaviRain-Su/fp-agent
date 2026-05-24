@@ -1450,26 +1450,32 @@ let run_plugin_tool_cli dir tool_name args_json args_file workspace_opt =
               Stdlib.prerr_endline ("plugin tool error: " ^ message);
               1))
 
-let dispatch new_plugin check_plugin install_plugin replace_plugin list_plugins
-    remove_plugin run_plugin_tool plugin_tool plugin_args plugin_args_file task
-    provider api_base model workspace max_steps confirm resume tui yolo =
+let dispatch new_plugin plugin_id check_plugin install_plugin replace_plugin
+    list_plugins remove_plugin run_plugin_tool plugin_tool plugin_args
+    plugin_args_file task provider api_base model workspace max_steps confirm
+    resume tui yolo =
   match
     ( new_plugin,
+      plugin_id,
       check_plugin,
       install_plugin,
       list_plugins,
       remove_plugin,
       run_plugin_tool )
   with
-  | Some path, _, _, _, _, _ -> (
-      match Plugin.scaffold path with
+  | Some path, plugin_id, _, _, _, _, _ -> (
+      match Plugin.scaffold ?id:plugin_id path with
       | Ok dst ->
           Stdlib.Printf.printf "created plugin scaffold: %s\n" dst;
           0
       | Error e ->
           Stdlib.prerr_endline ("plugin scaffold error: " ^ e);
           1)
-  | None, Some path, _, _, _, _ -> (
+  | None, Some _, _, _, _, _, _ ->
+      Stdlib.prerr_endline
+        "plugin scaffold error: --plugin-id requires --new-plugin DIR";
+      1
+  | None, None, Some path, _, _, _, _ -> (
       match Plugin.check ~replace:replace_plugin path with
       | Ok manifest ->
           Stdlib.print_endline "plugin manifest ok:";
@@ -1478,7 +1484,7 @@ let dispatch new_plugin check_plugin install_plugin replace_plugin list_plugins
       | Error e ->
           Stdlib.prerr_endline ("plugin check error: " ^ e);
           1)
-  | None, None, Some path, _, _, _ -> (
+  | None, None, None, Some path, _, _, _ -> (
       match Plugin.install ~replace:replace_plugin path with
       | Ok dst ->
           Stdlib.Printf.printf "installed plugin: %s\n" dst;
@@ -1486,10 +1492,10 @@ let dispatch new_plugin check_plugin install_plugin replace_plugin list_plugins
       | Error e ->
           Stdlib.prerr_endline ("plugin install error: " ^ e);
           1)
-  | None, None, None, true, _, _ ->
+  | None, None, None, None, true, _, _ ->
       print_installed_plugins ();
       0
-  | None, None, None, false, Some id, _ -> (
+  | None, None, None, None, false, Some id, _ -> (
       match Plugin.remove id with
       | Ok dst ->
           Stdlib.Printf.printf "removed plugin: %s\n" dst;
@@ -1497,14 +1503,14 @@ let dispatch new_plugin check_plugin install_plugin replace_plugin list_plugins
       | Error e ->
           Stdlib.prerr_endline ("plugin remove error: " ^ e);
           1)
-  | None, None, None, false, None, Some dir ->
+  | None, None, None, None, false, None, Some dir ->
       run_plugin_tool_cli dir plugin_tool plugin_args plugin_args_file workspace
-  | None, None, None, false, None, None when replace_plugin ->
+  | None, None, None, None, false, None, None when replace_plugin ->
       Stdlib.prerr_endline
         "plugin error: --replace-plugin requires --install-plugin DIR or \
          --check-plugin DIR";
       1
-  | None, None, None, false, None, None ->
+  | None, None, None, None, false, None, None ->
       with_setup provider api_base model workspace max_steps
         (fun config workspace ->
           match task with
@@ -1609,6 +1615,13 @@ let () =
       & info [ "new-plugin" ] ~docv:"DIR"
           ~doc:"Create a starter plugin directory, then exit.")
   in
+  let plugin_id =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "plugin-id" ] ~docv:"ID"
+          ~doc:"Manifest id to use with --new-plugin.")
+  in
   let provider =
     Arg.(
       value
@@ -1681,7 +1694,7 @@ let () =
   let doc = "A type-safe local CLI code agent harness." in
   let term =
     Term.(
-      const dispatch $ new_plugin $ check_plugin $ install_plugin
+      const dispatch $ new_plugin $ plugin_id $ check_plugin $ install_plugin
       $ replace_plugin $ list_plugins $ remove_plugin $ run_plugin_tool
       $ plugin_tool $ plugin_args $ plugin_args_file $ task $ provider
       $ api_base $ model $ workspace $ max_steps $ confirm $ resume $ tui $ yolo)
