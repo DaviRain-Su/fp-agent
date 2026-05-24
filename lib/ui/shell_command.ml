@@ -6,6 +6,7 @@ type id =
   | Tool
   | Plugins
   | Plugin
+  | PluginNew
   | PluginCheck
   | PluginInstall
   | PluginRemove
@@ -88,6 +89,14 @@ let specs =
       aliases = [];
       palette = true;
       acceptance = Draft "/plugin ";
+    };
+    {
+      id = PluginNew;
+      command = "/plugin-new [--id ID] [--tool-name NAME] <dir>";
+      description = "create a plugin scaffold";
+      aliases = [];
+      palette = true;
+      acceptance = Draft "/plugin-new ";
     };
     {
       id = PluginCheck;

@@ -72,6 +72,7 @@ dune exec -- fp-agent
 > /tools             # preview available tools
 > /tool read_file    # inspect a tool's kind/schema/description
 > /plugin echo_json  # inspect a plugin by id or tool name
+> /plugin-new --id local.my-plugin --tool-name my_tool my-plugin
 > /plugin-check my-plugin
 > /plugin-install --replace my-plugin
 > /plugin-remove local.my-plugin
@@ -122,6 +123,7 @@ export FP_AGENT_PLUGIN_PATH=$PWD/examples/plugins/echo
 dune exec -- fp-agent
 > /plugins
 > /plugin echo_json
+> /plugin-new --id local.my-plugin --tool-name my_tool my-plugin
 > /plugin-check my-plugin
 > /plugin-install --replace my-plugin
 > /plugin-smoke --replace my-plugin
@@ -139,6 +141,7 @@ dune exec -- fp-agent --new-plugin my-plugin --plugin-tool-name my_tool
 dune exec -- fp-agent --check-plugin my-plugin
 dune exec -- fp-agent --smoke-plugin my-plugin
 dune exec -- fp-agent
+> /plugin-new --id local.my-plugin --tool-name my_tool my-plugin
 > /plugin-check my-plugin
 > /plugin-install --replace my-plugin
 > /plugin-smoke --replace my-plugin
@@ -203,10 +206,11 @@ copy. Two consequences:
   plugin and run its `examples/<tool>.args.json` files from inside the REPL or
   fullscreen TUI, so plugin developers can keep the current agent session open
   while testing SDK changes.
-- **Plugin install management** (`/plugin-check <dir>`, `/plugin-install
-  [--replace] <dir>`, `/plugin-remove <id>`) validates, installs, and removes
-  plugins from the REPL or fullscreen TUI, then reloads the in-process tool
-  registry so `/tools` and later model calls see the updated plugin set.
+- **Plugin install management** (`/plugin-new [--id ID] [--tool-name NAME]
+  <dir>`, `/plugin-check <dir>`, `/plugin-install [--replace] <dir>`,
+  `/plugin-remove <id>`) scaffolds, validates, installs, and removes plugins
+  from the REPL or fullscreen TUI, then reloads the in-process tool registry so
+  `/tools` and later model calls see the updated plugin set.
 - **TUI model/provider switching** lets `/model <id>` and `/provider <name>
   [model] [api-base]` change the runtime used by later TUI task submissions.
 - **TUI session navigation** lets `/new`, `/resume <dir>`, and `/fork [index]`

@@ -609,6 +609,44 @@ let plugin_smoke_result_lines results =
       Printf.sprintf "smoke ok: %s (%s)" result.tool_name result.args_file
       :: (if String.is_empty output then [] else String.split_lines output))
 
+let plugin_new_usage = "usage: /plugin-new [--id ID] [--tool-name NAME] <dir>"
+
+let parse_plugin_new_args raw =
+  let tokens =
+    String.split (String.strip raw) ~on:' '
+    |> List.filter ~f:(fun s -> not (String.is_empty s))
+  in
+  let rec loop id tool_name dirs = function
+    | [] -> (
+        match List.rev dirs with
+        | [ dir ] -> Ok (id, tool_name, dir)
+        | [] -> Error plugin_new_usage
+        | _ -> Error "plugin new error: expected exactly one plugin directory")
+    | ("--id" | "--plugin-id") :: value :: rest ->
+        loop (Some value) tool_name dirs rest
+    | ("--id" | "--plugin-id") :: [] -> Error plugin_new_usage
+    | ("--tool-name" | "--plugin-tool-name") :: value :: rest ->
+        loop id (Some value) dirs rest
+    | ("--tool-name" | "--plugin-tool-name") :: [] -> Error plugin_new_usage
+    | flag :: _ when String.is_prefix flag ~prefix:"--" ->
+        Error ("plugin new error: unknown option " ^ flag)
+    | dir :: rest -> loop id tool_name (dir :: dirs) rest
+  in
+  loop None None [] tokens
+
+let plugin_new_lines args =
+  match parse_plugin_new_args args with
+  | Error e -> [ e ]
+  | Ok (id, tool_name, dir) -> (
+      match Plugin.scaffold ?id ?tool_name dir with
+      | Error e -> [ "plugin scaffold error: " ^ e ]
+      | Ok dst ->
+          [
+            "created plugin scaffold: " ^ dst;
+            "next: /plugin-check " ^ dst;
+            "next: /plugin-smoke " ^ dst;
+          ])
+
 let parse_plugin_dir_arg ~usage raw =
   let arg = String.strip raw in
   let replace_prefixes = [ "--replace "; "--replace-plugin " ] in
@@ -873,6 +911,9 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
   let undo () =
     view.append_lines ("[tui] /undo" :: Git_snapshot.undo snapshots)
   in
+  let new_plugin arg =
+    view.append_lines ("[tui] /plugin-new" :: plugin_new_lines arg)
+  in
   let smoke_plugin arg =
     view.append_lines
       ("[tui] /plugin-smoke" :: plugin_smoke_lines ~workspace arg)
@@ -906,6 +947,7 @@ let run_tui_repl config workspace ~confirm ~resume_opt ~yolo =
     | Command (Retry, _) -> retry_last_task ()
     | Command (Compact, _) -> compact_session ()
     | Command (Undo, _) -> undo ()
+    | Command (PluginNew, arg) -> new_plugin arg
     | Command (PluginCheck, arg) -> check_plugin arg
     | Command (PluginInstall, arg) -> install_plugin arg
     | Command (PluginRemove, arg) -> remove_plugin arg
@@ -1378,6 +1420,9 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
             loop ()
         | Command (Plugin, arg) ->
             print_plugin_detail arg;
+            loop ()
+        | Command (PluginNew, arg) ->
+            List.iter (plugin_new_lines arg) ~f:Stdlib.print_endline;
             loop ()
         | Command (PluginCheck, arg) ->
             List.iter (plugin_check_lines arg) ~f:Stdlib.print_endline;

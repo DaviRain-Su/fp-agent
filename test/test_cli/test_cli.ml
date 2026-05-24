@@ -271,18 +271,20 @@ let test_repl_installs_and_removes_plugin () =
     isolated_env root
     @ [ ("FP_AGENT_PLUGIN_PATH", ""); ("FP_AGENT_PLUGIN_HOME", home) ]
   in
-  assert_success "new plugin" (run ~env [ bin; "--new-plugin"; plugin_dir ]);
   let repl =
     run ~env
       ~stdin:
         (String.concat ~sep:"\n"
            [
+             "/plugin-new --id local.repl-plugin --tool-name repl_echo "
+             ^ plugin_dir;
              "/plugin-check " ^ plugin_dir;
              "/plugin-install " ^ plugin_dir;
              "/plugins";
-             "/tool hello_world";
-             "/plugin-remove local.my-plugin";
-             "/tool hello_world";
+             "/tool repl_echo";
+             "/plugin-smoke --replace " ^ plugin_dir;
+             "/plugin-remove local.repl-plugin";
+             "/tool repl_echo";
              "/plugins";
              "/exit";
              "";
@@ -290,14 +292,16 @@ let test_repl_installs_and_removes_plugin () =
       [ bin ]
   in
   assert_success "repl plugin install commands" repl;
+  assert_contains "new output" repl.stdout "created plugin scaffold:";
   assert_contains "check output" repl.stdout "plugin manifest ok:";
   assert_contains "install output" repl.stdout "installed plugin:";
   assert_contains "install reload output" repl.stdout "tools reloaded";
-  assert_contains "plugin listed after install" repl.stdout "local.my-plugin";
-  assert_contains "tool available after install" repl.stdout "name: hello_world";
+  assert_contains "plugin listed after install" repl.stdout "local.repl-plugin";
+  assert_contains "tool available after install" repl.stdout "name: repl_echo";
+  assert_contains "smoke output" repl.stdout "smoke ok: repl_echo";
   assert_contains "remove output" repl.stdout "removed plugin:";
   assert_contains "tool gone after remove" repl.stdout
-    "no tool matching: hello_world";
+    "no tool matching: repl_echo";
   assert_contains "plugins empty after remove" repl.stdout
     "(no plugins discovered)"
 
