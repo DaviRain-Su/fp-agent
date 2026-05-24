@@ -24,6 +24,7 @@ let test_edit_readme_e2e () =
           Config.api_key = "k";
           api_base = "http://localhost";
           model = "m";
+          protocol = Provider.Openai;
           max_steps = 10;
           workspace_root = root;
         }

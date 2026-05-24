@@ -4,6 +4,7 @@ type t = {
   api_key : string;
   api_base : string;
   model : string;
+  protocol : Provider.protocol;
   max_steps : int;
   workspace_root : string;
 }
@@ -55,4 +56,5 @@ let load ?provider ?api_base ?model () =
           let workspace_root =
             getenv_default "WORKSPACE_ROOT" ~default:(Unix.getcwd ())
           in
-          Ok { api_key; api_base; model; max_steps; workspace_root })
+          let protocol = Provider.protocol prov in
+          Ok { api_key; api_base; model; protocol; max_steps; workspace_root })

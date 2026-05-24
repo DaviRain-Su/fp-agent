@@ -2,6 +2,7 @@ type t = {
   api_key : string;
   api_base : string;
   model : string;
+  protocol : Provider.protocol;
   max_steps : int;
   workspace_root : string;
 }

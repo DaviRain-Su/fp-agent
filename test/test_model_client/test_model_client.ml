@@ -78,6 +78,9 @@ let test_config_providers () =
       Alcotest.(check bool)
         "kimi base" true
         (String.is_substring cfg.api_base ~substring:"api.kimi.com");
+      Alcotest.(check bool)
+        "kimi uses anthropic protocol" true
+        (match cfg.protocol with Provider.Anthropic -> true | _ -> false);
       Alcotest.(check string) "kimi key" "kimi-secret" cfg.api_key
   | Error e -> Alcotest.failf "kimi load: %s" e);
   (match Config.load ~provider:"deepseek" () with

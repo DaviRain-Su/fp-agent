@@ -3,8 +3,14 @@
 
 type t = Kimi | Zhipu | Deepseek
 
+(** Wire protocol the provider's endpoint speaks. *)
+type protocol = Openai | Anthropic
+
 val all : t list
 val to_string : t -> string
+
+val protocol : t -> protocol
+(** Which wire protocol this provider uses. *)
 
 val of_string : string -> t option
 (** Parse a provider name (case-insensitive, accepts a few aliases). *)

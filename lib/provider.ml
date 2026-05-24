@@ -2,6 +2,10 @@ open! Base
 
 type t = Kimi | Zhipu | Deepseek
 
+(* Wire protocol the provider's endpoint speaks. Both carry our JSON action
+   contract in the message body; only the HTTP request/response shape differs. *)
+type protocol = Openai | Anthropic
+
 let all = [ Kimi; Zhipu; Deepseek ]
 
 let to_string = function
@@ -23,10 +27,14 @@ let key_env = function
   | Zhipu -> "ZAI_API_KEY"
   | Deepseek -> "DEEPSEEK_API_KEY"
 
-(* OpenAI-compatible chat-completion bases; the client appends
-   "/chat/completions". *)
+(* Kimi for coding speaks the Anthropic Messages protocol (same as Claude
+   Code); the others are OpenAI-compatible. *)
+let protocol = function Kimi -> Anthropic | Zhipu | Deepseek -> Openai
+
+(* Base URLs. The client appends "/chat/completions" for OpenAI providers and
+   "/v1/messages" for Anthropic providers. *)
 let default_api_base = function
-  | Kimi -> "https://api.kimi.com/coding/v1"
+  | Kimi -> "https://api.kimi.com/coding"
   | Zhipu -> "https://api.z.ai/api/paas/v4"
   | Deepseek -> "https://api.deepseek.com"
 

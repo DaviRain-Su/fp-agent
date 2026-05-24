@@ -30,16 +30,22 @@ dune fmt         # format (requires .ocamlformat, included)
 
 ## Usage
 
-```sh
-export OPENAI_API_KEY=sk-...            # required
-export OPENAI_API_BASE=https://api.openai.com/v1   # optional
-export MODEL_NAME=gpt-4o-mini           # optional
+Pick a provider and set its API key, then run:
 
+```sh
+export KIMI_API_KEY=...                  # default provider (Kimi for coding)
 dune exec -- fp-agent "fix the failing test in lib/foo.ml"
+
+# or another provider
+export ZAI_API_KEY=...
+dune exec -- fp-agent --provider zhipu "add a docstring to lib/foo.ml"
 ```
 
 Options:
 
+- `-p`, `--provider NAME` — `kimi` (default), `zhipu`, or `deepseek`
+- `-m`, `--model ID` — override the model id
+- `--api-base URL` — override the provider's base URL
 - `-w`, `--workspace DIR` — workspace root (default: `WORKSPACE_ROOT` or cwd)
 - `--max-steps N` — max agent steps (default: `MAX_STEPS` or 30)
 
@@ -47,13 +53,28 @@ On completion the agent prints a status summary and, if the workspace is a git
 repo, `git diff --stat`. Every run also writes a full trace to
 `.ocaml-agent/sessions/<timestamp>-<id>/events.jsonl`.
 
+### Providers
+
+Each provider has a built-in key env var, base URL, and default model. All carry
+the same JSON action contract; the wire protocol differs (Kimi for coding speaks
+the Anthropic Messages API, the others OpenAI chat completions).
+
+| Provider | Key env var | Base URL | Default model | Protocol |
+| --- | --- | --- | --- | --- |
+| `kimi` (default) | `KIMI_API_KEY` | `https://api.kimi.com/coding` | `kimi-for-coding` | Anthropic |
+| `zhipu` | `ZAI_API_KEY` | `https://api.z.ai/api/paas/v4` | `glm-4` | OpenAI |
+| `deepseek` | `DEEPSEEK_API_KEY` | `https://api.deepseek.com` | `deepseek-v4-flash` | OpenAI |
+
+For DeepSeek Pro: `--model deepseek-v4-pro`.
+
 ### Environment variables
 
 | Variable | Meaning | Default |
 | --- | --- | --- |
-| `OPENAI_API_KEY` | Model API key (required) | — |
-| `OPENAI_API_BASE` | OpenAI-compatible endpoint base | `https://api.openai.com/v1` |
-| `MODEL_NAME` | Model name | `gpt-4o-mini` |
+| `PROVIDER` | Provider to use | `kimi` |
+| `<PROVIDER>_API_KEY` | Selected provider's API key (required) | — |
+| `API_BASE` | Override the provider's base URL | provider default |
+| `MODEL_NAME` | Override the model id | provider default |
 | `MAX_STEPS` | Max agent loop steps | `30` |
 | `WORKSPACE_ROOT` | Workspace root directory | current directory |
 

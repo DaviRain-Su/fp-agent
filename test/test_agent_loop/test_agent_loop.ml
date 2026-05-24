@@ -8,6 +8,7 @@ let with_env f =
       Config.api_key = "test-key";
       api_base = "http://localhost";
       model = "test";
+      protocol = Provider.Openai;
       max_steps = 10;
       workspace_root = root;
     }

@@ -100,19 +100,9 @@ let parse_action content : (Model_action.t, string) Result.t =
       | `String other -> Error ("unknown action: " ^ other)
       | _ -> Error "missing or invalid 'action' field")
 
-let extract_content body_str =
-  match Yojson.Safe.from_string body_str with
-  | exception exn ->
-      Error ("invalid JSON in model response: " ^ Exn.to_string exn)
-  | json -> (
-      try
-        let open Yojson.Safe.Util in
-        Ok
-          (json |> member "choices" |> index 0 |> member "message"
-         |> member "content" |> to_string)
-      with exn -> Error ("unexpected completion shape: " ^ Exn.to_string exn))
+(* --- OpenAI chat completions (zhipu, deepseek) --- *)
 
-let real_send (config : Config.t) messages =
+let openai_request (config : Config.t) messages =
   let uri = Uri.of_string (config.api_base ^ "/chat/completions") in
   let headers =
     Cohttp.Header.of_list
@@ -134,6 +124,76 @@ let real_send (config : Config.t) messages =
         ("temperature", `Float 0.0);
       ]
   in
+  (uri, headers, body_json)
+
+let openai_extract body_str =
+  match Yojson.Safe.from_string body_str with
+  | exception exn ->
+      Error ("invalid JSON in model response: " ^ Exn.to_string exn)
+  | json -> (
+      try
+        let open Yojson.Safe.Util in
+        Ok
+          (json |> member "choices" |> index 0 |> member "message"
+         |> member "content" |> to_string)
+      with exn -> Error ("unexpected completion shape: " ^ Exn.to_string exn))
+
+(* --- Anthropic Messages (Kimi for coding) --- *)
+
+let anthropic_request (config : Config.t) messages =
+  let uri = Uri.of_string (config.api_base ^ "/v1/messages") in
+  let headers =
+    Cohttp.Header.of_list
+      [
+        ("Authorization", "Bearer " ^ config.api_key);
+        ("anthropic-version", "2023-06-01");
+        ("Content-Type", "application/json");
+      ]
+  in
+  let system =
+    List.filter_map messages ~f:(fun (m : Message.t) ->
+        if String.equal m.role "system" then Some m.content else None)
+    |> String.concat ~sep:"\n\n"
+  in
+  let turns =
+    List.filter messages ~f:(fun (m : Message.t) ->
+        not (String.equal m.role "system"))
+  in
+  let body_json =
+    `Assoc
+      [
+        ("model", `String config.model);
+        ("max_tokens", `Int 4096);
+        ("system", `String system);
+        ( "messages",
+          `List
+            (List.map turns ~f:(fun (m : Message.t) ->
+                 `Assoc
+                   [ ("role", `String m.role); ("content", `String m.content) ]))
+        );
+      ]
+  in
+  (uri, headers, body_json)
+
+let anthropic_extract body_str =
+  match Yojson.Safe.from_string body_str with
+  | exception exn ->
+      Error ("invalid JSON in model response: " ^ Exn.to_string exn)
+  | json -> (
+      try
+        let open Yojson.Safe.Util in
+        let blocks = json |> member "content" |> to_list in
+        match
+          List.find_map blocks ~f:(fun b ->
+              match member "text" b with `String s -> Some s | _ -> None)
+        with
+        | Some text -> Ok text
+        | None -> Error "no text block in model response"
+      with exn -> Error ("unexpected messages shape: " ^ Exn.to_string exn))
+
+(* --- shared HTTP plumbing --- *)
+
+let post_and_parse (uri, headers, body_json) ~extract =
   let body = Cohttp_lwt.Body.of_string (Yojson.Safe.to_string body_json) in
   Lwt.bind
     (Lwt.catch
@@ -153,9 +213,18 @@ let real_send (config : Config.t) messages =
               if code >= 400 then
                 Lwt.return (Error (Printf.sprintf "model API HTTP %d" code))
               else
-                match extract_content body_str with
+                match extract body_str with
                 | Error e -> Lwt.return (Error e)
                 | Ok content -> Lwt.return (parse_action content)))
+
+let real_send (config : Config.t) messages =
+  match config.protocol with
+  | Provider.Openai ->
+      post_and_parse (openai_request config messages) ~extract:openai_extract
+  | Provider.Anthropic ->
+      post_and_parse
+        (anthropic_request config messages)
+        ~extract:anthropic_extract
 
 let create ~config = { send = (fun messages -> real_send config messages) }
 let create_mock ~send = { send }
