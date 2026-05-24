@@ -222,12 +222,51 @@ let test_scaffold_creates_valid_plugin () =
 
 let test_check_rejects_invalid_manifest () =
   with_temp_dir "fp_agent_plugin_bad" (fun root ->
-      write
-        (Stdlib.Filename.concat root Plugin.manifest_file)
-        {|{"id":"bad id","tools":[]}|};
-      Alcotest.(check bool)
-        "invalid manifest rejected" true
-        (Result.is_error (Plugin.check root)))
+      let check_error name json substring =
+        let dir = Stdlib.Filename.concat root name in
+        mkdir_p dir;
+        write (Stdlib.Filename.concat dir Plugin.manifest_file) json;
+        match Plugin.check dir with
+        | Ok _ -> Alcotest.failf "expected invalid manifest: %s" name
+        | Error e ->
+            Alcotest.(check bool)
+              (name ^ " error") true
+              (String.is_substring e ~substring)
+      in
+      check_error "bad-id" {|{"id":"bad id","tools":[]}|} "plugin id";
+      check_error "empty-tools" {|{"id":"com.example.empty","tools":[]}|}
+        "at least one tool";
+      check_error "duplicate-tool"
+        {|{
+  "id":"com.example.duplicate",
+  "tools":[
+    {"name":"echo","kind":"read","description":"Echo","command":"sh echo.sh"},
+    {"name":"echo","kind":"read","description":"Echo","command":"sh echo.sh"}
+  ]
+}|}
+        "duplicate tool name: echo";
+      check_error "bad-timeout"
+        {|{
+  "id":"com.example.timeout",
+  "tools":[
+    {
+      "name":"echo",
+      "kind":"read",
+      "description":"Echo",
+      "command":"sh echo.sh",
+      "timeout":0
+    }
+  ]
+}|}
+        "timeout must be positive";
+      check_error "empty-command"
+        {|{
+  "id":"com.example.command",
+  "tools":[
+    {"name":"echo","kind":"read","description":"Echo","command":" "}
+  ]
+}|}
+        "missing string field 'command'")
 
 let test_plugin_schema_reaches_native_tool_request () =
   with_temp_dir "fp_agent_plugin_schema" (fun root ->

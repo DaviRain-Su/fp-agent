@@ -29,9 +29,11 @@ or binaries it needs.
 }
 ```
 
-Tool names must use letters, digits, `_`, or `-`; this keeps them compatible
-with native tool-calling APIs. `kind` is one of `read`, `write`, or `exec` and
-drives approval policy in `--confirm` mode.
+Tool names must be unique within a manifest and use letters, digits, `_`, or
+`-`; this keeps them compatible with native tool-calling APIs. `kind` is one of
+`read`, `write`, or `exec` and drives approval policy in `--confirm` mode.
+Optional `timeout`, `timeoutSec`, or `timeout_sec` values must be positive
+seconds.
 
 ## Runtime Contract
 

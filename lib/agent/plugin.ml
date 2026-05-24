@@ -72,6 +72,11 @@ let kind_of_string = function
   | other -> Error ("unknown tool kind: " ^ other)
 
 let parse_tool json =
+  let timeout_sec =
+    Option.value
+      (json_int json [ "timeoutSec"; "timeout_sec"; "timeout" ])
+      ~default:default_timeout_sec
+  in
   match
     ( req_string json "name",
       req_string json "kind",
@@ -83,6 +88,8 @@ let parse_tool json =
         ( validate_name ~what:"tool name" ~allow_dot:false tool_name,
           kind_of_string (String.lowercase kind) )
       with
+      | Ok (), Ok _ when timeout_sec <= 0 ->
+          Error (Printf.sprintf "tool '%s' timeout must be positive" tool_name)
       | Ok (), Ok tool_kind ->
           Ok
             {
@@ -92,14 +99,28 @@ let parse_tool json =
               tool_command;
               tool_input_schema =
                 json_member json [ "input_schema"; "inputSchema"; "parameters" ];
-              tool_timeout_sec =
-                Option.value
-                  (json_int json [ "timeoutSec"; "timeout_sec"; "timeout" ])
-                  ~default:default_timeout_sec;
+              tool_timeout_sec = timeout_sec;
             }
       | Error e, _ | _, Error e -> Error e)
   | Error e, _, _, _ | _, Error e, _, _ | _, _, Error e, _ | _, _, _, Error e ->
       Error e
+
+let duplicate_tool_name tools =
+  let rec loop seen = function
+    | [] -> None
+    | tool :: rest ->
+        if List.mem seen tool.tool_name ~equal:String.equal then
+          Some tool.tool_name
+        else loop (tool.tool_name :: seen) rest
+  in
+  loop [] tools
+
+let validate_tool_list tools =
+  if List.is_empty tools then Error "plugin manifest requires at least one tool"
+  else
+    match duplicate_tool_name tools with
+    | Some name -> Error ("duplicate tool name: " ^ name)
+    | None -> Ok tools
 
 let load_manifest dir =
   let path = Stdlib.Filename.concat dir manifest_file in
@@ -127,15 +148,18 @@ let load_manifest dir =
               in
               match tools with
               | Error e -> Error e
-              | Ok tools ->
-                  Ok
-                    {
-                      id;
-                      name = Option.value name ~default:id;
-                      version = Option.value version ~default:"0.0.0";
-                      dir;
-                      tools = List.rev tools;
-                    }))
+              | Ok tools -> (
+                  match validate_tool_list (List.rev tools) with
+                  | Error e -> Error e
+                  | Ok tools ->
+                      Ok
+                        {
+                          id;
+                          name = Option.value name ~default:id;
+                          version = Option.value version ~default:"0.0.0";
+                          dir;
+                          tools;
+                        })))
       | Error e, _, _, _ -> Error e
       | _, _, _, _ -> Error "plugin manifest requires a tools array")
 
