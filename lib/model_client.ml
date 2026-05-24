@@ -243,7 +243,12 @@ let post_and_parse (uri, headers, body_json) ~extract =
                 Cohttp.Code.code_of_status (Cohttp.Response.status resp)
               in
               if code >= 400 then
-                Lwt.return (Error (Printf.sprintf "model API HTTP %d" code))
+                let snippet =
+                  let s = String.strip body_str in
+                  if String.length s > 400 then String.prefix s 400 ^ "…" else s
+                in
+                Lwt.return
+                  (Error (Printf.sprintf "model API HTTP %d: %s" code snippet))
               else
                 match extract body_str with
                 | Error e -> Lwt.return (Error e)
