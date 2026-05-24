@@ -81,6 +81,8 @@ let run ~(config : Config.t) ~model_client ~event_log ~workspace ~task =
     | Tool_call tc ->
         goto Agent_state.Executing_tool;
         log (Event.Tool_call tc);
+        let permission = Policy.check ~workspace ~tool_call:tc in
+        log (Event.Policy_decision { tool_call = tc; permission });
         let result = Tool_runner.run ~workspace ~tool_call:tc in
         log (Event.Tool_result result);
         goto Agent_state.Observing_result;

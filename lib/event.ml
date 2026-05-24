@@ -4,6 +4,7 @@ open Ppx_yojson_conv_lib.Yojson_conv.Primitives
 type t =
   | User_message of { content : string }
   | Model_response of { action : Model_action.t }
+  | Policy_decision of { tool_call : Tool_call.t; permission : Permission.t }
   | Tool_call of Tool_call.t
   | Tool_result of Tool_result.t
   | State_transition of { from_state : Agent_state.t; to_state : Agent_state.t }

@@ -78,6 +78,9 @@ let test_edit_readme_e2e () =
       in
       (* user_message, transitions, model_response, tool_call, tool_result, ... *)
       Alcotest.(check bool) "log non-trivial" true (List.length lines >= 6);
+      Alcotest.(check bool)
+        "policy decision logged" true
+        (String.is_substring log ~substring:"Policy_decision");
       let idx substring =
         List.findi lines ~f:(fun _ l -> String.is_substring l ~substring)
         |> Option.map ~f:fst
