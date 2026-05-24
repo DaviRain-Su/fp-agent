@@ -1912,6 +1912,11 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
       selected_event_index = latest_event_index events;
     }
   in
+  let print_providers () =
+    List.iter
+      (Tui_command.providers_lines (command_context ()))
+      ~f:Stdlib.print_endline
+  in
   let print_status () =
     List.iter
       (Tui_command.status_lines (command_context ()))
@@ -2122,6 +2127,9 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
             loop ()
         | Command (Models, _) ->
             print_models ();
+            loop ()
+        | Command (Providers, _) ->
+            print_providers ();
             loop ()
         | Command (Provider, args) ->
             switch_provider args;

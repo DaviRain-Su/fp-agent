@@ -24,8 +24,8 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - Right/secondary inspector: selected event JSON, tool args/result, usage, and
   policy decision.
 - Footer command palette: `/model`, `/provider`, `/provider-add`, `/plugins`,
-  `/plugin-sdk`, `/tools`, `/new`, `/resume`, `/fork`, `/retry`, `/plan`,
-  `/review`, `/plan-set`, `/plan-add`, `/plan-update`, `/plan-clear`,
+  `/providers`, `/plugin-sdk`, `/tools`, `/new`, `/resume`, `/fork`, `/retry`,
+  `/plan`, `/review`, `/plan-set`, `/plan-add`, `/plan-update`, `/plan-clear`,
   `/compact`, `/status`, `/handoff`, `/instructions`, `/undo`, `/diff`.
 - Status strip: provider/model, session id, step count, token usage, current
   phase, and active plugin count.
@@ -76,6 +76,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   client, update the status strip, and subsequent task submissions use the
   switched runtime. `/model <id>` can also switch provider when the model id
   uniquely belongs to another configured provider.
+- `/providers` now renders a provider discovery panel with built-in and custom
+  profiles, protocol, API base, auth hint, models, and active model markers
+  while hiding API key values.
 - `/provider-add <name> <base-url> <model[,model...]>` saves a provider profile
   into `FP_AGENT_CONFIG` or `.fp-agent/providers.json`, including local-server
   compatibility flags, so custom OpenAI-compatible endpoints can be added from
@@ -208,9 +211,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   accepted commands and seeded command drafts to the timeline instead of
   silently dropping them.
 - The Notty TUI now executes safe read-only palette commands directly:
-  `/tools`, `/plugins`, `/models`, `/model`, `/sessions`, `/tree`, `/diff`,
-  `/status`, `/handoff`, `/instructions`, `/log`, and `/inspect` render their
-  output into the timeline without leaving fullscreen mode.
+  `/tools`, `/plugins`, `/models`, `/providers`, `/model`, `/sessions`, `/tree`,
+  `/diff`, `/status`, `/handoff`, `/instructions`, `/log`, and `/inspect`
+  render their output into the timeline without leaving fullscreen mode.
 - The REPL exposes the same inspector through `/inspect [index]`, so event-log
   review works even outside a full-screen TUI and can target historical events.
 - The REPL exposes plugin inspection through `/plugin <id|tool>`, showing

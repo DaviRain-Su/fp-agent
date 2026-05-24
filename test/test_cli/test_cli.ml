@@ -893,7 +893,8 @@ let test_repl_lists_and_switches_custom_provider_models () =
   let repl =
     run ~env
       ~stdin:
-        "/models\n\
+        "/providers\n\
+         /models\n\
          /model qwen36-rtx\n\
          /model-next\n\
          /model\n\
@@ -903,6 +904,12 @@ let test_repl_lists_and_switches_custom_provider_models () =
       [ fp_agent_bin () ]
   in
   assert_success "repl model commands" repl;
+  assert_contains "providers header" repl.stdout "Providers:";
+  assert_contains "providers include protocol" repl.stdout "protocol: openai";
+  assert_contains "providers include custom auth" repl.stdout
+    "auth: custom config (api key hidden)";
+  assert_contains "providers include custom base" repl.stdout
+    "api_base: http://101.132.142.56:18080/v1";
   assert_contains "models include deepseek" repl.stdout "deepseek";
   assert_contains "models include custom provider" repl.stdout "local-llm";
   assert_contains "models include custom model" repl.stdout "qwen36-rtx";

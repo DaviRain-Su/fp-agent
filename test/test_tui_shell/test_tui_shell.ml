@@ -55,6 +55,19 @@ let output command context =
   | Some lines -> String.concat lines ~sep:"\n"
   | None -> Alcotest.failf "command was not handled: %s" command
 
+let provider_config =
+  {|{
+  "local-llm": {
+    "baseUrl": "http://localhost/v1",
+    "api": "openai-completions",
+    "apiKey": "dummy",
+    "models": [
+      { "id": "qwen36-rtx", "name": "qwen36-rtx" }
+    ]
+  }
+}
+|}
+
 let test_prompt_submit () =
   let state =
     Tui_shell.create ()
@@ -347,6 +360,9 @@ let test_approval_input_mapping () =
 
 let test_tui_command_model_log_and_inspect () =
   with_temp_dir "fp_agent_tui_command_events" (fun root ->
+      let config_path = Stdlib.Filename.concat root "providers.json" in
+      write config_path provider_config;
+      Unix.putenv "FP_AGENT_CONFIG" config_path;
       let events =
         [
           Event.User_message { content = "inspect README" };
@@ -365,6 +381,19 @@ let test_tui_command_model_log_and_inspect () =
       Alcotest.(check bool)
         "model provider" true
         (String.is_substring model ~substring:"provider: local-llm");
+      let providers = output "/providers" context in
+      Alcotest.(check bool)
+        "providers command header" true
+        (String.is_substring providers ~substring:"[tui] /providers");
+      Alcotest.(check bool)
+        "providers lists deepseek" true
+        (String.is_substring providers ~substring:"deepseek");
+      Alcotest.(check bool)
+        "providers includes protocol" true
+        (String.is_substring providers ~substring:"protocol: openai");
+      Alcotest.(check bool)
+        "providers hides custom key" true
+        (String.is_substring providers ~substring:"api key hidden");
       Alcotest.(check bool)
         "model switch is stateful" true
         (Option.is_none (Tui_command.run context "/model qwen-coder"));

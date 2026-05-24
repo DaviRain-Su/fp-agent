@@ -79,6 +79,7 @@ dune exec -- fp-agent
 > /new               # start a fresh session without prior history
 > /resume <name>     # switch to a past session
 > /models            # list all configured provider/model ids
+> /providers         # list provider profiles, protocol, auth hint, and models
 > /model qwen36-rtx  # switch model inside the REPL
 > /model-next        # cycle current provider's configured models
 > /provider local-llm qwen36-rtx
@@ -107,8 +108,10 @@ Use `--tui` without a task to start the fullscreen interactive shell. It uses
 the same session log and command palette as one-shot TUI runs; Ctrl+Enter
 submits the current draft as either a slash command or an agent task. `/model
 <id>` can switch to another configured provider when the model id uniquely
-matches that provider; `/model-next` cycles the current provider's models; and
-`/provider <name> [model] [api-base]` updates the active runtime directly.
+matches that provider; `/providers` shows provider profiles, protocol, API
+base, auth status, and models without exposing API keys; `/model-next` cycles
+the current provider's models; and `/provider <name> [model] [api-base]`
+updates the active runtime directly.
 `/resume <dir>` and `/fork [index]` switch the active event-sourced session.
 
 Code review requests, including explicit `/review [focus]`, get a
@@ -258,9 +261,9 @@ copy. Two consequences:
   prompt draft for commands that need arguments. Typing while the palette is open
   filters commands by name or description, and accepted commands/drafts are
   echoed into the TUI timeline. Read-only commands such as `/tools`, `/plugins`,
-  `/models`, `/model`, `/usage`, `/status`, `/handoff`, `/instructions`,
-  `/plan`, `/diff`, `/log`, and `/inspect` render their results directly inside
-  the fullscreen view.
+  `/models`, `/providers`, `/model`, `/usage`, `/status`, `/handoff`,
+  `/instructions`, `/plan`, `/diff`, `/log`, and `/inspect` render their
+  results directly inside the fullscreen view.
 - **Plugin local runs** (`/plugin-run <dir> <tool> <json|@file>`) execute one
   plugin tool with inline JSON or a JSON args file from inside the REPL or
   fullscreen TUI, using the same validation and workspace guard as
@@ -283,6 +286,9 @@ copy. Two consequences:
 - **TUI model/provider switching** lets `/model <id>`, `/model-next`, and
   `/provider <name> [model] [api-base]` change the runtime used by later TUI
   task submissions.
+- **Provider discovery** (`/providers`) shows every built-in and custom
+  provider profile with protocol, API base, auth hint, models, and the active
+  model without exposing API keys.
 - **TUI session navigation** lets `/new`, `/resume <dir>`, and `/fork [index]`
   switch the active fullscreen session and continue writing to the selected
   event log.
@@ -429,7 +435,8 @@ dune exec -- fp-agent --add-provider local-llm \
 The implementation uses `baseUrl`, `api`, `apiKey`, `models[].id` or
 `models[].name`, `models[].maxTokens`, `compat.supportsUsageInStreaming`, and
 `compat.maxTokensField`. In the REPL, `/models` lists built-in providers plus
-custom providers from these files. `/model <id>` switches to the uniquely
+custom providers from these files, and `/providers` adds protocol, API base, and
+auth hints without printing API keys. `/model <id>` switches to the uniquely
 matching configured provider/model, while `/provider <name> <model>` keeps an
 explicit provider override available.
 

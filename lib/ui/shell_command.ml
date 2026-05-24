@@ -22,6 +22,7 @@ type id =
   | Model
   | ModelNext
   | Models
+  | Providers
   | Provider
   | ProviderAdd
   | Log
@@ -234,6 +235,14 @@ let specs =
       acceptance = Execute "/models";
     };
     {
+      id = Providers;
+      command = "/providers";
+      description = "list configured provider profiles";
+      aliases = [ "/provider-list" ];
+      palette = true;
+      acceptance = Execute "/providers";
+    };
+    {
       id = Provider;
       command = "/provider <name> [model] [api-base]";
       description = "switch provider catalog entry";
@@ -408,7 +417,7 @@ let group_of_id = function
   | PluginRemove | PluginSmoke | PluginRun | PluginDoctor | PluginSdk ->
       "Plugins"
   | Sessions | Tree | NewSession | Resume -> "Sessions"
-  | Model | ModelNext | Models | Provider | ProviderAdd -> "Models"
+  | Model | ModelNext | Models | Providers | Provider | ProviderAdd -> "Models"
   | Log | Inspect | Plan | PlanSet | PlanAdd | PlanUpdate | PlanClear | Usage
   | Status | Handoff | Instructions ->
       "Context"

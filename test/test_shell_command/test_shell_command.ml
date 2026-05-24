@@ -34,6 +34,10 @@ let test_parse () =
     (Shell_command.parse "/model-cycle");
   require_command "models" Shell_command.Models ""
     (Shell_command.parse "/models");
+  require_command "providers" Shell_command.Providers ""
+    (Shell_command.parse "/providers");
+  require_command "providers alias" Shell_command.Providers ""
+    (Shell_command.parse "/provider-list");
   require_command "new session" Shell_command.NewSession ""
     (Shell_command.parse "/new");
   require_command "usage" Shell_command.Usage "" (Shell_command.parse "/usage");
@@ -122,6 +126,10 @@ let test_metadata () =
   Alcotest.(check bool)
     "palette has provider" true
     (List.mem palette "/provider <name> [model] [api-base]" ~equal:String.equal);
+  Alcotest.(check bool)
+    "palette has providers" true
+    (List.mem palette "/providers" ~equal:String.equal);
+  Alcotest.(check string) "providers group" "Models" (entry "/providers").group;
   Alcotest.(check string)
     "provider group" "Models"
     (entry "/provider <name> [model] [api-base]").group;
@@ -254,6 +262,8 @@ let test_acceptance () =
     (Shell_command.accept (entry "/model [id]"));
   require_acceptance "model next execute" ("execute", "/model-next")
     (Shell_command.accept (entry "/model-next"));
+  require_acceptance "providers execute" ("execute", "/providers")
+    (Shell_command.accept (entry "/providers"));
   require_acceptance "usage execute" ("execute", "/usage")
     (Shell_command.accept (entry "/usage"));
   require_acceptance "plan execute" ("execute", "/plan")

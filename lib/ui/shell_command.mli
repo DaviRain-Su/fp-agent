@@ -20,6 +20,7 @@ type id =
   | Model
   | ModelNext
   | Models
+  | Providers
   | Provider
   | ProviderAdd
   | Log

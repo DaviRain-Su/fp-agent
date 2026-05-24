@@ -228,6 +228,60 @@ let current_model_lines ctx =
     "api_base: " ^ ctx.api_base;
   ]
 
+let protocol_label = function
+  | Provider.Openai -> "openai"
+  | Provider.Anthropic -> "anthropic"
+
+let env_presence name =
+  match Stdlib.Sys.getenv_opt name with
+  | Some value when not (String.is_empty value) -> "set"
+  | _ -> "missing"
+
+let provider_auth_line provider_name =
+  match Provider.of_string provider_name with
+  | Some provider ->
+      let key = Provider.key_env provider in
+      let suffix =
+        if Provider.requires_api_key provider then "" else " (optional)"
+      in
+      Printf.sprintf "    auth: %s=%s%s" key (env_presence key) suffix
+  | None -> "    auth: custom config (api key hidden)"
+
+let providers_lines ctx =
+  match Config.available_providers () with
+  | [] -> [ "(no configured providers; add providers to FP_AGENT_CONFIG)" ]
+  | providers ->
+      let provider_lines =
+        List.concat_map providers
+          ~f:(fun (entry : Config.provider_catalog_entry) ->
+            let provider_mark =
+              if String.equal entry.provider_name ctx.provider then "*" else " "
+            in
+            let models =
+              match entry.provider_models with
+              | [] -> "(no models configured)"
+              | models -> String.concat models ~sep:", "
+            in
+            let active =
+              if String.equal entry.provider_name ctx.provider then
+                [ "    active_model: " ^ ctx.model ]
+              else []
+            in
+            [
+              Printf.sprintf "%s %s" provider_mark entry.provider_name;
+              "    protocol: " ^ protocol_label entry.provider_protocol;
+              "    api_base: " ^ entry.provider_api_base;
+              provider_auth_line entry.provider_name;
+              "    models: " ^ models;
+            ]
+            @ active)
+      in
+      ("Providers:" :: provider_lines)
+      @ [
+          "Use /provider <name> [model] to switch, /model <id> to switch by \
+           model id, or /provider-add <name> <base-url> <model> to add one.";
+        ]
+
 let models_lines ctx =
   match Config.available_providers () with
   | [] -> [ "(no configured providers; add providers to FP_AGENT_CONFIG)" ]
@@ -550,6 +604,8 @@ let run ctx command =
   | Command (Model, "") ->
       Some (command_section command (current_model_lines ctx))
   | Command (Models, _) -> Some (command_section command (models_lines ctx))
+  | Command (Providers, _) ->
+      Some (command_section command (providers_lines ctx))
   | Command (Diff, _) -> Some (command_section command (diff_lines ctx))
   | Command (Log, _) -> Some (command_section command (log_lines ctx))
   | Command (Inspect, arg) ->
