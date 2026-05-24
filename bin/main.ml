@@ -1,3 +1,84 @@
 open! Base
+open Fp_agent
 
-let () = Stdlib.print_endline "Hello from fp-agent!"
+let print_summary (outcome : Agent_loop.outcome) =
+  Stdlib.print_newline ();
+  Stdlib.Printf.printf "=== %s (after %d step(s)) ===\n"
+    (String.uppercase (Agent_loop.status_to_string outcome.status))
+    outcome.steps;
+  Stdlib.print_endline outcome.summary
+
+(* Show what changed: prefer git diff --stat when the workspace is a repo. *)
+let print_changes root =
+  let git_dir = Stdlib.Filename.concat root ".git" in
+  if Stdlib.Sys.file_exists git_dir then
+    match
+      Shell.run
+        ~command:
+          (Printf.sprintf "git -C %s diff --stat" (Stdlib.Filename.quote root))
+        ~timeout_sec:30
+    with
+    | Ok { stdout; _ } when not (String.is_empty (String.strip stdout)) ->
+        Stdlib.print_newline ();
+        Stdlib.print_endline "--- git diff --stat ---";
+        Stdlib.print_string stdout
+    | _ -> ()
+
+let run_agent task workspace_opt max_steps_opt =
+  match Config.load () with
+  | Error e ->
+      Stdlib.prerr_endline ("config error: " ^ e);
+      1
+  | Ok base_config -> (
+      let workspace_root =
+        Option.value workspace_opt ~default:base_config.workspace_root
+      in
+      let max_steps =
+        Option.value max_steps_opt ~default:base_config.max_steps
+      in
+      let config = { base_config with workspace_root; max_steps } in
+      match Workspace.create ~root:workspace_root with
+      | Error e ->
+          Stdlib.prerr_endline ("workspace error: " ^ e);
+          1
+      | Ok workspace -> (
+          let root = Workspace.root workspace in
+          let session_dir = Session.create ~base_dir:root in
+          Stdlib.Printf.eprintf "session: %s\n%!" session_dir;
+          let event_log = Event_log.create ~session_dir in
+          let model_client = Model_client.create ~config in
+          let outcome =
+            Lwt_main.run
+              (Agent_loop.run ~config ~model_client ~event_log ~workspace ~task)
+          in
+          Event_log.close event_log;
+          print_summary outcome;
+          print_changes root;
+          match outcome.status with Agent_loop.Completed -> 0 | _ -> 1))
+
+let () =
+  let open Cmdliner in
+  let task =
+    Arg.(
+      required
+      & pos 0 (some string) None
+      & info [] ~docv:"TASK" ~doc:"The coding task for the agent to perform.")
+  in
+  let workspace =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "w"; "workspace" ] ~docv:"DIR"
+          ~doc:"Workspace root (defaults to the WORKSPACE_ROOT env var or cwd).")
+  in
+  let max_steps =
+    Arg.(
+      value
+      & opt (some int) None
+      & info [ "max-steps" ] ~docv:"N"
+          ~doc:"Maximum agent steps (defaults to the MAX_STEPS env var or 30).")
+  in
+  let doc = "A type-safe local CLI code agent harness." in
+  let term = Term.(const run_agent $ task $ workspace $ max_steps) in
+  let info = Cmd.info "fp-agent" ~version:"0.1.0" ~doc in
+  Stdlib.exit (Cmd.eval' (Cmd.v info term))

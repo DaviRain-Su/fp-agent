@@ -33,7 +33,8 @@ let run ~command ~timeout_sec =
           ignore (Unix.waitpid [] pid);
           `Timeout)
         else (
-          ignore (Unix.select [] [] [] 0.02 : _ * _ * _);
+          (try ignore (Unix.select [] [] [] 0.02 : _ * _ * _)
+           with Unix.Unix_error (Unix.EINTR, _, _) -> ());
           wait ())
     | _, status -> `Done status
     | exception Unix.Unix_error (Unix.EINTR, _, _) -> wait ()
