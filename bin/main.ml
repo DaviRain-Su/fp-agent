@@ -836,7 +836,13 @@ let print_tools () =
   List.iter (Tool.all ()) ~f:(fun (tool : Tool.t) ->
       Stdlib.Printf.printf "  %-18s %-5s %s\n" tool.name
         (tool_kind_label tool.kind)
-        tool.description)
+        tool.description);
+  let conflicts = Plugin.tool_conflicts () in
+  if not (List.is_empty conflicts) then (
+    Stdlib.print_endline "Plugin tool conflicts:";
+    List.iter conflicts ~f:(fun (conflict : Plugin.tool_conflict) ->
+        Stdlib.Printf.printf "  - %s from %s skipped; already provided by %s\n"
+          conflict.tool_name conflict.plugin_id conflict.existing_owner))
 
 let print_tool_detail query =
   Tool_loader.register_all ();
@@ -856,6 +862,16 @@ let print_plugin_errors label errors =
       List.iter errors ~f:(fun (error : Plugin.load_error) ->
           Stdlib.Printf.printf "  - %s: %s\n" error.dir error.message)
 
+let print_plugin_conflicts conflicts =
+  match conflicts with
+  | [] -> ()
+  | conflicts ->
+      Stdlib.print_endline "Plugin tool conflicts:";
+      List.iter conflicts ~f:(fun (conflict : Plugin.tool_conflict) ->
+          Stdlib.Printf.printf
+            "  - %s from %s skipped; already provided by %s\n"
+            conflict.tool_name conflict.plugin_id conflict.existing_owner)
+
 let print_plugins () =
   let discovery = Plugin.discover () in
   (match discovery.manifests with
@@ -868,7 +884,8 @@ let print_plugins () =
               Stdlib.Printf.printf "  - %-18s %-5s %s\n" tool.tool_name
                 (tool_kind_label tool.tool_kind)
                 tool.tool_description)));
-  print_plugin_errors "Invalid plugins:" discovery.errors
+  print_plugin_errors "Invalid plugins:" discovery.errors;
+  print_plugin_conflicts (Plugin.tool_conflicts ())
 
 let plugin_matches query (plugin : Plugin.manifest) =
   String.equal plugin.id query
@@ -1246,7 +1263,8 @@ let print_installed_plugins () =
   | plugins ->
       Stdlib.print_endline "installed plugins:";
       List.iter plugins ~f:print_plugin_summary);
-  print_plugin_errors "Invalid installed plugins:" discovery.errors
+  print_plugin_errors "Invalid installed plugins:" discovery.errors;
+  print_plugin_conflicts (Plugin.installed_tool_conflicts ())
 
 let parse_json_arg json =
   match Yojson.Safe.from_string json with

@@ -287,6 +287,43 @@ let test_discover_reports_invalid_manifests () =
         "legacy manifest helper ignores invalid" 1
         (List.length (Plugin.manifests ())))
 
+let test_tool_conflicts_report_collisions () =
+  with_temp_dir "fp_agent_plugin_conflicts" (fun root ->
+      let plugin_root = Stdlib.Filename.concat root "plugins" in
+      let builtin_conflict = Stdlib.Filename.concat plugin_root "builtin" in
+      let first = Stdlib.Filename.concat plugin_root "first" in
+      let second = Stdlib.Filename.concat plugin_root "second" in
+      mkdir_p builtin_conflict;
+      mkdir_p first;
+      mkdir_p second;
+      Unix.putenv "FP_AGENT_PLUGIN_PATH" plugin_root;
+      Unix.putenv "FP_AGENT_PLUGIN_HOME" (Stdlib.Filename.concat root "home");
+      write_plugin builtin_conflict ~id:"com.example.builtin_conflict"
+        ~tool_name:"read_file" ~kind:"read";
+      write_plugin first ~id:"com.example.first" ~tool_name:"shared_echo"
+        ~kind:"read";
+      write_plugin second ~id:"com.example.second" ~tool_name:"shared_echo"
+        ~kind:"read";
+      let conflicts = Plugin.tool_conflicts () in
+      Alcotest.(check int) "conflict count" 2 (List.length conflicts);
+      let joined =
+        conflicts
+        |> List.map ~f:(fun (conflict : Plugin.tool_conflict) ->
+            String.concat ~sep:"|"
+              [
+                conflict.plugin_id; conflict.tool_name; conflict.existing_owner;
+              ])
+        |> String.concat ~sep:"\n"
+      in
+      Alcotest.(check bool)
+        "reports builtin conflict" true
+        (String.is_substring joined
+           ~substring:"com.example.builtin_conflict|read_file|built-in tool");
+      Alcotest.(check bool)
+        "reports plugin conflict" true
+        (String.is_substring joined
+           ~substring:"com.example.second|shared_echo|plugin com.example.first"))
+
 let test_run_tool_for_plugin_development () =
   with_temp_dir "fp_agent_plugin_run_tool" (fun root ->
       let plugin_dir = Stdlib.Filename.concat root "plugin" in
@@ -541,6 +578,8 @@ let () =
             test_install_plugin_can_replace_existing;
           Alcotest.test_case "discover_invalid_plugin" `Quick
             test_discover_reports_invalid_manifests;
+          Alcotest.test_case "tool_conflicts" `Quick
+            test_tool_conflicts_report_collisions;
           Alcotest.test_case "run_tool" `Quick
             test_run_tool_for_plugin_development;
           Alcotest.test_case "run_tool_schema_validation" `Quick

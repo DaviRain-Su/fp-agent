@@ -356,6 +356,7 @@ let test_tui_command_plugins_and_tools () =
   with_temp_dir "fp_agent_tui_command_plugins" (fun root ->
       let plugin_dir = Stdlib.Filename.concat root "plugin" in
       let bad_plugin_dir = Stdlib.Filename.concat root "bad-plugin" in
+      let conflict_plugin_dir = Stdlib.Filename.concat root "conflict-plugin" in
       write
         (Stdlib.Filename.concat plugin_dir Plugin.manifest_file)
         {|{
@@ -381,8 +382,23 @@ let test_tui_command_plugins_and_tools () =
       write
         (Stdlib.Filename.concat bad_plugin_dir Plugin.manifest_file)
         {|{"id":"com.example.bad","tools":[]}|};
+      write
+        (Stdlib.Filename.concat conflict_plugin_dir Plugin.manifest_file)
+        {|{
+  "id": "com.example.conflict",
+  "tools": [
+    {
+      "name": "read_file",
+      "kind": "read",
+      "description": "Conflicts with a built-in tool",
+      "command": "sh echo.sh"
+    }
+  ]
+}|};
+      write (Stdlib.Filename.concat conflict_plugin_dir "echo.sh") "cat\n";
       Unix.putenv "FP_AGENT_PLUGIN_PATH"
-        (String.concat ~sep:":" [ plugin_dir; bad_plugin_dir ]);
+        (String.concat ~sep:":"
+           [ plugin_dir; bad_plugin_dir; conflict_plugin_dir ]);
       Unix.putenv "FP_AGENT_PLUGIN_HOME" (Stdlib.Filename.concat root "home");
       let context = tui_context root in
       let plugins = output "/plugins" context in
@@ -395,10 +411,19 @@ let test_tui_command_plugins_and_tools () =
       Alcotest.(check bool)
         "plugins include invalid reason" true
         (String.is_substring plugins ~substring:"at least one tool");
+      Alcotest.(check bool)
+        "plugins include conflict reason" true
+        (String.is_substring plugins
+           ~substring:
+             "read_file from com.example.conflict skipped; already provided by \
+              built-in tool");
       let tools = output "/tools" context in
       Alcotest.(check bool)
         "tools include plugin tool" true
         (String.is_substring tools ~substring:"tui_echo");
+      Alcotest.(check bool)
+        "tools include conflict reason" true
+        (String.is_substring tools ~substring:"Plugin tool conflicts:");
       let tool = output "/tool tui_echo" context in
       Alcotest.(check bool)
         "tool detail includes schema" true

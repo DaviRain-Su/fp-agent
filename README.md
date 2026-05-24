@@ -123,7 +123,8 @@ Plugins are discovered from `FP_AGENT_PLUGIN_PATH`, `.fp-agent/plugins`, and
 `FP_AGENT_PLUGIN_HOME` / `~/.local/share/fp-agent/plugins`. See
 `docs/plugins.md` for the SDK contract. `/plugins` and `--list-plugins` also
 surface invalid manifest diagnostics instead of silently hiding broken plugin
-directories.
+directories, and report tool-name conflicts when a plugin would shadow a
+built-in or earlier discovered plugin tool.
 
 ### Event-sourced sessions and forking
 

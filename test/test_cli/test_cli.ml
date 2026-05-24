@@ -174,6 +174,22 @@ let test_plugin_lifecycle_cli () =
   write_file
     (Stdlib.Filename.concat invalid_installed "fp-agent-plugin.json")
     {|{"id":"com.example.invalid","tools":[]}|};
+  let conflict_installed = Stdlib.Filename.concat home "conflict-plugin" in
+  mkdir_p conflict_installed;
+  write_file
+    (Stdlib.Filename.concat conflict_installed "fp-agent-plugin.json")
+    {|{
+  "id": "com.example.installed_conflict",
+  "tools": [
+    {
+      "name": "read_file",
+      "kind": "read",
+      "description": "Conflicts with a built-in tool",
+      "command": "sh echo.sh"
+    }
+  ]
+}|};
+  write_file (Stdlib.Filename.concat conflict_installed "echo.sh") "cat\n";
   let listed = run ~env [ bin; "--list-plugins" ] in
   assert_success "list plugins after install" listed;
   assert_contains "list plugin id" listed.stdout "local.my-plugin";
@@ -181,6 +197,10 @@ let test_plugin_lifecycle_cli () =
   assert_contains "list invalid plugin section" listed.stdout
     "Invalid installed plugins:";
   assert_contains "list invalid plugin error" listed.stdout "at least one tool";
+  assert_contains "list conflict section" listed.stdout "Plugin tool conflicts:";
+  assert_contains "list conflict owner" listed.stdout
+    "read_file from com.example.installed_conflict skipped; already provided \
+     by built-in tool";
   let removed = run ~env [ bin; "--remove-plugin"; "local.my-plugin" ] in
   assert_success "remove plugin" removed;
   assert_contains "remove output" removed.stdout "removed plugin:";
@@ -264,12 +284,14 @@ let test_repl_lists_dynamic_plugin_tools () =
   let root = tmp_dir "fp-agent-cli-repl-plugin-" in
   let plugin_dir = Stdlib.Filename.concat root "my-plugin" in
   let bad_plugin_dir = Stdlib.Filename.concat root "bad-plugin" in
+  let conflict_plugin_dir = Stdlib.Filename.concat root "conflict-plugin" in
   let bin = fp_agent_bin () in
   let env =
     isolated_env root
     @ [
         ( "FP_AGENT_PLUGIN_PATH",
-          String.concat ~sep:":" [ plugin_dir; bad_plugin_dir ] );
+          String.concat ~sep:":"
+            [ plugin_dir; bad_plugin_dir; conflict_plugin_dir ] );
       ]
   in
   assert_success "new plugin" (run ~env [ bin; "--new-plugin"; plugin_dir ]);
@@ -277,6 +299,21 @@ let test_repl_lists_dynamic_plugin_tools () =
   write_file
     (Stdlib.Filename.concat bad_plugin_dir "fp-agent-plugin.json")
     {|{"id":"com.example.bad","tools":[]}|};
+  mkdir_p conflict_plugin_dir;
+  write_file
+    (Stdlib.Filename.concat conflict_plugin_dir "fp-agent-plugin.json")
+    {|{
+  "id": "com.example.conflict",
+  "tools": [
+    {
+      "name": "read_file",
+      "kind": "read",
+      "description": "Conflicts with a built-in tool",
+      "command": "sh echo.sh"
+    }
+  ]
+}|};
+  write_file (Stdlib.Filename.concat conflict_plugin_dir "echo.sh") "cat\n";
   let repl =
     run ~env
       ~stdin:
@@ -296,6 +333,11 @@ let test_repl_lists_dynamic_plugin_tools () =
   assert_contains "plugins report invalid section" repl.stdout
     "Invalid plugins:";
   assert_contains "plugins report invalid error" repl.stdout "at least one tool";
+  assert_contains "plugins report conflict section" repl.stdout
+    "Plugin tool conflicts:";
+  assert_contains "plugins report conflict owner" repl.stdout
+    "read_file from com.example.conflict skipped; already provided by built-in \
+     tool";
   assert_contains "plugin detail id" repl.stdout "id: local.my-plugin";
   assert_contains "plugin detail tool" repl.stdout "- hello_world";
   assert_contains "plugin detail command" repl.stdout "command: sh hello.sh";

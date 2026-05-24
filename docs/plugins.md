@@ -85,7 +85,10 @@ Use the REPL command:
 `/plugins` reports both loaded plugins and invalid manifests discovered on the
 same search path. Invalid plugins are not registered as tools, but their
 directory and validation error are shown so extension developers can fix a bad
-install without guessing why a tool disappeared.
+install without guessing why a tool disappeared. It also reports tool-name
+conflicts when a plugin tries to reuse a built-in tool name or a name already
+claimed by an earlier discovered plugin; the conflicting plugin tool is skipped
+while the rest of the valid plugin remains visible.
 
 `/plugin <plugin-id|tool-name>` prints the manifest details for one plugin:
 directory, version, tool kind, command, timeout, and input schema.
@@ -151,7 +154,8 @@ dune exec -- fp-agent --list-plugins
 
 The list command also reports invalid installed manifests under
 `Invalid installed plugins:` while continuing to show any valid installed
-plugins.
+plugins. Installed plugin tool-name conflicts are reported under
+`Plugin tool conflicts:`.
 
 Remove an installed plugin by id:
 

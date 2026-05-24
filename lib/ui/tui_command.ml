@@ -43,11 +43,21 @@ let shell_lines ~command =
 
 let tools_lines () =
   Tool_loader.register_all ();
-  "Available tools:"
-  :: List.map (Tool.all ()) ~f:(fun (tool : Tool.t) ->
-      Printf.sprintf "  %-18s %-5s %s" tool.name
-        (tool_kind_label tool.kind)
-        tool.description)
+  let tool_lines =
+    "Available tools:"
+    :: List.map (Tool.all ()) ~f:(fun (tool : Tool.t) ->
+        Printf.sprintf "  %-18s %-5s %s" tool.name
+          (tool_kind_label tool.kind)
+          tool.description)
+  in
+  match Plugin.tool_conflicts () with
+  | [] -> tool_lines
+  | conflicts ->
+      tool_lines
+      @ [ ""; "Plugin tool conflicts:" ]
+      @ List.map conflicts ~f:(fun (conflict : Plugin.tool_conflict) ->
+          Printf.sprintf "  - %s from %s skipped; already provided by %s"
+            conflict.tool_name conflict.plugin_id conflict.existing_owner)
 
 let tool_detail_lines query =
   Tool_loader.register_all ();
@@ -76,15 +86,32 @@ let plugins_lines () =
         |> List.drop_last |> Option.value ~default:[]
   in
   match discovery.errors with
-  | [] -> manifest_lines
+  | [] -> (
+      match Plugin.tool_conflicts () with
+      | [] -> manifest_lines
+      | conflicts ->
+          manifest_lines
+          @ [ ""; "Plugin tool conflicts:" ]
+          @ List.map conflicts ~f:(fun (conflict : Plugin.tool_conflict) ->
+              Printf.sprintf "  - %s from %s skipped; already provided by %s"
+                conflict.tool_name conflict.plugin_id conflict.existing_owner))
   | errors ->
       let error_lines =
         "Invalid plugins:"
         :: List.map errors ~f:(fun (error : Plugin.load_error) ->
             Printf.sprintf "  - %s: %s" error.dir error.message)
       in
-      if List.is_empty manifest_lines then error_lines
-      else manifest_lines @ [ "" ] @ error_lines
+      let conflict_lines =
+        match Plugin.tool_conflicts () with
+        | [] -> []
+        | conflicts ->
+            "" :: "Plugin tool conflicts:"
+            :: List.map conflicts ~f:(fun (conflict : Plugin.tool_conflict) ->
+                Printf.sprintf "  - %s from %s skipped; already provided by %s"
+                  conflict.tool_name conflict.plugin_id conflict.existing_owner)
+      in
+      if List.is_empty manifest_lines then error_lines @ conflict_lines
+      else manifest_lines @ [ "" ] @ error_lines @ conflict_lines
 
 let plugin_matches query (plugin : Plugin.manifest) =
   String.equal plugin.id query

@@ -21,6 +21,13 @@ type manifest = {
 type load_error = { dir : string; message : string }
 type discovery = { manifests : manifest list; errors : load_error list }
 
+type tool_conflict = {
+  dir : string;
+  plugin_id : string;
+  tool_name : string;
+  existing_owner : string;
+}
+
 let manifest_file = "fp-agent-plugin.json"
 let supported_sdk_version = 1
 let default_timeout_sec = 60
@@ -232,7 +239,7 @@ let kind_of_string = function
   | "exec" | "execute" -> Ok Tool.Exec
   | other -> Error ("unknown tool kind: " ^ other)
 
-let parse_tool json =
+let parse_tool json : (plugin_tool, string) Result.t =
   let timeout_sec =
     Option.value
       (json_int json [ "timeoutSec"; "timeout_sec"; "timeout" ])
@@ -266,8 +273,9 @@ let parse_tool json =
   | Error e, _, _, _ | _, Error e, _, _ | _, _, Error e, _ | _, _, _, Error e ->
       Error e
 
-let duplicate_tool_name tools =
-  let rec loop seen = function
+let duplicate_tool_name (tools : plugin_tool list) =
+  let rec loop (seen : string list) (tools : plugin_tool list) =
+    match tools with
     | [] -> None
     | tool :: rest ->
         if List.mem seen tool.tool_name ~equal:String.equal then
@@ -276,7 +284,7 @@ let duplicate_tool_name tools =
   in
   loop [] tools
 
-let validate_tool_list tools =
+let validate_tool_list (tools : plugin_tool list) =
   if List.is_empty tools then Error "plugin manifest requires at least one tool"
   else
     match duplicate_tool_name tools with
@@ -362,6 +370,7 @@ let dirs_in_root root =
     match Stdlib.Sys.readdir root with
     | exception _ -> []
     | entries ->
+        Array.sort entries ~compare:String.compare;
         Array.to_list entries
         |> List.filter_map ~f:(fun name ->
             let dir = Stdlib.Filename.concat root name in
@@ -388,12 +397,46 @@ let discover () =
 
 let manifests () = (discover ()).manifests
 
+let builtin_tool_owners () =
+  List.fold Builtin_tools.tools
+    ~init:(Map.empty (module String))
+    ~f:(fun owners tool ->
+      Map.set owners ~key:tool.Tool.name ~data:"built-in tool")
+
+let tool_conflicts_of_manifests manifests =
+  let register_manifest (owners, conflicts) (manifest : manifest) =
+    List.fold manifest.tools ~init:(owners, conflicts)
+      ~f:(fun (owners, conflicts) tool ->
+        match Map.find owners tool.tool_name with
+        | Some existing_owner ->
+            ( owners,
+              {
+                dir = manifest.dir;
+                plugin_id = manifest.id;
+                tool_name = tool.tool_name;
+                existing_owner;
+              }
+              :: conflicts )
+        | None ->
+            ( Map.set owners ~key:tool.tool_name ~data:("plugin " ^ manifest.id),
+              conflicts ))
+  in
+  let _, conflicts =
+    List.fold manifests ~init:(builtin_tool_owners (), []) ~f:register_manifest
+  in
+  List.rev conflicts
+
+let tool_conflicts () = tool_conflicts_of_manifests (manifests ())
+
 let installed_discovery () =
   match install_home () with
   | None -> { manifests = []; errors = [] }
   | Some home -> dirs_in_root home |> discover_dirs
 
 let installed_manifests () = (installed_discovery ()).manifests
+
+let installed_tool_conflicts () =
+  tool_conflicts_of_manifests (installed_manifests ())
 
 let output_of_result result =
   let stdout = String.strip result.Shell.stdout in

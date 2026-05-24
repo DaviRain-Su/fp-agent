@@ -19,6 +19,13 @@ type manifest = {
 type load_error = { dir : string; message : string }
 type discovery = { manifests : manifest list; errors : load_error list }
 
+type tool_conflict = {
+  dir : string;
+  plugin_id : string;
+  tool_name : string;
+  existing_owner : string;
+}
+
 val manifest_file : string
 val supported_sdk_version : int
 
@@ -32,6 +39,13 @@ val discover : unit -> discovery
 val manifests : unit -> manifest list
 (** Discover plugin manifests from [FP_AGENT_PLUGIN_PATH], [.fp-agent/plugins],
     and the install home. *)
+
+val tool_conflicts : unit -> tool_conflict list
+(** Return plugin tools that cannot be registered because their name is already
+    owned by a built-in tool or by an earlier discovered plugin. *)
+
+val installed_tool_conflicts : unit -> tool_conflict list
+(** Return registration conflicts among installed plugin manifests. *)
 
 val register_all : unit -> unit
 (** Register all discovered plugin tools. Built-in tools keep precedence when a

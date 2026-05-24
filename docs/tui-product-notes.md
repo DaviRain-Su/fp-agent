@@ -90,6 +90,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - Plugin discovery now keeps diagnostics for invalid manifests. `/plugins` and
   `--list-plugins` show broken plugin directories and validation errors while
   still registering every valid plugin found on the same search path.
+- Plugin tool-name conflicts are now reported in CLI/TUI tool and plugin
+  surfaces. Built-ins and earlier discovered plugins keep precedence, while the
+  skipped plugin/tool pair is shown to the developer.
 - The command palette controller now distinguishes close from accept: Enter
   returns the highlighted command entry, giving the future fullscreen shell a
   tested command-dispatch point while preserving the current overlay behavior.
