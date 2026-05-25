@@ -156,10 +156,10 @@ shown in `/plugins` and `/plugin`, passed through to SDK wrappers, and used by
 `--confirm` to require approval for sensitive plugin permissions such as
 network, shell, env, secrets, tokens, or workspace writes. `/plugin` also shows
 the exact approval reason that would appear before a model-triggered call.
-The Python scaffold includes a local `fp_agent_sdk.py` helper that reads JSON
-args, constructs a `ToolContext` from those env vars, and serializes handler
-results, so plugin authors can start from a handler instead of raw stdin/stdout
-plumbing.
+The Python and Node.js scaffolds include local `fp_agent_sdk.py` /
+`fp_agent_sdk.mjs` helpers that read JSON args, construct a `ToolContext` from
+those env vars, and serialize handler results, so plugin authors can start from
+a handler instead of raw stdin/stdout plumbing.
 
 ```sh
 export FP_AGENT_PLUGIN_PATH=$PWD/examples/plugins/echo
@@ -189,6 +189,7 @@ dune exec -- fp-agent --new-plugin my-plugin --plugin-id com.example.my_plugin
 dune exec -- fp-agent --new-plugin my-plugin --plugin-tool-name my_tool
 dune exec -- fp-agent --new-plugin my-plugin --plugin-kind exec
 dune exec -- fp-agent --new-plugin my-plugin --plugin-template python
+dune exec -- fp-agent --new-plugin my-plugin --plugin-template node
 dune exec -- fp-agent --dev-plugin my-plugin --replace-plugin
 dune exec -- fp-agent --check-plugin my-plugin
 dune exec -- fp-agent --smoke-plugin my-plugin
@@ -389,7 +390,7 @@ Options:
 - `--plugin-kind KIND` / `--tool-kind KIND` — initial tool kind for
   `--new-plugin`: `read`, `write`, or `exec`
 - `--plugin-template NAME` / `--template NAME` — initial scaffold template for
-  `--new-plugin`: `shell` or `python`
+  `--new-plugin`: `shell`, `python`, or `node`
 - `--check-plugin DIR|PACKAGE` — validate a plugin directory or package and
   show install-time package metadata, then exit
 - `--smoke-plugin DIR` — validate a plugin directory and run each tool with

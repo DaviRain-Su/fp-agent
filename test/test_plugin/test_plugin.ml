@@ -20,6 +20,15 @@ let write path content =
   Stdlib.Out_channel.with_open_bin path (fun oc ->
       Stdlib.Out_channel.output_string oc content)
 
+let command_available command =
+  match
+    Shell.run
+      ~command:(Printf.sprintf "command -v %s >/dev/null 2>&1" command)
+      ~timeout_sec:5
+  with
+  | Ok { exit_code = 0; _ } -> true
+  | Ok _ | Error _ -> false
+
 let with_temp_dir prefix f =
   let root = Stdlib.Filename.temp_dir prefix "" in
   Exn.protect ~f:(fun () -> f root) ~finally:(fun () -> rm_rf root)
@@ -1107,6 +1116,98 @@ let test_scaffold_creates_python_template () =
                     | `String value -> Some value
                     | _ -> None))))
 
+let test_scaffold_creates_node_template () =
+  with_temp_dir "fp_agent_plugin_scaffold_node" (fun root ->
+      let dir = Stdlib.Filename.concat root "node-starter" in
+      match
+        Plugin.scaffold ~id:"com.example.node_scaffold" ~tool_name:"node_echo"
+          ~kind:"read" ~template:"js" dir
+      with
+      | Error e -> Alcotest.failf "node scaffold failed: %s" e
+      | Ok created -> (
+          Alcotest.(check string) "created dir" dir created;
+          Alcotest.(check bool)
+            "node file exists" true
+            (Stdlib.Sys.file_exists (Stdlib.Filename.concat dir "main.mjs"));
+          Alcotest.(check bool)
+            "node sdk file exists" true
+            (Stdlib.Sys.file_exists
+               (Stdlib.Filename.concat dir "fp_agent_sdk.mjs"));
+          Alcotest.(check bool)
+            "python file omitted" false
+            (Stdlib.Sys.file_exists (Stdlib.Filename.concat dir "main.py"));
+          let main_mjs =
+            Stdlib.In_channel.with_open_bin
+              (Stdlib.Filename.concat dir "main.mjs")
+              Stdlib.In_channel.input_all
+          in
+          Alcotest.(check bool)
+            "main imports sdk" true
+            (String.is_substring main_mjs
+               ~substring:{|import { runJsonTool } from "./fp_agent_sdk.mjs"|});
+          let sdk_mjs =
+            Stdlib.In_channel.with_open_bin
+              (Stdlib.Filename.concat dir "fp_agent_sdk.mjs")
+              Stdlib.In_channel.input_all
+          in
+          Alcotest.(check bool)
+            "sdk exposes context" true
+            (String.is_substring sdk_mjs ~substring:"export class ToolContext");
+          Alcotest.(check bool)
+            "sdk reads args" true
+            (String.is_substring sdk_mjs
+               ~substring:"export async function readArgs");
+          let readme =
+            Stdlib.In_channel.with_open_bin
+              (Stdlib.Filename.concat dir "README.md")
+              Stdlib.In_channel.input_all
+          in
+          Alcotest.(check bool)
+            "readme documents node template" true
+            (String.is_substring readme ~substring:"Initial template: `node`");
+          Alcotest.(check bool)
+            "readme documents node command" true
+            (String.is_substring readme
+               ~substring:"Generated command: `node main.mjs`");
+          Alcotest.(check bool)
+            "readme documents sdk file" true
+            (String.is_substring readme ~substring:"`fp_agent_sdk.mjs`");
+          match Plugin.check dir with
+          | Error e -> Alcotest.failf "node scaffold check failed: %s" e
+          | Ok manifest -> (
+              let tool = Option.value_exn (List.hd manifest.tools) in
+              Alcotest.(check string)
+                "node command" "node main.mjs" tool.tool_command;
+              Alcotest.(check string) "node tool" "node_echo" tool.tool_name;
+              if command_available "node" then
+                match
+                  Plugin.run_tool ~dir ~tool_name:"node_echo"
+                    ~workspace:(workspace root)
+                    ~args:(`Assoc [ ("message", `String "hi") ])
+                with
+                | Error e -> Alcotest.failf "node run failed: %s" e
+                | Ok (Tool_result.Error { message }) ->
+                    Alcotest.failf "node tool error: %s" message
+                | Ok (Tool_result.Success { output }) ->
+                    let json = Yojson.Safe.from_string output in
+                    let member = Yojson.Safe.Util.member in
+                    Alcotest.(check (option string))
+                      "node sdk greeting"
+                      (Some "hello from fp-agent node plugin")
+                      (match member "greeting" json with
+                      | `String value -> Some value
+                      | _ -> None);
+                    Alcotest.(check (option string))
+                      "node sdk tool" (Some "node_echo")
+                      (match member "tool" json with
+                      | `String value -> Some value
+                      | _ -> None);
+                    Alcotest.(check (option string))
+                      "node sdk echoed input" (Some "hi")
+                      (match member "echo" json |> member "message" with
+                      | `String value -> Some value
+                      | _ -> None))))
+
 let test_scaffold_template_catalog () =
   let templates = Plugin.scaffold_templates () in
   let template_ids =
@@ -1118,6 +1219,9 @@ let test_scaffold_template_catalog () =
   Alcotest.(check bool)
     "python template listed" true
     (List.mem template_ids "python" ~equal:String.equal);
+  Alcotest.(check bool)
+    "node template listed" true
+    (List.mem template_ids "node" ~equal:String.equal);
   let python =
     Option.value_exn
       (List.find templates ~f:(fun template ->
@@ -1130,7 +1234,19 @@ let test_scaffold_template_catalog () =
     (List.mem python.template_aliases "py" ~equal:String.equal);
   Alcotest.(check bool)
     "python sdk file" true
-    (List.mem python.template_files "fp_agent_sdk.py" ~equal:String.equal)
+    (List.mem python.template_files "fp_agent_sdk.py" ~equal:String.equal);
+  let node =
+    Option.value_exn
+      (List.find templates ~f:(fun template ->
+           String.equal template.Plugin.template_id "node"))
+  in
+  Alcotest.(check string) "node command" "node main.mjs" node.template_command;
+  Alcotest.(check bool)
+    "node aliases" true
+    (List.mem node.template_aliases "js" ~equal:String.equal);
+  Alcotest.(check bool)
+    "node sdk file" true
+    (List.mem node.template_files "fp_agent_sdk.mjs" ~equal:String.equal)
 
 let test_manifest_schema_contract () =
   let schema = Plugin.manifest_schema () in
@@ -1327,6 +1443,8 @@ let () =
             test_scaffold_creates_valid_plugin;
           Alcotest.test_case "scaffold_python_template" `Quick
             test_scaffold_creates_python_template;
+          Alcotest.test_case "scaffold_node_template" `Quick
+            test_scaffold_creates_node_template;
           Alcotest.test_case "scaffold_template_catalog" `Quick
             test_scaffold_template_catalog;
           Alcotest.test_case "manifest_schema_contract" `Quick

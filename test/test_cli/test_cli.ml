@@ -111,6 +111,8 @@ let test_plugin_lifecycle_cli () =
     "manifest_file: fp-agent-plugin.json";
   assert_contains "plugin sdk template" sdk.stdout
     "python (aliases: python3, py)";
+  assert_contains "plugin sdk node template" sdk.stdout
+    "node (aliases: javascript, js)";
   assert_contains "plugin sdk workflow" sdk.stdout
     "/plugin-dev --replace my-plugin";
   let schema = run ~env [ bin; "--plugin-schema" ] in
@@ -556,6 +558,35 @@ let test_new_plugin_custom_id_cli () =
   assert_contains "python manifest command" python_manifest "python3 main.py";
   let checked_python = run ~env [ bin; "--check-plugin"; python_dir ] in
   assert_success "check python scaffold" checked_python;
+  let node_dir = Stdlib.Filename.concat root "node-plugin" in
+  let node_created =
+    run ~env
+      [
+        bin;
+        "--new-plugin";
+        node_dir;
+        "--plugin-tool-name";
+        "node_echo";
+        "--plugin-template";
+        "node";
+      ]
+  in
+  assert_success "new plugin node template" node_created;
+  Alcotest.(check bool)
+    "node scaffold created main.mjs" true
+    (Stdlib.Sys.file_exists (Stdlib.Filename.concat node_dir "main.mjs"));
+  Alcotest.(check bool)
+    "node scaffold created sdk" true
+    (Stdlib.Sys.file_exists
+       (Stdlib.Filename.concat node_dir "fp_agent_sdk.mjs"));
+  let node_manifest =
+    Stdlib.In_channel.with_open_bin
+      (Stdlib.Filename.concat node_dir "fp-agent-plugin.json")
+      Stdlib.In_channel.input_all
+  in
+  assert_contains "node manifest command" node_manifest "node main.mjs";
+  let checked_node = run ~env [ bin; "--check-plugin"; node_dir ] in
+  assert_success "check node scaffold" checked_node;
   let stray_template = run ~env [ bin; "--plugin-template"; "python" ] in
   assert_failure "plugin template without new plugin" stray_template;
   assert_contains "stray plugin template stderr" stray_template.stderr

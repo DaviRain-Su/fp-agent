@@ -224,6 +224,9 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - Plugin developers can run `/plugin-sdk` or `--plugin-sdk` to see the manifest
   SDK version, built-in scaffold templates, runtime environment variables, and
   the shortest local development loop without opening the docs.
+- Plugin scaffolding now supports shell, Python, and Node.js starters. The
+  Python and Node.js templates include small local helper SDK files so plugin
+  authors can write handler functions instead of raw stdin/stdout plumbing.
 - Plugin developers can run `/plugin-schema` or `--plugin-schema` to print the
   machine-readable JSON Schema for `fp-agent-plugin.json`, giving SDK wrappers,
   editors, and CI jobs the same manifest contract the loader validates.

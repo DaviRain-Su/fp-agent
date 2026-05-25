@@ -1451,6 +1451,88 @@ if __name__ == "__main__":
     extra_files = [ ("fp_agent_sdk.py", python_sdk_body) ];
   }
 
+let node_sdk_body =
+  {|#!/usr/bin/env node
+import process from "node:process";
+
+function jsonEnv(name, fallback) {
+  const raw = process.env[name] || "";
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+}
+
+export class ToolContext {
+  constructor(env = process.env) {
+    this.workspace = env.FP_AGENT_WORKSPACE || "";
+    this.pluginDir = env.FP_AGENT_PLUGIN_DIR || "";
+    this.pluginId = env.FP_AGENT_PLUGIN_ID || "";
+    this.pluginName = env.FP_AGENT_PLUGIN_NAME || "";
+    this.pluginVersion = env.FP_AGENT_PLUGIN_VERSION || "";
+    this.pluginSdkVersion = env.FP_AGENT_PLUGIN_SDK_VERSION || "";
+    this.toolName = env.FP_AGENT_TOOL_NAME || "";
+    this.toolKind = env.FP_AGENT_TOOL_KIND || "";
+    this.toolPermissions = jsonEnv("FP_AGENT_TOOL_PERMISSIONS", {});
+    this.argsFile = env.FP_AGENT_ARGS_FILE || "";
+  }
+}
+
+export async function readArgs(stream = process.stdin) {
+  const chunks = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.from(chunk));
+  }
+  const raw = Buffer.concat(chunks).toString("utf8");
+  if (!raw.trim()) return {};
+  return JSON.parse(raw);
+}
+
+export function writeResult(value) {
+  if (value === undefined || value === null) return;
+  if (typeof value === "string") {
+    process.stdout.write(value + "\n");
+  } else {
+    process.stdout.write(JSON.stringify(value) + "\n");
+  }
+}
+
+export async function runJsonTool(handler) {
+  try {
+    writeResult(await handler(await readArgs(), new ToolContext()));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`plugin error: ${message}\n`);
+    process.exit(1);
+  }
+}
+|}
+
+let node_scaffold_template =
+  {
+    template_id = "node";
+    script_name = "main.mjs";
+    command = "node main.mjs";
+    script_body =
+      {|#!/usr/bin/env node
+import { runJsonTool } from "./fp_agent_sdk.mjs";
+
+async function handle(args, ctx) {
+  return {
+    greeting: "hello from fp-agent node plugin",
+    tool: ctx.toolName,
+    workspace: ctx.workspace,
+    echo: args,
+  };
+}
+
+await runJsonTool(handle);
+|};
+    extra_files = [ ("fp_agent_sdk.mjs", node_sdk_body) ];
+  }
+
 let scaffold_template_info (template : scaffold_template) ~aliases ~description
     =
   {
@@ -1469,6 +1551,9 @@ let scaffold_templates () =
       ~description:"portable shell starter with no helper SDK dependency";
     scaffold_template_info python_scaffold_template ~aliases:[ "python3"; "py" ]
       ~description:"Python starter with fp_agent_sdk.py helper functions";
+    scaffold_template_info node_scaffold_template
+      ~aliases:[ "javascript"; "js" ]
+      ~description:"Node.js starter with fp_agent_sdk.mjs helper functions";
   ]
 
 let schema_string ?pattern ?description () =
@@ -1648,10 +1733,11 @@ let scaffold_template_of_string template =
   match String.lowercase (String.strip template) with
   | "shell" | "sh" -> Ok shell_scaffold_template
   | "python" | "python3" | "py" -> Ok python_scaffold_template
+  | "node" | "javascript" | "js" -> Ok node_scaffold_template
   | other ->
       Error
-        (Printf.sprintf "unknown plugin template: %s (expected shell or python)"
-           other)
+        (Printf.sprintf
+           "unknown plugin template: %s (expected shell, python, or node)" other)
 
 let scaffold ?id ?tool_name ?(kind = "read") ?(template = "shell") dir =
   let id =

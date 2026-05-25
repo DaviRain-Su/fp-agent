@@ -197,13 +197,14 @@ dune exec -- fp-agent --new-plugin my-plugin --plugin-id com.example.my_plugin
 Use `--plugin-tool-name` when the starter should scaffold the real first tool
 instead of `hello_world`, `--plugin-kind` / `--tool-kind` when that tool should
 start as `read`, `write`, or `exec`, and `--plugin-template` / `--template` to
-choose the generated runtime starter. Supported templates are `shell` and
-`python`:
+choose the generated runtime starter. Supported templates are `shell`,
+`python`, and `node`:
 
 ```sh
 dune exec -- fp-agent --new-plugin my-plugin --plugin-tool-name my_tool
 dune exec -- fp-agent --new-plugin my-plugin --plugin-kind exec
 dune exec -- fp-agent --new-plugin my-plugin --plugin-template python
+dune exec -- fp-agent --new-plugin my-plugin --plugin-template node
 ```
 
 List the current SDK contract and templates without opening the REPL:
@@ -217,9 +218,11 @@ The scaffold includes `fp-agent-plugin.json`, a README with the local
 development commands, and `examples/<tool>.args.json` for a first
 `--run-plugin-tool` smoke test. Shell scaffolds use `hello.sh`. Python
 scaffolds use `main.py`, `python3 main.py`, and a generated `fp_agent_sdk.py`
-helper that reads JSON args, builds a `ToolContext` from the `FP_AGENT_*`
-runtime environment, and serializes handler results. Add more JSON files under
-`examples/<tool>/` to run multiple smoke cases for the same tool.
+helper. Node.js scaffolds use `main.mjs`, `node main.mjs`, and a generated
+`fp_agent_sdk.mjs` helper. Both helper SDKs read JSON args, build a
+`ToolContext` from the `FP_AGENT_*` runtime environment, and serialize handler
+results. Add more JSON files under `examples/<tool>/` to run multiple smoke
+cases for the same tool.
 
 Validate it before installing:
 
