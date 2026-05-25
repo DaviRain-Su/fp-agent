@@ -26,7 +26,7 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - Footer command palette: `/model`, `/provider`, `/provider-add`, `/plugins`,
   `/providers`, `/plugin-sdk`, `/plugin-schema`, `/tools`, `/new`, `/resume`,
   `/fork`, `/retry`, `/plan`, `/review`, `/plan-set`, `/plan-add`,
-  `/plan-update`, `/plan-clear`, `/compact`, `/status`, `/context`,
+  `/plan-update`, `/plan-clear`, `/compact`, `/status`, `/doctor`, `/context`,
   `/handoff`, `/instructions`, `/undo`, `/diff`.
 - Status strip: provider/model, session id, step count, token usage, current
   phase, and active plugin count.
@@ -101,6 +101,10 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
 - `/status` now exposes a shared REPL/TUI runtime summary with workspace,
   session, provider/model, event count, token usage, plugin diagnostics, and
   registered tool count.
+- `/doctor` and `--doctor` now provide a unified read-only health report that
+  combines runtime status, provider diagnostics, plugin diagnostics, and next
+  inspection commands. CLI doctor is best-effort and still prints useful output
+  when runtime config cannot load.
 - `/context` now previews the event-sourced conversation context that a future
   model turn inherits: replayed turns, tool-use/result summaries, compaction
   count, token totals, agent state, and project instruction state.
@@ -247,7 +251,7 @@ Code/Codex/Pi/Opencode-class agent while keeping a distinct shape.
   silently dropping them.
 - The Notty TUI now executes safe read-only palette commands directly:
   `/tools`, `/plugins`, `/plugin-schema`, `/models`, `/providers`, `/model`,
-  `/sessions`, `/tree`, `/diff`, `/status`, `/context`, `/handoff`,
+  `/sessions`, `/tree`, `/diff`, `/status`, `/doctor`, `/context`, `/handoff`,
   `/instructions`, `/log`, and `/inspect` render their output into the timeline
   without leaving fullscreen mode.
 - The REPL exposes the same inspector through `/inspect [index]`, so event-log

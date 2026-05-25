@@ -970,6 +970,21 @@ let test_cli_provider_doctor () =
   assert_contains "provider doctor catalog deepseek" doctor.stdout "deepseek";
   assert_contains "provider doctor next command" doctor.stdout "next: /models"
 
+let test_cli_unified_doctor () =
+  let root = tmp_dir "fp-agent-cli-doctor-" in
+  let env = isolated_env root in
+  let doctor =
+    run ~env [ fp_agent_bin (); "--doctor"; "--provider"; "missing-provider" ]
+  in
+  assert_success "unified doctor" doctor;
+  assert_contains "doctor header" doctor.stdout "fp-agent doctor";
+  assert_contains "doctor config error" doctor.stdout
+    "runtime_config_error: unknown provider: missing-provider";
+  assert_contains "doctor runtime section" doctor.stdout "Runtime status";
+  assert_contains "doctor provider section" doctor.stdout "Provider diagnostics";
+  assert_contains "doctor plugin section" doctor.stdout "Plugin diagnostics";
+  assert_contains "doctor next status" doctor.stdout "next: /status"
+
 let test_repl_lists_and_switches_custom_provider_models () =
   let root = tmp_dir "fp-agent-cli-models-" in
   let config_path = Stdlib.Filename.concat root "providers.json" in
@@ -1284,6 +1299,7 @@ let () =
           Alcotest.test_case "custom provider models" `Quick
             test_repl_lists_and_switches_custom_provider_models;
           Alcotest.test_case "provider doctor" `Quick test_cli_provider_doctor;
+          Alcotest.test_case "unified doctor" `Quick test_cli_unified_doctor;
           Alcotest.test_case "add provider profile" `Quick
             test_cli_adds_custom_provider_profile;
           Alcotest.test_case "repl instructions" `Quick

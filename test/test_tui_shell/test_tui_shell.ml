@@ -190,7 +190,8 @@ let test_palette_state () =
     (Tui_shell.selected_command_index state)
 
 let test_palette_input_mapping () =
-  let state = Tui_shell.create ~command_count:13 () in
+  let command_count = List.length View.command_palette_entries in
+  let state = Tui_shell.create ~command_count () in
   let state = input Tui_shell.Slash state in
   Alcotest.(check (option int))
     "slash opens" (Some 0)
@@ -205,16 +206,20 @@ let test_palette_input_mapping () =
     (Tui_shell.selected_command_index state);
   let state = input Tui_shell.End state in
   Alcotest.(check (option int))
-    "end moves palette" (Some 12)
+    "end moves palette"
+    (Some (command_count - 1))
     (Tui_shell.selected_command_index state);
-  let result = Tui_shell.handle_input ~page_size:3 state Tui_shell.Enter in
+  let result =
+    Tui_shell.create ~command_count () |> input Tui_shell.Slash |> fun state ->
+    Tui_shell.handle_input ~page_size:3 state Tui_shell.Enter
+  in
   Alcotest.(check bool)
     "enter closes palette" false
     (Tui_shell.palette_open result.state);
   Alcotest.(check (option string))
-    "enter accepts selected command" (palette_command_at 12)
+    "enter accepts selected command" (palette_command_at 0)
     (accepted_command result.accepted_command);
-  let selected_command = palette_command_at 12 in
+  let selected_command = palette_command_at 0 in
   Alcotest.(check (option string))
     "enter dispatches no-arg command" selected_command result.dispatched_command;
   Alcotest.(check (list string))
@@ -229,6 +234,7 @@ let test_palette_input_mapping () =
 let test_palette_accept_draft_mapping () =
   let state =
     Tui_shell.create () |> input Tui_shell.Slash |> input Tui_shell.Down
+    |> input Tui_shell.Down
   in
   let result = Tui_shell.handle_input ~page_size:3 state Tui_shell.Enter in
   Alcotest.(check (option string))
@@ -381,6 +387,19 @@ let test_tui_command_model_log_and_inspect () =
       Alcotest.(check bool)
         "model provider" true
         (String.is_substring model ~substring:"provider: local-llm");
+      let doctor = output "/doctor" context in
+      Alcotest.(check bool)
+        "doctor command header" true
+        (String.is_substring doctor ~substring:"[tui] /doctor");
+      Alcotest.(check bool)
+        "doctor includes runtime" true
+        (String.is_substring doctor ~substring:"Runtime status");
+      Alcotest.(check bool)
+        "doctor includes providers" true
+        (String.is_substring doctor ~substring:"Provider diagnostics");
+      Alcotest.(check bool)
+        "doctor includes plugins" true
+        (String.is_substring doctor ~substring:"Plugin diagnostics");
       let providers = output "/providers" context in
       Alcotest.(check bool)
         "providers command header" true

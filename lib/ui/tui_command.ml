@@ -806,6 +806,48 @@ let status_lines ctx =
     Printf.sprintf "tools: %d" (List.length (Tool.all ()));
   ]
 
+let section title lines =
+  let lines =
+    match lines with
+    | first :: rest when String.equal first title -> rest
+    | _ -> lines
+  in
+  title
+  :: List.map lines ~f:(fun line ->
+      if String.is_empty line then "" else "  " ^ line)
+
+let doctor_lines ?config_error ctx =
+  Tool_loader.register_all ();
+  let config_status =
+    match config_error with
+    | None -> "runtime_config: ok"
+    | Some error -> "runtime_config_error: " ^ error
+  in
+  let tool_count = List.length (Tool.all ()) in
+  let plugin_discovery = Plugin.discover () in
+  [
+    "fp-agent doctor";
+    config_status;
+    Printf.sprintf
+      "summary: %d tool(s), %d valid plugin(s), %d invalid plugin(s)" tool_count
+      (List.length plugin_discovery.manifests)
+      (List.length plugin_discovery.errors);
+    "";
+  ]
+  @ section "Runtime status" (status_lines ctx)
+  @ [ "" ]
+  @ section "Provider diagnostics" (provider_diagnostics_lines ())
+  @ [ "" ]
+  @ section "Plugin diagnostics" (plugin_diagnostics_lines ())
+  @ [
+      "";
+      "next: /status";
+      "next: /provider-doctor";
+      "next: /plugin-doctor";
+      "next: /tools";
+      "next: /plugin-schema";
+    ]
+
 let handoff_lines ctx =
   let usage = View.token_usage_of_events ctx.events in
   let plan = View.plan_progress_of_events ctx.events in
@@ -870,6 +912,7 @@ let instruction_lines ctx =
 let run ctx command =
   let open Shell_command in
   match parse command with
+  | Command (Doctor, _) -> Some (command_section command (doctor_lines ctx))
   | Command (Help, _) ->
       Some (command_section command (String.split_lines (help_text ())))
   | Command (Tools, _) -> Some (command_section command (tools_lines ()))

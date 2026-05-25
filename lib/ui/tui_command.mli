@@ -19,6 +19,10 @@ val run : context -> string -> string list option
 val status_lines : context -> string list
 (** Render runtime/session/plugin status without a command header. *)
 
+val doctor_lines : ?config_error:string -> context -> string list
+(** Render combined workspace, provider, plugin, and tool diagnostics without a
+    command header. *)
+
 val context_lines : context -> string list
 (** Render the replayed model conversation context without a command header. *)
 

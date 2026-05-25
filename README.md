@@ -70,6 +70,7 @@ dune exec -- fp-agent
 > /log               # list this session's events with indices
 > /usage             # show token usage from the event log
 > /status            # show runtime/session/plugin status
+> /doctor            # show combined workspace/provider/plugin/tool diagnostics
 > /context           # preview model-visible replay context
 > /handoff           # print a copyable session handoff summary
 > /instructions      # show project instructions loaded for the model
@@ -255,6 +256,10 @@ copy. Two consequences:
 - **Status** (`/status`) summarizes workspace, session, provider/model,
   event count, token usage, plan progress, plugin diagnostics, and registered
   tool count.
+- **Doctor** (`/doctor`, `--doctor`) combines runtime status, provider
+  discovery, plugin discovery, and tool registry diagnostics in one read-only
+  report. The CLI form is best-effort and still reports configuration problems
+  such as unknown providers or missing API keys.
 - **Context preview** (`/context`) replays the current event log and shows the
   conversation turns, compaction count, token totals, agent state, and project
   instruction state that the next task will inherit before the task-specific
@@ -366,6 +371,8 @@ Options:
   `--add-provider`
 - `--provider-local-compat` — OpenAI-compatible local-server defaults for
   `--add-provider` (`max_tokens`, no developer role, no streaming usage)
+- `--doctor` — show combined workspace/provider/plugin/tool diagnostics, then
+  exit
 - `--doctor-providers` / `--provider-doctor` — show provider config and model
   discovery diagnostics, then exit
 - `-w`, `--workspace DIR` — workspace root (default: `WORKSPACE_ROOT` or cwd)

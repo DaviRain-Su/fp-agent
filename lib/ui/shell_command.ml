@@ -2,6 +2,7 @@ open! Base
 
 type id =
   | Help
+  | Doctor
   | Tools
   | Tool
   | Plugins
@@ -75,6 +76,14 @@ let specs =
       aliases = [];
       palette = false;
       acceptance = Execute "/help";
+    };
+    {
+      id = Doctor;
+      command = "/doctor";
+      description = "show workspace, model, plugin, and tool diagnostics";
+      aliases = [];
+      palette = true;
+      acceptance = Execute "/doctor";
     };
     {
       id = Tools;
@@ -458,7 +467,7 @@ let group_of_id = function
   | ProviderAdd ->
       "Models"
   | Log | Inspect | Plan | PlanSet | PlanAdd | PlanUpdate | PlanClear | Usage
-  | Status | Context | Handoff | Instructions ->
+  | Status | Context | Handoff | Instructions | Doctor ->
       "Context"
   | Compact | Fork | Diff | Review | Retry | Undo -> "Run Control"
   | Help | Exit -> "Shell"

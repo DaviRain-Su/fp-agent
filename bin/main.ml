@@ -601,6 +601,80 @@ let with_setup provider_opt api_base_opt model_opt workspace_opt max_steps_opt f
           1
       | Ok workspace -> f config workspace)
 
+let getenv_nonempty name =
+  match Stdlib.Sys.getenv_opt name with
+  | Some value when not (String.is_empty (String.strip value)) -> Some value
+  | _ -> None
+
+let doctor_workspace_root workspace_opt config_result =
+  match workspace_opt with
+  | Some root -> root
+  | None -> (
+      match config_result with
+      | Ok (config : Config.t) -> config.workspace_root
+      | Error _ ->
+          Option.value
+            (getenv_nonempty "WORKSPACE_ROOT")
+            ~default:(Unix.getcwd ()))
+
+let run_doctor_cli provider_opt api_base_opt model_opt workspace_opt
+    _max_steps_opt resume_opt =
+  let config_result =
+    Config.load ?provider:provider_opt ?api_base:api_base_opt ?model:model_opt
+      ()
+  in
+  let workspace_root = doctor_workspace_root workspace_opt config_result in
+  let sessions_root =
+    Stdlib.Filename.concat workspace_root
+      (Stdlib.Filename.concat ".ocaml-agent" "sessions")
+  in
+  let session_dir = Option.value resume_opt ~default:"(no active session)" in
+  let events =
+    match resume_opt with
+    | None -> []
+    | Some session_dir -> (
+        match Journal.read ~session_dir with
+        | Ok events -> events
+        | Error _ -> [])
+  in
+  let provider, model, api_base =
+    match config_result with
+    | Ok config -> (config.provider, config.model, config.api_base)
+    | Error _ ->
+        let provider =
+          Option.value
+            (Option.first_some provider_opt (getenv_nonempty "PROVIDER"))
+            ~default:"(unresolved)"
+        in
+        let model =
+          Option.value
+            (Option.first_some model_opt (getenv_nonempty "MODEL_NAME"))
+            ~default:"(unresolved)"
+        in
+        let api_base =
+          Option.value
+            (Option.first_some api_base_opt (getenv_nonempty "API_BASE"))
+            ~default:"(unresolved)"
+        in
+        (provider, model, api_base)
+  in
+  let config_error = Result.error config_result in
+  let ctx =
+    {
+      Tui_command.provider;
+      model;
+      api_base;
+      workspace_root;
+      sessions_root;
+      session_dir;
+      events;
+      selected_event_index =
+        (if List.is_empty events then None else Some (List.length events - 1));
+    }
+  in
+  List.iter (Tui_command.doctor_lines ?config_error ctx) ~f:Stdlib.print_endline;
+  0
+
 let warn_yolo yolo =
   if yolo then
     Stdlib.prerr_endline
@@ -2148,6 +2222,11 @@ let run_repl config workspace ~confirm ~resume_opt ~yolo =
         | Command (Help, _) ->
             print_help ();
             loop ()
+        | Command (Doctor, _) ->
+            List.iter
+              (Tui_command.doctor_lines (command_context ()))
+              ~f:Stdlib.print_endline;
+            loop ()
         | Command (Tools, _) ->
             print_tools ();
             loop ()
@@ -2552,7 +2631,7 @@ let dispatch add_provider provider_base provider_models provider_api
     provider_api_key provider_config provider_local_compat
     provider_no_developer_role provider_no_reasoning_effort
     provider_no_usage_in_streaming provider_max_tokens_field provider_max_tokens
-    replace_provider new_plugin plugin_id plugin_tool_name plugin_kind
+    replace_provider doctor new_plugin plugin_id plugin_tool_name plugin_kind
     plugin_template check_plugin install_plugin smoke_plugin dev_plugin
     package_plugin plugin_package_output replace_plugin list_plugins
     doctor_plugins doctor_providers plugin_sdk plugin_schema remove_plugin
@@ -2575,6 +2654,8 @@ let dispatch add_provider provider_base provider_models provider_api
         "provider add error: provider profile options require --add-provider \
          NAME";
       1
+  | None when doctor ->
+      run_doctor_cli provider api_base model workspace max_steps resume
   | None when plugin_sdk ->
       List.iter (Tui_command.plugin_sdk_lines ()) ~f:Stdlib.print_endline;
       0
@@ -3114,6 +3195,15 @@ let () =
       & info [ "replace-provider" ]
           ~doc:"Allow --add-provider to replace an existing provider profile.")
   in
+  let doctor =
+    Arg.(
+      value & flag
+      & info [ "doctor" ]
+          ~doc:
+            "Show combined workspace, provider, plugin, and tool diagnostics, \
+             then exit. This is best-effort and does not require a successful \
+             model configuration.")
+  in
   let provider =
     Arg.(
       value
@@ -3191,7 +3281,7 @@ let () =
       $ provider_local_compat $ provider_no_developer_role
       $ provider_no_reasoning_effort $ provider_no_usage_in_streaming
       $ provider_max_tokens_field $ provider_max_tokens $ replace_provider
-      $ new_plugin $ plugin_id $ plugin_tool_name $ plugin_kind
+      $ doctor $ new_plugin $ plugin_id $ plugin_tool_name $ plugin_kind
       $ plugin_template $ check_plugin $ install_plugin $ smoke_plugin
       $ dev_plugin $ package_plugin $ plugin_package_output $ replace_plugin
       $ list_plugins $ doctor_plugins $ doctor_providers $ plugin_sdk

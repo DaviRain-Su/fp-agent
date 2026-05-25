@@ -26,6 +26,8 @@ let test_parse () =
     | Shell_command.Empty -> true
     | _ -> false);
   require_task "task" "fix tests" (Shell_command.parse "  fix tests  ");
+  require_command "doctor" Shell_command.Doctor ""
+    (Shell_command.parse "/doctor");
   require_command "model" Shell_command.Model "qwen36-rtx"
     (Shell_command.parse "/model qwen36-rtx");
   require_command "model next" Shell_command.ModelNext ""
@@ -139,6 +141,10 @@ let test_metadata () =
   Alcotest.(check bool)
     "palette has tools" true
     (List.mem palette "/tools" ~equal:String.equal);
+  Alcotest.(check bool)
+    "palette has doctor" true
+    (List.mem palette "/doctor" ~equal:String.equal);
+  Alcotest.(check string) "doctor group" "Context" (entry "/doctor").group;
   Alcotest.(check string) "tools group" "Tools" (entry "/tools").group;
   Alcotest.(check bool)
     "palette has provider" true
@@ -298,6 +304,8 @@ let test_acceptance () =
   in
   require_acceptance "tools execute" ("execute", "/tools")
     (Shell_command.accept (entry "/tools"));
+  require_acceptance "doctor execute" ("execute", "/doctor")
+    (Shell_command.accept (entry "/doctor"));
   require_acceptance "model execute" ("execute", "/model")
     (Shell_command.accept (entry "/model [id]"));
   require_acceptance "model next execute" ("execute", "/model-next")

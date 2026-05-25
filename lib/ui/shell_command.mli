@@ -1,5 +1,6 @@
 type id =
   | Help
+  | Doctor
   | Tools
   | Tool
   | Plugins
