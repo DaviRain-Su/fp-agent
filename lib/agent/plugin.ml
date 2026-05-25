@@ -758,6 +758,100 @@ let output_of_result result =
   else if not (String.is_empty stderr) then truncate stderr
   else "(plugin produced no output)"
 
+let plugin_baseline_env_names =
+  [
+    "PATH";
+    "HOME";
+    "TMPDIR";
+    "TMP";
+    "TEMP";
+    "LANG";
+    "LC_ALL";
+    "LC_CTYPE";
+    "USER";
+    "LOGNAME";
+  ]
+
+let env_name_ok name =
+  let name = String.strip name in
+  let char_ok = function
+    | 'A' .. 'Z' | 'a' .. 'z' | '0' .. '9' | '_' -> true
+    | _ -> false
+  in
+  (not (String.is_empty name))
+  && (not (Char.is_digit name.[0]))
+  && String.for_all name ~f:char_ok
+
+let dedupe_strings names =
+  let seen = Hash_set.create (module String) in
+  List.filter names ~f:(fun name ->
+      if Hash_set.mem seen name then false
+      else (
+        Hash_set.add seen name;
+        true))
+
+let permission_env_names permissions =
+  let strings = function
+    | `String name -> [ name ]
+    | `List values ->
+        List.filter_map values ~f:(function
+          | `String name -> Some name
+          | _ -> None)
+    | _ -> []
+  in
+  let names =
+    match permissions with
+    | Some (`Assoc fields) -> (
+        match List.Assoc.find fields "env" ~equal:String.equal with
+        | Some value -> strings value
+        | None -> [])
+    | _ -> []
+  in
+  names |> List.map ~f:String.strip |> List.filter ~f:env_name_ok
+  |> dedupe_strings
+
+let env_entries names =
+  List.filter_map names ~f:(fun name ->
+      match Stdlib.Sys.getenv_opt name with
+      | Some value -> Some (name ^ "=" ^ value)
+      | None -> None)
+
+let set_env name value entries = (name ^ "=" ^ value) :: entries
+
+let dedupe_env_keep_last entries =
+  let seen = Hash_set.create (module String) in
+  List.rev entries
+  |> List.filter ~f:(fun entry ->
+      let name =
+        match String.lsplit2 entry ~on:'=' with
+        | Some (name, _) -> name
+        | None -> entry
+      in
+      if Hash_set.mem seen name then false
+      else (
+        Hash_set.add seen name;
+        true))
+  |> List.rev |> Array.of_list
+
+let plugin_environment (manifest : manifest) tool workspace args_file
+    permissions =
+  let entries =
+    env_entries
+      (plugin_baseline_env_names @ permission_env_names tool.tool_permissions)
+  in
+  entries
+  |> set_env "FP_AGENT_WORKSPACE" (Workspace.root workspace)
+  |> set_env "FP_AGENT_PLUGIN_DIR" manifest.dir
+  |> set_env "FP_AGENT_PLUGIN_ID" manifest.id
+  |> set_env "FP_AGENT_PLUGIN_NAME" manifest.name
+  |> set_env "FP_AGENT_PLUGIN_VERSION" manifest.version
+  |> set_env "FP_AGENT_PLUGIN_SDK_VERSION" (Int.to_string manifest.sdk_version)
+  |> set_env "FP_AGENT_TOOL_NAME" tool.tool_name
+  |> set_env "FP_AGENT_TOOL_KIND" (string_of_kind tool.tool_kind)
+  |> set_env "FP_AGENT_TOOL_PERMISSIONS" permissions
+  |> set_env "FP_AGENT_ARGS_FILE" args_file
+  |> dedupe_env_keep_last
+
 let run_plugin_tool (manifest : manifest) tool workspace args =
   match validate_args_schema tool.tool_input_schema args with
   | Error e -> Tool_result.Error { message = "schema validation failed: " ^ e }
@@ -772,28 +866,18 @@ let run_plugin_tool (manifest : manifest) tool workspace args =
         ~f:(fun () ->
           Stdlib.Out_channel.with_open_bin tmp (fun oc ->
               Stdlib.Out_channel.output_string oc (Yojson.Safe.to_string args));
+          let env =
+            plugin_environment manifest tool workspace tmp permissions
+          in
           let command =
-            Printf.sprintf
-              "cd %s && FP_AGENT_WORKSPACE=%s FP_AGENT_PLUGIN_DIR=%s \
-               FP_AGENT_PLUGIN_ID=%s FP_AGENT_PLUGIN_NAME=%s \
-               FP_AGENT_PLUGIN_VERSION=%s FP_AGENT_PLUGIN_SDK_VERSION=%s \
-               FP_AGENT_TOOL_NAME=%s FP_AGENT_TOOL_KIND=%s \
-               FP_AGENT_TOOL_PERMISSIONS=%s FP_AGENT_ARGS_FILE=%s %s < %s"
+            Printf.sprintf "cd %s && %s < %s"
               (Stdlib.Filename.quote manifest.dir)
-              (Stdlib.Filename.quote (Workspace.root workspace))
-              (Stdlib.Filename.quote manifest.dir)
-              (Stdlib.Filename.quote manifest.id)
-              (Stdlib.Filename.quote manifest.name)
-              (Stdlib.Filename.quote manifest.version)
-              (Stdlib.Filename.quote (Int.to_string manifest.sdk_version))
-              (Stdlib.Filename.quote tool.tool_name)
-              (Stdlib.Filename.quote (string_of_kind tool.tool_kind))
-              (Stdlib.Filename.quote permissions)
-              (Stdlib.Filename.quote tmp)
               tool.tool_command
               (Stdlib.Filename.quote tmp)
           in
-          match Shell.run ~command ~timeout_sec:tool.tool_timeout_sec with
+          match
+            Shell.run_with_env ~env ~command ~timeout_sec:tool.tool_timeout_sec
+          with
           | Error e -> Tool_result.Error { message = e }
           | Ok ({ exit_code = 0; _ } as result) ->
               Tool_result.Success { output = output_of_result result }

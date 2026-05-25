@@ -50,7 +50,9 @@ adds it to the registered tool description, and passes the raw JSON through
 such as `network: true`, `shell: true`, environment variables, secrets, tokens,
 or `workspace: "write"` also triggers human approval before a model-triggered
 plugin call runs. Workspace path enforcement still comes from `kind` and the
-policy checks described below.
+policy checks described below. If `permissions.env` names environment
+variables, only those valid variable names are copied from the host environment
+into the plugin process.
 
 `sdk_version` declares the fp-agent plugin manifest contract version. It
 defaults to `1` for older plugins, and `fp-agent --check-plugin` / install /
@@ -63,7 +65,9 @@ When the model calls a plugin tool, `fp-agent`:
 
 1. Runs the tool command from the plugin directory.
 2. Sends the tool call args as JSON on stdin.
-3. Exposes:
+3. Starts the process with a minimal baseline environment (`PATH`, home/temp,
+   locale, and user/logname variables when present), the environment variables
+   explicitly listed in `permissions.env`, and these `FP_AGENT_*` values:
    - `FP_AGENT_WORKSPACE`
    - `FP_AGENT_PLUGIN_DIR`
    - `FP_AGENT_PLUGIN_ID`
@@ -80,6 +84,12 @@ When the model calls a plugin tool, `fp-agent`:
 `FP_AGENT_ARGS_FILE` points at the temporary JSON args file that is also piped
 to stdin. It exists for plugin SDKs or scripts that prefer reading a file path
 over consuming stdin directly.
+
+The plugin process does not inherit the full parent shell environment. Declare
+required variables in `permissions.env`, for example
+`{ "env": ["GITHUB_TOKEN"] }`, when a plugin needs a token or local service
+configuration. Undeclared ambient variables, including public-looking values
+and likely secrets, are omitted by default.
 
 Before the command starts, `input_schema` is validated locally. The supported
 subset is intentionally small and portable: `type`, `enum`, `required`, object

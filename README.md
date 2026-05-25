@@ -150,12 +150,15 @@ runs. Manifests can declare `sdk_version`; unsupported future SDK versions are
 rejected by `--check-plugin`, install, and local tool runs. Plugin commands also
 receive runtime env such as `FP_AGENT_WORKSPACE`, `FP_AGENT_PLUGIN_ID`,
 `FP_AGENT_TOOL_KIND`, `FP_AGENT_TOOL_PERMISSIONS`, and
-`FP_AGENT_ARGS_FILE`. Tool manifests may include optional `permissions` audit
-metadata such as `{ "workspace": "read", "network": false }`; it is validated,
-shown in `/plugins` and `/plugin`, passed through to SDK wrappers, and used by
-`--confirm` to require approval for sensitive plugin permissions such as
-network, shell, env, secrets, tokens, or workspace writes. `/plugin` also shows
-the exact approval reason that would appear before a model-triggered call.
+`FP_AGENT_ARGS_FILE`. Plugin processes inherit only a small baseline environment
+plus variables explicitly named in `permissions.env`, so local secrets do not
+leak into third-party tools by default. Tool manifests may include optional
+`permissions` audit metadata. For example, `{"workspace":"read","network":false}`
+is validated, shown in `/plugins` and `/plugin`, passed through to SDK
+wrappers, and used by `--confirm` to require approval for sensitive plugin
+permissions such as network, shell, env, secrets, tokens, or workspace writes.
+`/plugin` also shows the exact approval reason that would appear before a
+model-triggered call.
 The Python and Node.js scaffolds include local `fp_agent_sdk.py` /
 `fp_agent_sdk.mjs` helpers that read JSON args, construct a `ToolContext` from
 those env vars, and serialize handler results, so plugin authors can start from

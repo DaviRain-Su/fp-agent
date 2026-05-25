@@ -29,7 +29,7 @@ let scrubbed_environment () =
 (* Run [command] through [/bin/sh -c] with output captured to temp files.
    Polls the child so the call can enforce [timeout_sec] and kill a runaway
    process. *)
-let run ~command ~timeout_sec =
+let run_with_env ~env ~command ~timeout_sec =
   let out_file = Stdlib.Filename.temp_file "fp_agent_out" ".txt" in
   let err_file = Stdlib.Filename.temp_file "fp_agent_err" ".txt" in
   let fd_out = Unix.openfile out_file [ Unix.O_WRONLY; Unix.O_TRUNC ] 0o600 in
@@ -37,7 +37,7 @@ let run ~command ~timeout_sec =
   let pid =
     Unix.create_process_env "/bin/sh"
       [| "/bin/sh"; "-c"; command |]
-      (scrubbed_environment ()) Unix.stdin fd_out fd_err
+      env Unix.stdin fd_out fd_err
   in
   Unix.close fd_out;
   Unix.close fd_err;
@@ -66,3 +66,6 @@ let run ~command ~timeout_sec =
   | `Done (Unix.WEXITED code) -> Ok { stdout; stderr; exit_code = code }
   | `Done (Unix.WSIGNALED s) -> Ok { stdout; stderr; exit_code = 128 + s }
   | `Done (Unix.WSTOPPED s) -> Ok { stdout; stderr; exit_code = 128 + s }
+
+let run ~command ~timeout_sec =
+  run_with_env ~env:(scrubbed_environment ()) ~command ~timeout_sec

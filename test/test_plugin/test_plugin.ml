@@ -599,55 +599,88 @@ let test_plugin_runtime_environment () =
       mkdir_p plugin_dir;
       write_plugin plugin_dir ~id:"com.example.env" ~tool_name:"plugin_env"
         ~kind:"exec"
-        ~permissions:{|{"workspace":"read","network":false,"env":["FOO"]}|}
+        ~permissions:
+          {|{"workspace":"read","network":false,"env":["FOO","PLUGIN_SECRET"]}|}
         ~script:
-          "printf 'id=%s name=%s version=%s sdk=%s tool=%s kind=%s perms=%s \
-           args_file_exists=' \"$FP_AGENT_PLUGIN_ID\" \
-           \"$FP_AGENT_PLUGIN_NAME\" \"$FP_AGENT_PLUGIN_VERSION\" \
-           \"$FP_AGENT_PLUGIN_SDK_VERSION\" \"$FP_AGENT_TOOL_NAME\" \
-           \"$FP_AGENT_TOOL_KIND\" \"$FP_AGENT_TOOL_PERMISSIONS\"\n\
-           if [ -f \"$FP_AGENT_ARGS_FILE\" ]; then printf yes; else printf no; \
-           fi\n\
-           printf ' stdin='\n\
-           cat\n\
-           printf ' args_file='\n\
-           cat \"$FP_AGENT_ARGS_FILE\"\n";
-      match
-        Plugin.run_tool ~dir:plugin_dir ~tool_name:"plugin_env"
-          ~workspace:(workspace root)
-          ~args:(`Assoc [ ("message", `String "hello") ])
-      with
-      | Error e -> Alcotest.failf "run_tool failed: %s" e
-      | Ok (Tool_result.Error { message }) ->
-          Alcotest.failf "plugin returned error: %s" message
-      | Ok (Tool_result.Success { output }) ->
-          Alcotest.(check bool)
-            "output includes plugin id" true
-            (String.is_substring output ~substring:"id=com.example.env");
-          Alcotest.(check bool)
-            "output includes plugin name" true
-            (String.is_substring output ~substring:"name=Test Plugin");
-          Alcotest.(check bool)
-            "output includes sdk version" true
-            (String.is_substring output ~substring:"sdk=1");
-          Alcotest.(check bool)
-            "output includes tool kind" true
-            (String.is_substring output ~substring:"kind=exec");
-          Alcotest.(check bool)
-            "output includes tool permissions" true
-            (String.is_substring output
-               ~substring:
-                 {|perms={"workspace":"read","network":false,"env":["FOO"]}|});
-          Alcotest.(check bool)
-            "args file exists" true
-            (String.is_substring output ~substring:"args_file_exists=yes");
-          Alcotest.(check bool)
-            "stdin includes args" true
-            (String.is_substring output ~substring:{|stdin={"message":"hello"}|});
-          Alcotest.(check bool)
-            "args file includes args" true
-            (String.is_substring output
-               ~substring:{|args_file={"message":"hello"}|}))
+          {|
+printf 'id=%s name=%s version=%s sdk=%s tool=%s kind=%s perms=%s args_file_exists=' "$FP_AGENT_PLUGIN_ID" "$FP_AGENT_PLUGIN_NAME" "$FP_AGENT_PLUGIN_VERSION" "$FP_AGENT_PLUGIN_SDK_VERSION" "$FP_AGENT_TOOL_NAME" "$FP_AGENT_TOOL_KIND" "$FP_AGENT_TOOL_PERMISSIONS"
+if [ -f "$FP_AGENT_ARGS_FILE" ]; then printf yes; else printf no; fi
+printf ' env foo=%s secret=%s undeclared_public=%s undeclared_token=%s' "$FOO" "$PLUGIN_SECRET" "${UNDECLARED_PUBLIC:-}" "${UNDECLARED_TOKEN:-}"
+printf ' stdin='
+cat
+printf ' args_file='
+cat "$FP_AGENT_ARGS_FILE"
+|};
+      let env_names =
+        [ "FOO"; "PLUGIN_SECRET"; "UNDECLARED_PUBLIC"; "UNDECLARED_TOKEN" ]
+      in
+      let saved_env =
+        List.map env_names ~f:(fun name -> (name, Stdlib.Sys.getenv_opt name))
+      in
+      Exn.protect
+        ~f:(fun () ->
+          Unix.putenv "FOO" "visible-foo";
+          Unix.putenv "PLUGIN_SECRET" "secret-value";
+          Unix.putenv "UNDECLARED_PUBLIC" "public-value";
+          Unix.putenv "UNDECLARED_TOKEN" "hidden-token";
+          match
+            Plugin.run_tool ~dir:plugin_dir ~tool_name:"plugin_env"
+              ~workspace:(workspace root)
+              ~args:(`Assoc [ ("message", `String "hello") ])
+          with
+          | Error e -> Alcotest.failf "run_tool failed: %s" e
+          | Ok (Tool_result.Error { message }) ->
+              Alcotest.failf "plugin returned error: %s" message
+          | Ok (Tool_result.Success { output }) ->
+              Alcotest.(check bool)
+                "output includes plugin id" true
+                (String.is_substring output ~substring:"id=com.example.env");
+              Alcotest.(check bool)
+                "output includes plugin name" true
+                (String.is_substring output ~substring:"name=Test Plugin");
+              Alcotest.(check bool)
+                "output includes sdk version" true
+                (String.is_substring output ~substring:"sdk=1");
+              Alcotest.(check bool)
+                "output includes tool kind" true
+                (String.is_substring output ~substring:"kind=exec");
+              Alcotest.(check bool)
+                "output includes tool permissions" true
+                (String.is_substring output
+                   ~substring:
+                     {|perms={"workspace":"read","network":false,"env":["FOO","PLUGIN_SECRET"]}|});
+              Alcotest.(check bool)
+                "args file exists" true
+                (String.is_substring output ~substring:"args_file_exists=yes");
+              Alcotest.(check bool)
+                "declared env is passed" true
+                (String.is_substring output ~substring:"foo=visible-foo");
+              Alcotest.(check bool)
+                "declared sensitive env is passed" true
+                (String.is_substring output ~substring:"secret=secret-value");
+              Alcotest.(check bool)
+                "undeclared public env is not inherited" true
+                (String.is_substring output
+                   ~substring:"undeclared_public= undeclared_token=");
+              Alcotest.(check bool)
+                "undeclared sensitive env is not inherited" true
+                (String.is_substring output
+                   ~substring:"undeclared_token= stdin=");
+              Alcotest.(check bool)
+                "undeclared env values are absent" false
+                (String.is_substring output ~substring:"hidden-token"
+                || String.is_substring output ~substring:"public-value");
+              Alcotest.(check bool)
+                "stdin includes args" true
+                (String.is_substring output
+                   ~substring:{|stdin={"message":"hello"}|});
+              Alcotest.(check bool)
+                "args file includes args" true
+                (String.is_substring output
+                   ~substring:{|args_file={"message":"hello"}|}))
+        ~finally:(fun () ->
+          List.iter saved_env ~f:(fun (name, value) ->
+              Unix.putenv name (Option.value value ~default:""))))
 
 let test_plugin_permissions_require_confirm_approval () =
   with_temp_dir "fp_agent_plugin_permission_approval" (fun root ->

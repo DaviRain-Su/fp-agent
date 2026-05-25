@@ -8,3 +8,10 @@ val run : command:string -> timeout_sec:int -> (result, string) Stdlib.result
     failures. The child process inherits a scrubbed environment with likely
     secret variables removed. The process is killed if it exceeds [timeout_sec].
 *)
+
+val run_with_env :
+  env:string array ->
+  command:string ->
+  timeout_sec:int ->
+  (result, string) Stdlib.result
+(** Like [run], but uses the supplied process environment verbatim. *)
